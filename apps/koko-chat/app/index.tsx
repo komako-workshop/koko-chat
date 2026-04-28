@@ -4,6 +4,11 @@ import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
 
+// Task 04b-1 sanity check: Metro must be able to resolve workspace packages
+// through pnpm's symlink graph. Importing a constant is enough to verify the
+// whole @koko/protocol module resolves and its transitive deps exist.
+import { PROTOCOL_VERSION } from "@koko/protocol";
+
 import { usePairingStore } from "@/state/pairing";
 
 const navItems = [
@@ -23,7 +28,9 @@ export default function HomeScreen() {
           <Text style={tw`text-center text-4xl font-bold text-slate-950 dark:text-slate-50`}>
             🦞 KokoChat (dev)
           </Text>
-          <Text style={tw`text-base text-slate-500 dark:text-slate-400`}>Version {appVersion}</Text>
+          <Text style={tw`text-base text-slate-500 dark:text-slate-400`}>
+            Version {appVersion} · Protocol v{PROTOCOL_VERSION}
+          </Text>
 
           <View style={tw`mt-8 w-full gap-4`}>
             {navItems.map((item) => (

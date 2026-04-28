@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@koko/protocol": "workspace:*",
     "expo": "~55.0.0",
     "expo-constants": "~55.0.0",
     "expo-linking": "~55.0.0",
