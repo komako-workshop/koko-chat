@@ -1,10 +1,8 @@
-import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
-import type { Socket } from "node:net";
 import { initCrypto } from "@koko/protocol";
-import { handleHealth } from "./http/health";
-import { sendJson, sendNotFound, type HttpRequestContext } from "./http";
-import type { pino } from "./logger";
-import { createPairingRoutes } from "./pairing/routes";
+import Fastify from "fastify";
+import type { Logger } from "pino";
+import { registerHealthRoute } from "./http/health";
+import { registerPairingRoutes } from "./pairing/routes";
 import { PairingStore } from "./pairing/store";
 import { RoomWebSocketHandler } from "./room/handler";
 import { RoomStore } from "./room/store";
@@ -16,7 +14,7 @@ export interface RelayServerOptions {
   /** Host interface to bind. */
   host: string;
   /** Structured logger. */
-  logger: pino.Logger;
+  logger: Logger;
   /** Pairing request TTL in milliseconds. */
   pairingTtlMs: number;
   /** Room inactivity TTL in milliseconds. */
@@ -55,19 +53,16 @@ function roomIdFromPath(pathname: string): string | null {
   return roomId.length > 0 && !roomId.includes("/") ? decodeURIComponent(roomId) : null;
 }
 
-function closeHttpServer(server: HttpServer): Promise<void> {
-  if (!server.listening) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve, reject) => {
-    server.close((error) => {
-      if (error !== undefined) {
-        reject(error);
-        return;
-      }
-      resolve();
-    });
-  });
+function errorCodeOf(error: unknown): string | undefined {
+  return error !== null && typeof error === "object" && "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
+}
+
+function invalidJsonError(): Error & { code: string } {
+  const error = new Error("request body must be valid JSON") as Error & { code: string };
+  error.code = "FST_ERR_CTP_INVALID_JSON_BODY";
+  return error;
 }
 
 /** Creates a relay server with HTTP pairing routes and WebSocket room handling. */
@@ -79,40 +74,56 @@ export function createRelayServer(options: RelayServerOptions): RelayServer {
     options.roomOfflineQueueMax,
     options.roomOfflineQueueTtlMs
   );
-  const pairingRoutes = createPairingRoutes({
-    pairingStore,
-    roomStore,
-    logger: options.logger
+  const app = Fastify({
+    bodyLimit: 64 * 1024,
+    exposeHeadRoutes: false,
+    loggerInstance: options.logger
   });
   const roomHandler = new RoomWebSocketHandler({
     roomStore,
     logger: options.logger
   });
 
-  const httpServer = createHttpServer((req, res) => {
-    const url = parseRequestUrl(req.url, req.headers.host);
-    const ctx: HttpRequestContext = { req, res, url };
-    void (async () => {
-      try {
-        if (handleHealth(ctx, startedAt)) {
-          return;
-        }
-        if (await pairingRoutes.handle(ctx)) {
-          return;
-        }
-        sendNotFound(res);
-      } catch (error) {
-        options.logger.error(error instanceof Error ? error : { error }, "unhandled HTTP route error");
-        if (!res.headersSent) {
-          sendJson(res, 500, { error: "internal_error", message: "internal server error" });
-        } else {
-          res.end();
-        }
-      }
-    })();
+  app.removeContentTypeParser("application/json");
+  app.addContentTypeParser("application/json", { parseAs: "string", bodyLimit: 64 * 1024 }, (_request, body, done) => {
+    const text = typeof body === "string" ? body : body.toString("utf8");
+    if (text.length === 0) {
+      done(null, {});
+      return;
+    }
+    try {
+      done(null, JSON.parse(text));
+    } catch {
+      done(invalidJsonError());
+    }
   });
 
-  httpServer.on("upgrade", (req, socket, head) => {
+  registerHealthRoute(app, startedAt);
+  registerPairingRoutes(app, {
+    pairingStore,
+    roomStore,
+    logger: options.logger
+  });
+
+  app.setNotFoundHandler(async (_request, reply) => {
+    return reply.status(404).send({ error: "not_found", message: "route not found" });
+  });
+
+  app.setErrorHandler((error, _request, reply) => {
+    const code = errorCodeOf(error);
+    if (code === "FST_ERR_CTP_INVALID_JSON_BODY") {
+      void reply.status(400).send({ error: "invalid_json", message: "request body must be valid JSON" });
+      return;
+    }
+    if (code === "FST_ERR_CTP_BODY_TOO_LARGE") {
+      void reply.status(413).send({ error: "body_too_large", message: "request body is too large" });
+      return;
+    }
+    options.logger.error(error instanceof Error ? error : { error }, "unhandled HTTP route error");
+    void reply.status(500).send({ error: "internal_error", message: "internal server error" });
+  });
+
+  app.server.on("upgrade", (req, socket, head) => {
     const url = parseRequestUrl(req.url, req.headers.host);
     const roomId = roomIdFromPath(url.pathname);
     if (roomId === null) {
@@ -120,26 +131,14 @@ export function createRelayServer(options: RelayServerOptions): RelayServer {
       socket.destroy();
       return;
     }
-    roomHandler.handleUpgrade(req, socket as Socket, head, roomId);
+    roomHandler.handleUpgrade(req, socket, head, roomId);
   });
 
   return {
     async listen(): Promise<{ address: string; port: number }> {
       await initCrypto();
-      await new Promise<void>((resolve, reject) => {
-        const onError = (error: Error): void => {
-          httpServer.off("listening", onListening);
-          reject(error);
-        };
-        const onListening = (): void => {
-          httpServer.off("error", onError);
-          resolve();
-        };
-        httpServer.once("error", onError);
-        httpServer.once("listening", onListening);
-        httpServer.listen(options.port, options.host);
-      });
-      const address = httpServer.address();
+      await app.listen({ port: options.port, host: options.host });
+      const address = app.server.address();
       if (address === null || typeof address === "string") {
         return { address: options.host, port: options.port };
       }
@@ -150,7 +149,7 @@ export function createRelayServer(options: RelayServerOptions): RelayServer {
       await roomHandler.close();
       pairingStore.close();
       roomStore.clear();
-      await closeHttpServer(httpServer);
+      await app.close();
     },
 
     stats() {

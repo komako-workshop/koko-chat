@@ -1,18 +1,17 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
-import type { Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import { decodeEnvelope, encodeEnvelope, EnvelopeSchema, PROTOCOL_VERSION } from "@koko/protocol";
-import type { pino } from "../logger";
+import type { Logger } from "pino";
+import { WebSocket, WebSocketServer, type RawData } from "ws";
 import type { RoomEntry, RoomStore } from "./store";
 import { HelloMessageSchema, oppositeRole, type ManagedWebSocket, type PeerLeftReason, type RoomRole } from "./types";
 
-const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const closeBadRequest = 4400;
 const closeGone = 4410;
 
 type TextHandler = (text: string) => void;
 type CloseHandler = (reason: PeerLeftReason) => void;
-type Frame = { opcode: number; payload: Buffer };
 
 interface RoomSession {
   roomId: string;
@@ -24,7 +23,7 @@ export interface RoomWebSocketHandlerOptions {
   /** Room state store. */
   roomStore: RoomStore;
   /** Structured logger. */
-  logger: pino.Logger;
+  logger: Logger;
   /** Ping interval in milliseconds. */
   heartbeatIntervalMs?: number;
   /** Maximum time since last pong before closing a socket. */
@@ -33,50 +32,57 @@ export interface RoomWebSocketHandlerOptions {
   roomCleanupIntervalMs?: number;
 }
 
-class RoomSocket implements ManagedWebSocket {
+class ManagedRoomSocket implements ManagedWebSocket {
   readonly id = randomUUID();
-  private buffer = Buffer.alloc(0);
   private closed = false;
   private closeReason: PeerLeftReason = "closed";
+  private lastPongAt = Date.now();
   private resolveClosed: () => void = () => undefined;
   private readonly closedPromise = new Promise<void>((resolve) => {
     this.resolveClosed = resolve;
   });
   private readonly textHandlers = new Set<TextHandler>();
   private readonly closeHandlers = new Set<CloseHandler>();
-  private lastPongAt = Date.now();
 
   constructor(
-    private readonly socket: Socket,
-    private readonly logger: pino.Logger
+    private readonly websocket: WebSocket,
+    private readonly logger: Logger
   ) {
-    socket.on("data", (chunk: Buffer) => this.handleData(chunk));
-    socket.on("close", () => this.handleClosed());
-    socket.on("error", (error: Error) => {
-      this.closeReason = "error";
+    websocket.on("message", (data, isBinary) => this.handleMessage(data, isBinary));
+    websocket.on("close", () => this.handleClosed());
+    websocket.on("error", (error: Error) => {
+      if (this.closeReason === "closed") {
+        this.closeReason = "error";
+      }
       this.logger.warn(error, "websocket socket error");
+    });
+    websocket.on("pong", () => {
+      this.lastPongAt = Date.now();
     });
   }
 
   sendText(text: string): void {
-    this.sendFrame(0x1, Buffer.from(text, "utf8"));
+    if (!this.isOpen()) {
+      return;
+    }
+    this.websocket.send(text, (error) => {
+      if (error !== undefined) {
+        this.logger.warn(error, "failed to send websocket message");
+      }
+    });
   }
 
   ping(): void {
-    this.sendFrame(0x9, Buffer.alloc(0));
+    if (this.isOpen()) {
+      this.websocket.ping();
+    }
   }
 
   close(code = 1000, reason = ""): void {
-    if (this.closed) {
+    if (this.closed || this.websocket.readyState === WebSocket.CLOSED) {
       return;
     }
-    const reasonBytes = Buffer.from(reason, "utf8");
-    const payload = Buffer.alloc(2 + reasonBytes.byteLength);
-    payload.writeUInt16BE(code, 0);
-    reasonBytes.copy(payload, 2);
-    this.sendFrame(0x8, payload);
-    this.closed = true;
-    this.socket.end();
+    this.websocket.close(code, reason);
   }
 
   closeAsTimeout(): void {
@@ -85,7 +91,7 @@ class RoomSocket implements ManagedWebSocket {
   }
 
   isOpen(): boolean {
-    return !this.closed && this.socket.writable;
+    return this.websocket.readyState === WebSocket.OPEN;
   }
 
   getLastPongAt(): number {
@@ -104,127 +110,15 @@ class RoomSocket implements ManagedWebSocket {
     this.closeHandlers.add(handler);
   }
 
-  pushHead(head: Buffer): void {
-    if (head.byteLength > 0) {
-      this.handleData(head);
-    }
-  }
-
-  private handleData(chunk: Buffer): void {
-    this.buffer = Buffer.concat([this.buffer, chunk]);
-    try {
-      for (;;) {
-        const frame = this.readFrame();
-        if (frame === null) {
-          return;
-        }
-        this.handleFrame(frame);
-      }
-    } catch (error) {
-      this.logger.warn(error instanceof Error ? error : { error }, "invalid websocket frame");
-      this.close(1002, "protocol error");
-    }
-  }
-
-  private handleFrame(frame: Frame): void {
-    if (frame.opcode === 0x1) {
-      const text = frame.payload.toString("utf8");
-      for (const handler of this.textHandlers) {
-        handler(text);
-      }
+  private handleMessage(data: RawData, isBinary: boolean): void {
+    if (isBinary) {
+      this.close(1003, "unsupported frame");
       return;
     }
-    if (frame.opcode === 0x8) {
-      this.closed = true;
-      this.socket.end();
-      return;
+    const text = rawDataToText(data);
+    for (const handler of this.textHandlers) {
+      handler(text);
     }
-    if (frame.opcode === 0x9) {
-      this.sendFrame(0xa, frame.payload);
-      return;
-    }
-    if (frame.opcode === 0xa) {
-      this.lastPongAt = Date.now();
-      return;
-    }
-    this.close(1003, "unsupported frame");
-  }
-
-  private readFrame(): Frame | null {
-    if (this.buffer.byteLength < 2) {
-      return null;
-    }
-    const first = this.buffer[0];
-    const second = this.buffer[1];
-    if (first === undefined || second === undefined) {
-      return null;
-    }
-    const opcode = first & 0x0f;
-    const masked = (second & 0x80) !== 0;
-    let payloadLength = second & 0x7f;
-    let offset = 2;
-
-    if (payloadLength === 126) {
-      if (this.buffer.byteLength < offset + 2) {
-        return null;
-      }
-      payloadLength = this.buffer.readUInt16BE(offset);
-      offset += 2;
-    } else if (payloadLength === 127) {
-      if (this.buffer.byteLength < offset + 8) {
-        return null;
-      }
-      const largeLength = this.buffer.readBigUInt64BE(offset);
-      if (largeLength > BigInt(Number.MAX_SAFE_INTEGER)) {
-        throw new Error("websocket frame too large");
-      }
-      payloadLength = Number(largeLength);
-      offset += 8;
-    }
-
-    const maskLength = masked ? 4 : 0;
-    const frameLength = offset + maskLength + payloadLength;
-    if (this.buffer.byteLength < frameLength) {
-      return null;
-    }
-
-    const mask = masked ? this.buffer.subarray(offset, offset + 4) : null;
-    offset += maskLength;
-    const payload = Buffer.from(this.buffer.subarray(offset, offset + payloadLength));
-    this.buffer = this.buffer.subarray(frameLength);
-
-    if (mask !== null) {
-      for (let index = 0; index < payload.byteLength; index += 1) {
-        const maskByte = mask[index % 4];
-        if (maskByte !== undefined) {
-          payload[index] = (payload[index] ?? 0) ^ maskByte;
-        }
-      }
-    }
-
-    return { opcode, payload };
-  }
-
-  private sendFrame(opcode: number, payload: Buffer): void {
-    if (!this.isOpen() && opcode !== 0x8) {
-      return;
-    }
-    const length = payload.byteLength;
-    let header: Buffer;
-    if (length < 126) {
-      header = Buffer.from([0x80 | opcode, length]);
-    } else if (length <= 0xffff) {
-      header = Buffer.alloc(4);
-      header[0] = 0x80 | opcode;
-      header[1] = 126;
-      header.writeUInt16BE(length, 2);
-    } else {
-      header = Buffer.alloc(10);
-      header[0] = 0x80 | opcode;
-      header[1] = 127;
-      header.writeBigUInt64BE(BigInt(length), 2);
-    }
-    this.socket.write(Buffer.concat([header, payload]));
   }
 
   private handleClosed(): void {
@@ -240,6 +134,19 @@ class RoomSocket implements ManagedWebSocket {
   }
 }
 
+function rawDataToText(data: RawData): string {
+  if (typeof data === "string") {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return Buffer.concat(data).toString("utf8");
+  }
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data).toString("utf8");
+  }
+  return data.toString("utf8");
+}
+
 function parseJsonObject(text: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(text);
@@ -249,7 +156,7 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
   }
 }
 
-function sendHelloError(socket: RoomSocket, error: string, message: string): void {
+function sendHelloError(socket: ManagedRoomSocket, error: string, message: string): void {
   socket.sendText(
     JSON.stringify({
       type: "hello-error",
@@ -260,19 +167,24 @@ function sendHelloError(socket: RoomSocket, error: string, message: string): voi
   socket.close(closeBadRequest, error);
 }
 
-function acceptKey(key: string): string {
-  return createHash("sha1").update(`${key}${websocketGuid}`).digest("base64");
-}
-
-function isValidWebSocketKey(key: string): boolean {
-  return Buffer.from(key, "base64").byteLength === 16;
+function closeWebSocketServer(wss: WebSocketServer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    wss.close((error) => {
+      if (error !== undefined) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
 }
 
 /** Handles WebSocket upgrades and room message routing. */
 export class RoomWebSocketHandler {
-  private readonly sockets = new Set<RoomSocket>();
-  private readonly sessions = new Map<RoomSocket, RoomSession>();
-  private readonly logger: pino.Logger;
+  private readonly wss = new WebSocketServer({ noServer: true });
+  private readonly sockets = new Set<ManagedRoomSocket>();
+  private readonly sessions = new Map<ManagedRoomSocket, RoomSession>();
+  private readonly logger: Logger;
   private readonly heartbeatTimer: NodeJS.Timeout;
   private readonly roomCleanupTimer: NodeJS.Timeout;
   private readonly heartbeatTimeoutMs: number;
@@ -287,33 +199,10 @@ export class RoomWebSocketHandler {
   }
 
   /** Accepts a WebSocket upgrade for /v1/room/:roomId. */
-  handleUpgrade(req: IncomingMessage, socket: Socket, head: Buffer, roomId: string): void {
-    const keyHeader = req.headers["sec-websocket-key"];
-    const versionHeader = req.headers["sec-websocket-version"];
-    const key = Array.isArray(keyHeader) ? keyHeader[0] : keyHeader;
-    const version = Array.isArray(versionHeader) ? versionHeader[0] : versionHeader;
-
-    if (key === undefined || version !== "13" || !isValidWebSocketKey(key)) {
-      socket.write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
-      socket.destroy();
-      return;
-    }
-
-    socket.write(
-      [
-        "HTTP/1.1 101 Switching Protocols",
-        "Upgrade: websocket",
-        "Connection: Upgrade",
-        `Sec-WebSocket-Accept: ${acceptKey(key)}`,
-        "\r\n"
-      ].join("\r\n")
-    );
-
-    const roomSocket = new RoomSocket(socket, this.logger.child({ connectionId: randomUUID() }));
-    this.sockets.add(roomSocket);
-    roomSocket.onText((text) => this.handleText(roomSocket, roomId, text));
-    roomSocket.onClose((reason) => this.handleClose(roomSocket, reason));
-    roomSocket.pushHead(head);
+  handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer, roomId: string): void {
+    this.wss.handleUpgrade(req, socket, head, (websocket) => {
+      this.handleConnection(websocket, roomId);
+    });
   }
 
   /** Closes all active sockets and stops timers. */
@@ -325,11 +214,19 @@ export class RoomWebSocketHandler {
       socket.close(1001, "server closing");
     }
     await Promise.all(sockets.map((socket) => socket.waitClosed()));
+    await closeWebSocketServer(this.wss);
     this.sockets.clear();
     this.sessions.clear();
   }
 
-  private handleText(socket: RoomSocket, urlRoomId: string, text: string): void {
+  private handleConnection(websocket: WebSocket, roomId: string): void {
+    const roomSocket = new ManagedRoomSocket(websocket, this.logger.child({ connectionId: randomUUID() }));
+    this.sockets.add(roomSocket);
+    roomSocket.onText((text) => this.handleText(roomSocket, roomId, text));
+    roomSocket.onClose((reason) => this.handleClose(roomSocket, reason));
+  }
+
+  private handleText(socket: ManagedRoomSocket, urlRoomId: string, text: string): void {
     const session = this.sessions.get(socket);
     if (session === undefined) {
       this.handleHello(socket, urlRoomId, text);
@@ -338,7 +235,7 @@ export class RoomWebSocketHandler {
     this.handleEnvelope(socket, session, text);
   }
 
-  private handleHello(socket: RoomSocket, urlRoomId: string, text: string): void {
+  private handleHello(socket: ManagedRoomSocket, urlRoomId: string, text: string): void {
     const raw = parseJsonObject(text);
     if (raw === null) {
       this.logger.warn({ roomId: urlRoomId }, "ignoring invalid JSON before hello");
@@ -371,7 +268,7 @@ export class RoomWebSocketHandler {
     this.flushOfflineQueue(socket, urlRoomId, parsed.data.role);
   }
 
-  private handleEnvelope(socket: RoomSocket, session: RoomSession, text: string): void {
+  private handleEnvelope(socket: ManagedRoomSocket, session: RoomSession, text: string): void {
     const raw = parseJsonObject(text);
     if (raw === null) {
       this.logger.warn({ roomId: session.roomId, role: session.role }, "ignoring invalid JSON message");
@@ -406,7 +303,7 @@ export class RoomWebSocketHandler {
     this.options.roomStore.enqueue(session.roomId, targetRole, envelope);
   }
 
-  private handleClose(socket: RoomSocket, reason: PeerLeftReason): void {
+  private handleClose(socket: ManagedRoomSocket, reason: PeerLeftReason): void {
     this.sockets.delete(socket);
     const session = this.sessions.get(socket);
     if (session === undefined) {
