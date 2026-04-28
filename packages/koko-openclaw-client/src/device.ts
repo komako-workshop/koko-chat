@@ -1,7 +1,23 @@
-import { randomBytes } from "node:crypto";
-import { Buffer } from "node:buffer";
 import { getPublicKeyAsync, signAsync } from "@noble/ed25519";
 import { sha256 } from "@noble/hashes/sha2";
+
+// Cross-platform primitives.
+// - randomBytes uses globalThis.crypto which exists in:
+//   - Node 19+ (webcrypto)
+//   - all modern browsers
+//   - React Native Hermes (via react-native-get-random-values polyfill)
+//     or RN's own built-in as of 0.76+ / Hermes.
+// - base64url uses TextEncoder/TextDecoder + btoa/atob which are everywhere.
+// This keeps the package usable from RN Metro without a Node shim.
+function getCrypto(): Crypto {
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    return globalThis.crypto;
+  }
+  throw new Error(
+    "Cryptographically secure randomness not available. " +
+      "On older React Native, import 'react-native-get-random-values' at app entry."
+  );
+}
 
 /** Arguments used to build OpenClaw's canonical v2 signature payload. */
 export interface SignaturePayloadArgs {
@@ -25,7 +41,9 @@ export interface SignaturePayloadArgs {
 
 /** Creates a fresh 32-byte Ed25519 device seed. */
 export function generateDeviceSeed(): Uint8Array {
-  return randomBytes(32);
+  const bytes = new Uint8Array(32);
+  getCrypto().getRandomValues(bytes);
+  return bytes;
 }
 
 /**
@@ -64,9 +82,35 @@ export async function signDevicePayload(seed: Uint8Array, payload: string): Prom
   return base64url(signature);
 }
 
-/** Encodes bytes as base64url without padding. */
+/** Encodes bytes as base64url without padding (works in browsers, RN, and Node). */
 export function base64url(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64url");
+  // Use a portable implementation instead of Node's Buffer.
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i += 1) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
+  // btoa is available in Node 16+, all browsers, and RN Hermes.
+  const b64 = typeof btoa === "function" ? btoa(binary) : globalBtoa(binary);
+  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function globalBtoa(binary: string): string {
+  // Node 16+ has btoa as a global; this branch is only for hypothetical runtimes
+  // that miss it. Fall back to inline base64 encode.
+  const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let output = "";
+  let i = 0;
+  while (i < binary.length) {
+    const c1 = binary.charCodeAt(i++);
+    const c2 = i < binary.length ? binary.charCodeAt(i++) : Number.NaN;
+    const c3 = i < binary.length ? binary.charCodeAt(i++) : Number.NaN;
+    const e1 = c1 >> 2;
+    const e2 = ((c1 & 3) << 4) | (c2 >> 4);
+    const e3 = Number.isNaN(c2) ? 64 : ((c2 & 15) << 2) | (c3 >> 6);
+    const e4 = Number.isNaN(c3) ? 64 : c3 & 63;
+    output += CHARS.charAt(e1) + CHARS.charAt(e2) + CHARS.charAt(e3) + CHARS.charAt(e4);
+  }
+  return output;
 }
 
 function assertSeed(seed: Uint8Array): void {

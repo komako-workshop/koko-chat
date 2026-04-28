@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@koko/protocol": "workspace:*",
+    "@koko/openclaw-client": "workspace:*",
     "expo": "~55.0.0",
     "expo-constants": "~55.0.0",
     "expo-linking": "~55.0.0",

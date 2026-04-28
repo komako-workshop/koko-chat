@@ -10,6 +10,9 @@ importers:
 
   apps/koko-chat:
     dependencies:
+      '@koko/openclaw-client':
+        specifier: workspace:*
+        version: link:../../packages/koko-openclaw-client
       '@koko/protocol':
         specifier: workspace:*
         version: link:../../packages/koko-protocol
