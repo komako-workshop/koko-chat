@@ -1,0 +1,13 @@
+{
+  "name": "@koko/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "One-off smoke and ops scripts for the Koko monorepo (not published).",
+  "dependencies": {
+    "@koko/openclaw-client": "workspace:*",
+    "@koko/protocol": "workspace:*",
+    "@koko/relay": "workspace:*",
+    "ws": "^8.20.0"
+  }
+}

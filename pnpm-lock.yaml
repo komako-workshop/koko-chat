@@ -101,6 +101,21 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@25.6.0)
 
+  scripts:
+    dependencies:
+      '@koko/openclaw-client':
+        specifier: workspace:*
+        version: link:../packages/koko-openclaw-client
+      '@koko/protocol':
+        specifier: workspace:*
+        version: link:../packages/koko-protocol
+      '@koko/relay':
+        specifier: workspace:*
+        version: link:../packages/koko-relay
+      ws:
+        specifier: ^8.20.0
+        version: 8.20.0
+
 packages:
 
   '@esbuild/aix-ppc64@0.27.7':
