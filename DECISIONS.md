@@ -107,8 +107,90 @@ koko://pair?k=<base64url(cliEphBoxPublicKey)>
 | 架构 | 本地 bridge（Mac 上 Node spawn CLI） | Relay 中继 |
 | 仓库 | 单仓库 | pnpm monorepo |
 | UI 栈 | RN + Expo | RN + Expo（未变） |
-| OpenClaw 接入 | `openclaw agent --session-id ... --message ...` | 同（放在 koko-cli 里） |
-| E2E 加密 | 无 | libsodium-wrappers + AES-GCM |
+| OpenClaw 接入 | `openclaw agent --session-id ... --message ...`（spawn CLI） | **Gateway WebSocket 直连**（见 2026-04-29 决定） |
+| E2E 加密 | 无 | libsodium-wrappers + XChaCha20-Poly1305（见 2026-04-28 修订） |
 | 使用范围 | 只能 Simulator | 真机可用，任何网络 |
 
-旧仓库验证过且可复用的事：`openclaw infer model run --gateway --json` 三路并发 OK、main session file lock 必须 `--gateway` 不是 `--local`、主聊天进来要 cancel 后台任务——这些会写进 `koko-cli` 的任务书里。
+旧仓库验证过且可复用的事：`openclaw infer model run --gateway --json` 三路并发 OK、main session file lock 必须 `--gateway` 不是 `--local`、主聊天进来要 cancel 后台任务——这些经验仍然有用，但旧仓库代码本身 Komako 确认不参考（质量差）。
+
+---
+
+## 2026-04-29 新增：koko-cli ↔ OpenClaw 接入 + Task 03 拆分
+
+**决定**：koko-cli 走 **OpenClaw Gateway WebSocket 直连**（`ws://127.0.0.1:18789`），**不 spawn `openclaw agent` CLI**。
+
+**原因**：
+- `openclaw agent --session-id ... --message ... --json` 整块返回（~15s 延迟，实测），**不支持流式**
+- Gateway Protocol v3 的 `event chat {state: 'delta'}` 支持真正 token 流式
+- 透过 relay 把 OpenClaw 流式一路推到 APP，UX 和现代 chat 产品齐平
+- 旧仓库 bridge 代码质量差（Komako 明确确认不参考）
+
+**协议参考**：`ngmaloney/clawchat` 的 [`src/lib/gateway-client.ts`](https://github.com/ngmaloney/clawchat/blob/main/src/lib/gateway-client.ts)（420 行 TS），握手流程：
+
+```
+ws.open
+  ↓
+server → event: connect.challenge { nonce }
+  ↓
+client → req: connect {
+  role: "operator",
+  scopes: ["operator.read","operator.write","operator.approvals","operator.pairing"],
+  auth: { token, deviceToken? },
+  device: { id, publicKey, signature, signedAt, nonce },  // 已 paired 时才带
+  client: { id, version, platform, mode },
+  minProtocol: 3, maxProtocol: 3
+}
+  ↓
+server → res: hello-ok { auth.deviceToken, snapshot.policy.maxPayload, ... }
+  ↓
+后续 req/res 和 event 流式推送
+```
+
+**使用方式**：
+- `call('chat.send', {sessionKey, message, idempotencyKey})` → 返回 `{runId}`
+- `call('chat.history', {sessionKey, limit})` → 返回历史 messages
+- `call('chat.abort', {sessionKey})` → 取消正在跑的 run
+- `event 'chat' { state: 'delta'|'final'|'error', sessionKey, runId, message }` → 流式 token
+
+**Session 绑定**：koko-cli 启动时读 OpenClaw 的 `agent:main:main` session（用 `openclaw sessions --json --agent main` 获取 sessionKey 和 sessionId），把 APP 消息发到这个 session。所有 APP ↔ OpenClaw 对话进入 main session，和用户在 OpenClaw TUI / 其他客户端共享历史。
+
+**Device pairing**：
+- 如果 `~/.openclaw/devices/paired.json` 已有 operator device，**复用** operator token
+- 如果没有，koko-cli **不负责** pair（让用户先跑 `openclaw onboard` 或类似），koko-cli 看到没 paired device 就报错退出
+- 理由：MVP 不在 koko-cli 里做 device pairing（和 APP pairing 容易混淆），用户机器上 OpenClaw Gateway 本来就已经 paired
+
+**新增仓库结构**：
+
+```
+packages/koko-openclaw-client/     # @koko/openclaw-client（03a）
+packages/koko-cli/                  # @koko/cli（03b + 03c）
+```
+
+`@koko/openclaw-client` 做成独立 workspace package 而非 koko-cli 私有模块，理由：未来 RN APP 如果要直连 Gateway（例如用户在家 WiFi 下 Tailscale 到自己 Mac）可以复用这个包。
+
+**Task 03 拆分**：
+
+- `03a`：`@koko/openclaw-client` 纯协议层，mock WS 单测可覆盖全部 edge case
+- `03b`：`@koko/cli` 骨架 + echo bot（收到 APP envelope → 原样回一个 envelope），打通 APP ↔ relay ↔ cli 链路
+- `03c`：`@koko/cli` 接入 `@koko/openclaw-client`（echo bot → 真 Gateway 流式）
+
+---
+
+## 环境资源（本机，2026-04-29 确认）
+
+Komako 的 Mac（开发机）：
+- OpenClaw 2026.4.26 装在 `/Users/lijianren/.local/bin/openclaw`
+- Gateway 作为 LaunchAgent 跑（`openclaw gateway status`）
+  - `ws://127.0.0.1:18789`（也监听 `0.0.0.0:18789`，Dashboard: `http://192.168.71.159:18789/`）
+  - PID 6808（当前 session，会变）
+  - `--port 18789` 是默认
+- Paired operator device 已存在（`~/.openclaw/devices/paired.json`）
+  - publicKey: `m5DaiOBU8Wk_iW7Tz2BTW1ne1YeD0p0j_SnHwD2Uc-c`
+  - operator token: `u9BCjtBb7fqbG96XoZzXx7DHe1ZLHRII_3eaBaFH6QQ`
+  - Scopes: `operator.admin/read/write/approvals/pairing`
+- Main session 存在（`openclaw sessions --json --agent main`）
+  - key: `agent:main:main`
+  - sessionId: `bdb0f457-c1e8-458b-845b-daf7e786cafc`（会随使用变）
+  - model: `claude-opus-4.7` via `openrouter`
+
+**这些都是 koko-cli 启动时**动态读取**的，不 hardcode**。
