@@ -114,13 +114,49 @@ async function main() {
   ws.send(JSON.stringify({ type: "envelope", envelope }));
   console.log(`[app] -> envelope "${message}"`);
 
-  const reply = await waitFor(ws, (m) => m.type === "envelope", 5000);
-  const decoded = decodeEnvelope(JSON.stringify(reply.envelope));
-  const plain = new TextDecoder().decode(symmetricDecrypt(b64d(decoded.payload), SESSION_KEY));
-  console.log(`[app] <- envelope "${plain}"`);
+  // Collect delta chunks until final/error, or the legacy ECHO single message.
+  const deltas = [];
+  let finalText = null;
+  let errorText = null;
+  const deadline = Date.now() + 60_000;
 
-  if (plain !== `ECHO: ${message}`) throw new Error(`unexpected echo: ${plain}`);
-  console.log(`\n✅ Echo received correctly.`);
+  while (Date.now() < deadline && finalText === null && errorText === null) {
+    const reply = await waitFor(ws, (m) => m.type === "envelope", 60_000);
+    const decoded = decodeEnvelope(JSON.stringify(reply.envelope));
+    const plainBytes = symmetricDecrypt(b64d(decoded.payload), SESSION_KEY);
+    const plain = new TextDecoder().decode(plainBytes);
+
+    // Try JSON first (OpenClaw mode), fall back to raw text (legacy ECHO mode).
+    let parsed = null;
+    try { parsed = JSON.parse(plain); } catch {}
+
+    if (parsed && typeof parsed === "object" && "openclawMessage" in parsed) {
+      const content = parsed.openclawMessage?.content;
+      const text = Array.isArray(content)
+        ? content.filter((b) => b && b.type === "text").map((b) => b.text ?? "").join("")
+        : (parsed.openclawMessage?.text ?? "");
+      if (decoded.type === "chat.agent.delta") {
+        deltas.push(text);
+        process.stdout.write(`[app] ∆ ${text.slice(deltas.slice(0,-1).join("").length)}`);
+      } else if (decoded.type === "chat.agent.final") {
+        finalText = text;
+        console.log(`\n[app] ✓ final: "${text}"`);
+      } else if (decoded.type === "chat.agent.error") {
+        errorText = parsed.errorMessage ?? "(no message)";
+        console.log(`\n[app] ✗ error: ${errorText}`);
+      }
+    } else {
+      // Legacy ECHO bot output
+      console.log(`[app] <- envelope "${plain}"`);
+      finalText = plain;
+      break;
+    }
+  }
+
+  if (errorText !== null) throw new Error(`OpenClaw error: ${errorText}`);
+  if (finalText === null) throw new Error("no final response received within 60s");
+
+  console.log(`\n✅ Final text received from OpenClaw.`);
 
   ws.close();
   await delay(100);

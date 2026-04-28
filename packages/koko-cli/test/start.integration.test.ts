@@ -18,7 +18,12 @@ import {
 import { createRelayServer, type RelayServer } from "@koko/relay";
 import type { CliConfig } from "../src/config";
 import { createLogger } from "../src/logger";
-import { PLACEHOLDER_SESSION_KEY, runStart } from "../src/start";
+import {
+  PLACEHOLDER_SESSION_KEY,
+  runStart,
+  type StartGatewayClient,
+  type StartOpenClawRuntime
+} from "../src/start";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -27,6 +32,65 @@ interface TestRelay {
   server: RelayServer;
   baseUrl: string;
   wsBaseUrl: string;
+}
+
+interface GatewayCall {
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+class FakeStartGatewayClient implements StartGatewayClient {
+  readonly calls: GatewayCall[] = [];
+  private readonly callbacks = new Map<string, Set<(payload: Record<string, unknown>) => void>>();
+  private nextRunNumber = 1;
+  connected = false;
+  disconnected = false;
+
+  connect(): Promise<void> {
+    this.connected = true;
+    return Promise.resolve();
+  }
+
+  disconnect(): Promise<void> {
+    this.disconnected = true;
+    return Promise.resolve();
+  }
+
+  call(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+    this.calls.push(params === undefined ? { method } : { method, params });
+    if (method === "chat.send") {
+      const runId = `run-start-${this.nextRunNumber}`;
+      this.nextRunNumber += 1;
+      const sessionKey = typeof params?.sessionKey === "string" ? params.sessionKey : "agent:main:main";
+      const message = typeof params?.message === "string" ? params.message : "";
+      setTimeout(() => {
+        this.emitChat({
+          sessionKey,
+          runId,
+          state: "final",
+          message: { content: [{ type: "text", text: `OpenClaw: ${message}` }] }
+        });
+      }, 0);
+      return Promise.resolve({ runId });
+    }
+    return Promise.resolve({});
+  }
+
+  on(event: string, callback: (payload: Record<string, unknown>) => void): () => void {
+    const callbacks = this.callbacks.get(event) ?? new Set<(payload: Record<string, unknown>) => void>();
+    callbacks.add(callback);
+    this.callbacks.set(event, callbacks);
+    return () => {
+      callbacks.delete(callback);
+    };
+  }
+
+  private emitChat(payload: Record<string, unknown>): void {
+    const callbacks = this.callbacks.get("chat") ?? new Set<(payload: Record<string, unknown>) => void>();
+    for (const callback of callbacks) {
+      callback(payload);
+    }
+  }
 }
 
 async function startRelay(): Promise<TestRelay> {
@@ -143,12 +207,12 @@ function encryptedUserEnvelope(roomId: string, text: string): Envelope {
     roomId,
     seq: 1,
     ts: Date.now(),
-    payload: base64Encode(symmetricEncrypt(textEncoder.encode(text), PLACEHOLDER_SESSION_KEY)),
+    payload: base64Encode(symmetricEncrypt(textEncoder.encode(JSON.stringify({ text })), PLACEHOLDER_SESSION_KEY)),
     encrypted: true
   };
 }
 
-async function simulateApp(relay: TestRelay, pairingUrlPromise: Promise<string>): Promise<string> {
+async function simulateApp(relay: TestRelay, pairingUrlPromise: Promise<string>): Promise<Record<string, unknown>> {
   const qrUrl = await pairingUrlPromise;
   const decodedQr = decodePairingQrUrl(qrUrl);
   const appBoxKeypair = generateEphemeralBoxKeypair();
@@ -179,7 +243,8 @@ async function simulateApp(relay: TestRelay, pairingUrlPromise: Promise<string>)
       throw new Error("echo payload must be string");
     }
     const decrypted = symmetricDecrypt(base64Decode(envelope.payload), PLACEHOLDER_SESSION_KEY);
-    return textDecoder.decode(decrypted);
+    const parsed: unknown = JSON.parse(textDecoder.decode(decrypted));
+    return asRecord(parsed);
   } finally {
     appWs.close(1000);
   }
@@ -202,18 +267,38 @@ describe("start integration", () => {
     }
   });
 
-  it("starts, pairs, echoes one encrypted APP message, and shuts down on abort", async () => {
+  it("starts, pairs, forwards one encrypted APP message through OpenClaw, and shuts down on abort", async () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     const relay = await startRelay();
     relays.push(relay.server);
     const keyDir = await mkdtemp(path.join(os.tmpdir(), "koko-cli-start-"));
+    const fakeGateway = new FakeStartGatewayClient();
+    const openclawRuntime: Partial<StartOpenClawRuntime> = {
+      loadDeviceSeed: async () => ({
+        seed: new Uint8Array(32).fill(1),
+        deviceId: "device-id",
+        publicKeyPem: "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n-----END PUBLIC KEY-----\n",
+        publicKey: "public-key"
+      }),
+      loadOperatorToken: async () => "operator-token",
+      loadPairedDevice: async () => ({ token: "operator-token", clientId: "cli", clientMode: "probe" }),
+      readMainSession: async () => ({
+        sessionKey: "agent:main:main",
+        sessionId: "session-id"
+      }),
+      createGatewayClient: () => fakeGateway
+    };
     const config: CliConfig = {
       relayUrl: relay.baseUrl,
       relayWsUrl: relay.wsBaseUrl,
       deviceKeyPath: path.join(keyDir, "device.key"),
       logLevel: "error",
       pairingPollIntervalMs: 10,
-      pairingMaxWaitMs: 2_000
+      pairingMaxWaitMs: 2_000,
+      openclawGatewayUrl: "ws://127.0.0.1:18789",
+      openclawIdentityPath: path.join(keyDir, "openclaw-device.json"),
+      openclawPairedPath: path.join(keyDir, "paired.json"),
+      openclawBinary: "openclaw"
     };
     const controller = new AbortController();
     let resolvePairingUrl: (url: string) => void = () => undefined;
@@ -226,10 +311,17 @@ describe("start integration", () => {
       logger: createLogger({ level: "error", enabled: false }),
       signal: controller.signal,
       onPairingUrl: resolvePairingUrl,
-      renderQr: false
+      renderQr: false,
+      openclawRuntime
     });
-    const echoed = await simulateApp(relay, pairingUrlPromise);
-    expect(echoed).toBe("ECHO: Hello from APP! 你好 OpenClaw 🦞");
+    const response = await simulateApp(relay, pairingUrlPromise);
+    expect(response.runId).toBe("run-start-1");
+    expect(JSON.stringify(response.openclawMessage)).toContain("OpenClaw: Hello from APP!");
+    expect(fakeGateway.calls[0]?.method).toBe("chat.send");
+    expect(fakeGateway.calls[0]?.params).toMatchObject({
+      sessionKey: "agent:main:main",
+      message: "Hello from APP! 你好 OpenClaw 🦞"
+    });
 
     controller.abort();
     await Promise.race([
@@ -238,5 +330,7 @@ describe("start integration", () => {
         throw new Error("runStart did not stop within 500ms");
       })
     ]);
+    expect(fakeGateway.connected).toBe(true);
+    expect(fakeGateway.disconnected).toBe(true);
   });
 });

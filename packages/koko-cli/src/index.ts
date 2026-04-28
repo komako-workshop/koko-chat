@@ -4,13 +4,26 @@ import { loadConfig } from "./config";
 import { createLogger } from "./logger";
 import { runStart } from "./start";
 
-export { DEFAULT_RELAY_URL, loadConfig, type CliConfig } from "./config";
+export { DEFAULT_OPENCLAW_GATEWAY_URL, DEFAULT_RELAY_URL, loadConfig, type CliConfig } from "./config";
 export { loadOrCreateDeviceSeed, saveDeviceSeed, type DeviceSeedResult } from "./identity";
 export { createLogger, type CreateLoggerOptions, type Logger } from "./logger";
 export { runPairingFlow, renderQrToStdout, type PairingFlowOptions, type PairingFlowResult } from "./pairing";
 export { connectRoom, type PeerEvent, type RoomConnection, type RoomConnectionOptions } from "./relay";
 export { createEchoBot, type EchoBot, type EchoBotOptions } from "./bot";
-export { PLACEHOLDER_SESSION_KEY, runStart, type StartOptions } from "./start";
+export {
+  createOpenClawBot,
+  loadOpenClawDeviceSeed,
+  loadOpenClawOperatorToken,
+  readMainSession,
+  type MainSessionInfo,
+  type OpenClawBot,
+  type OpenClawBotOptions,
+  type OpenClawDeviceIdentity,
+  type OpenClawEnvelopePayload,
+  type OpenClawGatewayClient,
+  type ReadMainSessionOptions
+} from "./openclaw";
+export { PLACEHOLDER_SESSION_KEY, runStart, type StartGatewayClient, type StartOpenClawRuntime, type StartOptions } from "./start";
 
 const VERSION = "0.0.1";
 
@@ -19,7 +32,7 @@ function helpText(): string {
     "koko-cli",
     "",
     "Usage:",
-    "  koko-cli start      Pair with the APP and run the encrypted echo bot",
+    "  koko-cli start      Pair with the APP and run the OpenClaw-backed chat bot",
     "  koko-cli --version  Print version",
     "  koko-cli help       Print this help"
   ].join("\n");
