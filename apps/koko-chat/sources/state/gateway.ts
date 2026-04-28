@@ -1,7 +1,13 @@
 import { create } from "zustand";
 import type { ConnectionStatus, JsonRecord } from "@koko/openclaw-client/protocol";
-import { generateDeviceSeed } from "@koko/openclaw-client/protocol";
 import { BrowserGatewayClient } from "@/gateway/BrowserGatewayClient";
+import {
+  loadDeviceToken,
+  loadOrCreateDeviceSeed,
+  saveDeviceToken,
+  saveGatewayUrl,
+  clearDeviceIdentity
+} from "@/gateway/identityStorage";
 import type { OpenClawSetup } from "@/gateway/setupCode";
 
 /** Minimal shape of an OpenClaw chat event payload as observed on the wire. */
@@ -34,6 +40,7 @@ interface GatewayState {
 
   connect: (setup: OpenClawSetup) => Promise<void>;
   disconnect: () => Promise<void>;
+  forgetIdentity: () => Promise<void>;
   sendUserMessage: (text: string) => Promise<void>;
   resetError: () => void;
 }
@@ -73,19 +80,21 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       await existing.disconnect();
     }
 
-    const deviceSeed = generateDeviceSeed();
+    const deviceSeed = loadOrCreateDeviceSeed();
+    const storedDeviceToken = loadDeviceToken();
 
     const client = new BrowserGatewayClient({
       url: setup.url,
       token: setup.bootstrapToken,
+      ...(storedDeviceToken !== undefined ? { deviceToken: storedDeviceToken } : {}),
       deviceSeed,
       onStatusChange: (status: ConnectionStatus) => {
         set({ status });
       },
       onDeviceToken: (deviceToken: string) => {
-        // TODO: persist deviceToken + deviceSeed to MMKV so next session skips
-        // approval. For the demo we just re-pair each time.
-        console.info("[koko] gateway issued deviceToken", deviceToken.slice(0, 8), "...");
+        // Persist so subsequent sessions skip pairing approval entirely.
+        saveDeviceToken(deviceToken);
+        console.info("[koko] gateway issued deviceToken", deviceToken.slice(0, 8), "... (persisted)");
       },
       logger: {
         trace: () => undefined,
@@ -173,6 +182,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
     try {
       await client.connect();
+      saveGatewayUrl(setup.url);
     } catch (error) {
       set({
         client: null,
@@ -190,6 +200,11 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     }
     await client.disconnect();
     set({ client: null, status: "disconnected", messages: [], setup: null });
+  },
+
+  async forgetIdentity() {
+    await get().disconnect();
+    clearDeviceIdentity();
   },
 
   async sendUserMessage(text) {
