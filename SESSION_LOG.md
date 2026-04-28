@@ -100,3 +100,95 @@ Falling back to file-based resolution.
 
 我关闭。
 
+---
+
+## 2026-04-29 01:40 — ⚠️ 重大方向调整发现 ⚠️
+
+Komako 在我关闭前问了一个问题："OpenClaw 支持那么多 channel，就没一个能让我们借用减轻 APP 开发复杂度？"
+
+这个问题把我推到一个**元问题**，深挖后**发现 KokoChat 的整体架构可能要大改**。
+
+### 调研过程
+
+1. 翻 OpenClaw 内置 skill（`~/.npm-global/lib/node_modules/openclaw/skills/`）发现 skill 的本质是 "SKILL.md + scripts/" 的 LLM 教学单元，不是独立守护进程
+2. skill 靠 agent 的 `exec` tool（支持 `background=true`）开长进程
+3. **最关键**：跑 `openclaw qr --help`、`openclaw devices --help` 发现：
+   - `openclaw qr --public-url <tunnel-url> --json` **直接生成 mobile pairing setupCode**
+   - `openclaw devices approve` 内置 device pairing approval
+   - Gateway 本身已经支持外部 mobile client pairing（这是 OpenClaw 的产品设计目标）
+
+### 结论
+
+"Mac 端 守护进程 + pairing + machineKey 交换 + relay"这一整套我们自己重写的东西，**OpenClaw 已经原生支持**。`openclaw qr` 给出的 setupCode 就是手机 APP pairing 需要的一切信息。
+
+完整流程（**完全用 OpenClaw 内置能力**）：
+
+```
+[kokochat skill 指示 agent]
+  1. spawn `cloudflared tunnel --url ws://127.0.0.1:18789` background
+  2. wait for public URL from cloudflared stdout
+  3. run `openclaw qr --public-url <url> --json` → setupCode
+  4. display ASCII QR in terminal (openclaw qr 自带)
+
+[用户拿 KokoChat APP 扫 QR]
+
+[APP]
+  1. decode setupCode → { url, bootstrapToken }
+  2. 连 wss url，通过 bootstrapToken 开始 Gateway device pairing
+  3. OpenClaw 弹 pairing 请求 → 用户 approve (或 skill 自动 approve)
+  4. APP 拿到 operator token → 常规 @koko/openclaw-client 连接 → 开始聊天
+```
+
+### 代码沉没成本评估
+
+| 包 | 在新方向下 | 已写 |
+|---|---|---|
+| @koko/protocol | 加密原语保留，pairing **废弃** | 38 tests |
+| @koko/relay | **完全废弃** | 16 tests |
+| @koko/openclaw-client | **完全保留，核心** | 25 tests |
+| @koko/cli | **完全废弃** | 28 tests |
+| @koko/app | **完全保留** | typecheck + Metro |
+| scripts/smoke-* | **废弃** | - |
+
+**67/107 tests (63%) 的代码路径要废弃**，但 git 历史保留、不物理删除（将来如果新路线不行还能回退）。
+
+净节省：
+- 不用架公网 relay
+- 不用写 cli 守护进程（OpenClaw 本身就是）
+- 不用设计 machineKey 交换协议 (Task 04d 作废)
+- 不用写 pairing UI (复用 OpenClaw 的 QR setup)
+- Task 04b-2 大幅简化：APP 只要做 "扫 QR + 通过 @koko/openclaw-client 连 Gateway" 就行
+- Task 04d 完全废弃
+
+### 新需要写的
+
+- **kokochat skill** (SKILL.md + 少量 shell 脚本)：~50 行 + Markdown
+- **RN APP 里的 QR scanner** (04b-2 的一部分)：选 expo-barcode-scanner 还是 vision-camera
+- **RN APP 里 @koko/openclaw-client 真实 runtime 调用** (之前只 import 了 const)：要验证 libsodium / @noble 在 RN 上能跑
+- （可选）**kokochat plugin**：把 skill 升级成持久 channel plugin，和 wechat / telegram 并列
+
+### 决定权在 Komako
+
+我**不做这个方向变更**。需要 Komako 醒来拍板：
+
+**选项 α: 立即切换** — 保留现有 @koko/openclaw-client + @koko/app，废弃 @koko/relay + @koko/cli，开始写 kokochat skill 和 APP 的 Gateway pairing。所有沉没成本接受。
+**选项 β: 先验证再切** — 写一个 shell 脚本 smoke 出 "tunnel → openclaw qr → APP 扫 → APP 连上" 的完整流程，确认没隐藏坑，再切。
+**选项 γ: 继续原计划** — 已经做了 70%，不换。保留 relay/cli 的代码价值，完成 04b-c-d。
+
+### 我认为是 α（但不该我决定）
+
+理由：
+1. α 代价是"已完成代码的一半价值减少"（**但 git 留着，不真正删**）
+2. γ 代价是"继续写 40% 相对复杂代码"+"用户装 APP 后还要手动配 tunnel"+"未来还要跟 OpenClaw 协议变化"
+3. α 的净工作量**显著更小**，用户体验**显著更好**，架构和 IDEA.md 的"KokoChat = OpenClaw 在你手机上的家"**更一致**
+
+### Komako 醒来首件事（更新）
+
+1. 读这段（`SESSION_LOG.md` 最后）
+2. 决定 α / β / γ
+3. 如果 α：把决定写进 DECISIONS.md 的新一节"2026-04-29 方向调整：基于 OpenClaw 原生 pairing"，然后重开 task 04x
+4. 如果 β：写 `scripts/smoke-openclaw-pair.mjs` 验证完整 tunnel + qr + 连接流程
+5. 如果 γ：继续 04b-2 开工
+
+我关机。git 最后 commit 是 `377baf8` session-log 收尾，现在这篇 session-log 更新尚未 commit。将在下一步 commit 后真的退出。
+
