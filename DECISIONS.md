@@ -50,7 +50,7 @@ koko-chat/
 | 密码学库 | **libsodium-wrappers**（两端统一） | Happy 两端库不一致打了 sha512 截断补丁，脏；我们统一用一个库 |
 | 密钥派生 | master secret → **HKDF**(master, info="sig") / HKDF(master, info="box") | 避免 key reuse across primitives；保持密码学纯洁 |
 | 身份认证 | Ed25519 challenge-response | 同 Happy；server 只存 pubKey，client 持私钥签随机 challenge |
-| 消息 E2E | **AES-256-GCM** + dataKey 分层（CLI 本地生成 machineKey，用 APP 公钥 box 加密存 relay） | 跳过 v1 legacy 直接走 v2 结构 |
+| 消息 E2E | **XChaCha20-Poly1305** (libsodium `crypto_aead_xchacha20poly1305_ietf_*`) + dataKey 分层（CLI 本地生成 machineKey，用 APP 公钥 box 加密存 relay） | 跳过 v1 legacy 直接走 v2 结构；libsodium.js 不含 AES-GCM（AES-NI 非常数时间顾虑），XChaCha20 是 libsodium 推荐的对称 AEAD，nonce 24B 随机更安全 |
 | Relay 持久化 | **内存 LRU，24h / 1000 条上限** | MVP 简化；relay 重启消息全丢（上层应用层感知重发） |
 | SAS 防 MitM | **MVP 不做**，不预留接口 | 等有真实用户再说；现在加会让任务书复杂化 |
 | 部署目标 | Komako 的服务器（Ubuntu 22.04，nginx + letsencrypt） | `ssh komako` 可登陆，已有 TLS 基础设施 |
@@ -89,6 +89,18 @@ koko://pair?k=<base64url(cliEphBoxPublicKey)>
 ---
 
 ## 历史决定（与旧仓库 openclaw-chat 对比）
+
+### 2026-04-28 修订：对称 AEAD 从 AES-GCM 改为 XChaCha20-Poly1305
+
+原因：实现 `@koko/protocol` 时发现 `libsodium-wrappers` 主包**不含** AES-256-GCM（libsodium.js 因 AES-NI 非常数时间考虑默认剔除，只在 sumo 版才有）。已考虑过的选项：
+
+1. 切换到 `libsodium-wrappers-sumo`（完整版含 AES-GCM）—— RN 兼容性不确定、包体大
+2. Node 端 `node:crypto` + RN 端 WebCrypto —— 两端实现不一致、复杂度高
+3. **换 XChaCha20-Poly1305**（选定）—— libsodium 两端原生支持、nonce 24B 随机更安全、密码学等价
+
+这是被迫的调整，但结果更干净：`@koko/protocol` 继续只依赖 `libsodium-wrappers` 一个加密库。
+
+---
 
 | 维度 | 旧 openclaw-chat | 新 koko-chat |
 |---|---|---|
