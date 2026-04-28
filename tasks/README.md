@@ -15,5 +15,9 @@
 | 03a-fix | `@koko/openclaw-client` 测试修复（Error: null + Promise settle guard + ws.send callback null） | codex + Claude | ✅ done (2026-04-28) |
 | 03b | `@koko/cli` 骨架 + echo bot（APP ↔ relay ↔ cli 打通） | codex + Claude | ✅ done (2026-04-28) — 11/11 测试绿 + 真实手动 smoke 过 |
 | 03c | `@koko/cli` 接入 `@koko/openclaw-client`（echo → 真 LLM） | codex + Claude | ✅ done (2026-04-29) — 28/28 + 真实 Gateway 流式 smoke 过 |
+| 04a | `@koko/app` Expo scaffold（4 屏 + MMKV + Zustand + twrnc） | codex + Claude | ✅ done (2026-04-29) — typecheck + Metro Web 启动 + 浏览器渲染过 |
+| 04b | `@koko/app` 集成 workspace 包 + pairing（QR 扫描 + 完整 pair flow） | codex | pending |
+| 04c | `@koko/app` chat UI（delta 流式渲染 + 富结构展示） | Claude | pending |
+| 04d | machineKey 交换协议（APP + CLI 同步替换 PLACEHOLDER） | codex + Claude | pending |
 
 （后续任务随项目推进追加）
