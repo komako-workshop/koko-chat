@@ -66,3 +66,37 @@ Falling back to file-based resolution.
 
 **接下来行动**：commit + 更新 tasks/README.md + 再抽时间扫描低风险 housekeeping（如 DECISIONS.md 补一条"方案 A 选定"）。
 
+---
+
+## 2026-04-29 01:00 — 04b-1 + housekeeping commit
+
+- 提交 `3e2b35f` 实现 Metro + pnpm 集成
+- 提交 `48593aa` 把决定写进 DECISIONS.md "2026-04-29 新增：RN Metro + pnpm 集成（04b-1）"一节
+- 更新 tasks/README.md 拆分 04b 为 04b-1（✅）+ 04b-2（pending）
+
+### 停手理由
+
+接下来做的事都需要 Komako 产品决定，所以我停：
+
+- 04b-2 需要选 QR 库（managed vs bare）、设计 pairing UI、决定 relay URL 配置机制
+- 04c chat UI 完全是产品判断（UX 设计）
+- 04d machineKey 交换决定了暂缓
+
+### 可能还能"偷做"但**我选择不做**的几件
+
+- 调用 `initCrypto()` 跑 libsodium Web 验证：只能验 Web，不能验 RN 真机。边际价值不高，RN 真机还要决定 pure-JS libsodium 还是 react-native-libsodium 原生模块——产品决定
+- `tsup --watch` + Metro `resolver.resolveRequest` 改成"从 src 而不是 dist 读"：开发体验提升，但动的是 protocol / metro / 整体 dev workflow，**改动面大**不适合我一个人决定
+- 给 `@koko/protocol` 加一个 `initCryptoSync` 的 placeholder export：纯机械改动，但"为什么要这样改"需要上下文判断
+
+### 新窗口/Komako 醒来首件事
+
+1. 读 SESSION_LOG.md 的本节（你在读）
+2. git log 看 `48593aa` 之后有没有其他改动（应该没有）
+3. `pnpm -r typecheck` 应该全绿
+4. `cd apps/koko-chat && pnpm exec expo start --web` 打开 http://localhost:8081 → 看到 "Version 0.0.1 · Protocol v1"
+5. 决定 04b-2 的三个产品问题（QR 库、pairing UI、relay URL 配置），或者跳去 04c，或者换方向（比如 relay 部署）
+
+当前测试状态（未变）：107+ 测试全绿（38 protocol + 16 relay + 25 openclaw-client + 28 cli）+ 真实 OpenClaw 流式 smoke 过。
+
+我关闭。
+
