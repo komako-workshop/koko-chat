@@ -36,6 +36,28 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@25.6.0)
 
+  packages/koko-relay:
+    dependencies:
+      '@koko/protocol':
+        specifier: workspace:*
+        version: link:../koko-protocol
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.1(postcss@8.5.12)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@25.6.0)
+
 packages:
 
   '@esbuild/aix-ppc64@0.27.7':

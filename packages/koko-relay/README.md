@@ -12,3 +12,33 @@ KokoChat 的 WebSocket 中继服务器。
 部署：Komako 的服务器（Ubuntu 22.04, nginx + letsencrypt TLS 反代）。
 
 详见 `tasks/` 下各模块的任务书。
+
+## Development
+
+```bash
+pnpm --filter @koko/relay typecheck
+pnpm --filter @koko/relay build
+pnpm --filter @koko/relay test
+pnpm --filter @koko/relay dev
+```
+
+默认监听 `0.0.0.0:8080`。可用环境变量：
+
+- `KOKO_RELAY_PORT`
+- `KOKO_RELAY_HOST`
+- `KOKO_RELAY_LOG_LEVEL`
+- `KOKO_RELAY_PAIRING_TTL_MS`
+- `KOKO_RELAY_ROOM_TTL_MS`
+- `KOKO_RELAY_ROOM_OFFLINE_QUEUE_MAX`
+- `KOKO_RELAY_ROOM_OFFLINE_QUEUE_TTL_MS`
+
+HTTP:
+
+- `GET /healthz`
+- `POST /v1/pair/request`
+- `POST /v1/pair/response`
+- `DELETE /v1/pair/request`
+
+WebSocket:
+
+- `/v1/room/:roomId`
