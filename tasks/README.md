@@ -13,7 +13,7 @@
 | 02b | `koko-relay` swap 成真实 fastify / ws / pino 依赖 | codex + Claude | ✅ done (2026-04-28) — 16/16 无 regression |
 | 03a | `@koko/openclaw-client` Gateway Protocol v3 TS 客户端 | codex + Claude | ✅ done (2026-04-28) — 25/25 测试绿，见 03a-fix |
 | 03a-fix | `@koko/openclaw-client` 测试修复（Error: null + Promise settle guard + ws.send callback null） | codex + Claude | ✅ done (2026-04-28) |
-| 03b | `@koko/cli` 骨架 + echo bot（APP ↔ relay ↔ cli 打通） | codex | pending |
+| 03b | `@koko/cli` 骨架 + echo bot（APP ↔ relay ↔ cli 打通） | codex + Claude | ✅ done (2026-04-28) — 11/11 测试绿 + 真实手动 smoke 过 |
 | 03c | `@koko/cli` 接入 `@koko/openclaw-client`（echo → 真 LLM） | codex | pending |
 
 （后续任务随项目推进追加）
