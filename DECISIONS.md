@@ -194,3 +194,40 @@ Komako 的 Mac（开发机）：
   - model: `claude-opus-4.7` via `openrouter`
 
 **这些都是 koko-cli 启动时**动态读取**的，不 hardcode**。
+
+---
+
+## 2026-04-29 新增：RN Metro + pnpm 集成（04b-1）
+
+**决定**：走"方案 A"（在 `apps/koko-chat/metro.config.js` 里配 `watchFolders` + `nodeModulesPaths` 到 workspace root），**保留** Metro 默认的 hierarchical lookup（不用 `disableHierarchicalLookup: true`）。
+
+**原因**：
+- pnpm 不把 peer deps 平铺到 app 级 node_modules。`expo-router` 的 peer dep `@expo/metro-runtime` 只存在于 `node_modules/.pnpm/expo-router@.../node_modules/`。关闭 hierarchical lookup 后 Metro 找不到这条路径。
+- 打开 hierarchical lookup 后 Metro 从 importing file 向上找 `node_modules/`，能遍历到 .pnpm 的子 node_modules 里的 peer deps。**有点微弱地放松了严格依赖**（理论上 `apps/koko-chat` 能 import 它没声明的 peer dep），但实践上 Happy 和我们都这么干。
+- 相比 "方案 C"（`file:../../packages/koko-protocol` 本地路径依赖），方案 A 保留 workspace `workspace:*` 协议，改 protocol 源码实时反映到 APP，不用额外 `pnpm install` 同步。
+- 相比 "方案 B"（`.npmrc shamefully-hoist`），方案 A 不影响 workspace 其他包的严格依赖检查。
+
+**示例配置**（见 `apps/koko-chat/metro.config.js`）：
+
+```js
+const { getDefaultConfig } = require("expo/metro-config");
+const path = require("node:path");
+
+const projectRoot = __dirname;
+const workspaceRoot = path.resolve(projectRoot, "../..");
+
+const config = getDefaultConfig(projectRoot);
+config.watchFolders = [workspaceRoot];
+config.resolver.nodeModulesPaths = [
+  path.resolve(projectRoot, "node_modules"),
+  path.resolve(workspaceRoot, "node_modules")
+];
+// do NOT set disableHierarchicalLookup — needed so pnpm's nested peer deps
+// (e.g. @expo/metro-runtime via expo-router) can still be found.
+
+module.exports = config;
+```
+
+**已知副作用**：
+- `@noble/hashes/crypto.js` 会被 Metro 发出 "subpath not in exports" warning，原因是 `@noble/hashes` 的 `package.json` exports 没声明那个 crypto 子路径。Metro fallback 成功、不影响运行。可忽略。
+- Future：如果 04b-2 把 `libsodium-wrappers` 真正在 RN 上跑起来还有坑，需要 `@more-tech/react-native-libsodium` 原生模块（bare workflow）或 `libsodium-wrappers` 纯 JS（managed workflow，慢）。这部分见 Task 04b-2 / 04c 的决定。
