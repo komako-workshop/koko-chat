@@ -68,7 +68,12 @@ const noopLogger: Logger = {
 };
 
 const defaultClient: GatewayClientMetadata = {
-  id: "koko-app",
+  // OpenClaw Gateway enforces an allowlist on client.id / client.mode.
+  // "webchat" + "webchat" is the pair used by browser-based webchat clients
+  // and triggers Gateway's `isWebchat === true` path, which enables silent
+  // local pairing without manual `openclaw devices approve` for loopback
+  // browser connections. See server.impl shouldAllowSilentLocalPairing.
+  id: "webchat",
   version: "0.0.1",
   platform: "web",
   mode: "webchat"
