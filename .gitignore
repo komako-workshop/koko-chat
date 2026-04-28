@@ -1,0 +1,38 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Env / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build / dist
+dist/
+build/
+out/
+.next/
+.expo/
+.expo-shared/
+
+# Logs / tmp
+*.log
+.tmp/
+tmp/
+
+# Local app state (if any future bridge stores files here)
+.koko/
+~/.koko-chat/
