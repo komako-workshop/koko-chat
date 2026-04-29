@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View, type ListRenderItemInfo } from "react-native";
 import { Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -40,6 +40,20 @@ export default function ChatScreen() {
   const disconnect = useGatewayStore((s) => s.disconnect);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const listRef = useRef<FlatList<ChatMessage>>(null);
+
+  // Autoscroll to bottom whenever messages grow or the streaming text
+  // updates. A soft scroll (animated: false so streaming updates don't
+  // fight fast incoming deltas).
+  useEffect(() => {
+    if (messages.length === 0) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated: false });
+    }, 16);
+    return () => clearTimeout(timer);
+  }, [messages]);
 
   async function handleSend(): Promise<void> {
     if (sending || draft.trim().length === 0) return;
@@ -91,10 +105,16 @@ export default function ChatScreen() {
         </View>
 
         <FlatList
+          ref={listRef}
           data={messages}
           keyExtractor={messageKey}
           renderItem={renderMessage}
           contentContainerStyle={tw`px-4 py-4`}
+          onContentSizeChange={() => {
+            if (messages.length > 0) {
+              listRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
           ListEmptyComponent={
             <View style={tw`mt-16 items-center`}>
               <Text style={tw`text-slate-500 dark:text-slate-400`}>
