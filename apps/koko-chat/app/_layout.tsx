@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -6,8 +7,21 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppStateProvider } from "@/providers/AppStateProvider";
 import { ErrorBoundary } from "@/providers/ErrorBoundary";
 import { ThemeProvider } from "@/providers/ThemeProvider";
+import { hydrateStorage } from "@/storage/mmkv";
 
 export default function RootLayout() {
+  // Load persisted KV from AsyncStorage before exposing routes, so that
+  // zustand persist reads see the stored values. On Web this is a no-op
+  // (localStorage is already synchronous).
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    void hydrateStorage().then(() => setHydrated(true));
+  }, []);
+
+  if (!hydrated) {
+    return null;
+  }
+
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>

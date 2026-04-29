@@ -27,7 +27,15 @@
       "bundler": "metro",
       "output": "single"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "KokoChat uses the camera to scan OpenClaw pairing QR codes."
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     }

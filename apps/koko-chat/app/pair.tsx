@@ -5,12 +5,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
 
 import { parseSetupCode } from "@/gateway/setupCode";
+import { QrScanner } from "@/pair/QrScanner";
 import { useGatewayStore } from "@/state/gateway";
 
 async function readClipboardText(): Promise<string | null> {
-  // Browser clipboard API (requires user gesture, which onPress is).
-  // On RN native, navigator.clipboard doesn't exist — callers can handle
-  // the null fallback.
   if (typeof navigator !== "undefined" && navigator.clipboard?.readText !== undefined) {
     try {
       return await navigator.clipboard.readText();
@@ -25,9 +23,25 @@ export default function PairScreen() {
   const [input, setInput] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const status = useGatewayStore((s) => s.status);
   const connect = useGatewayStore((s) => s.connect);
   const lastError = useGatewayStore((s) => s.lastError);
+
+  async function connectWith(raw: string): Promise<void> {
+    setLocalError(null);
+    if (busy) return;
+    try {
+      const setup = parseSetupCode(raw);
+      setBusy(true);
+      await connect(setup);
+      router.replace("/chat");
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function handlePaste(): Promise<void> {
     const text = await readClipboardText();
@@ -39,19 +53,19 @@ export default function PairScreen() {
     }
   }
 
-  async function handleConnect(): Promise<void> {
-    setLocalError(null);
-    if (busy) return;
-    try {
-      const setup = parseSetupCode(input);
-      setBusy(true);
-      await connect(setup);
-      router.replace("/chat");
-    } catch (error) {
-      setLocalError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
+  function handleScanned(data: string): void {
+    setShowScanner(false);
+    setInput(data);
+    void connectWith(data);
+  }
+
+  if (showScanner) {
+    return (
+      <QrScanner
+        onScanned={handleScanned}
+        onCancel={() => setShowScanner(false)}
+      />
+    );
   }
 
   return (
@@ -62,15 +76,27 @@ export default function PairScreen() {
           On your Mac, run:
         </Text>
         <View style={tw`mt-2 rounded-lg bg-slate-900 px-3 py-2`}>
-          <Text style={tw`font-mono text-xs text-cyan-300`}>openclaw qr --json --no-ascii --url ws://127.0.0.1:18789</Text>
+          <Text style={tw`font-mono text-xs text-cyan-300`}>openclaw qr</Text>
         </View>
         <Text style={tw`mt-3 text-sm leading-5 text-slate-600 dark:text-slate-300`}>
-          Copy the <Text style={tw`font-mono text-xs`}>setupCode</Text> value (or paste the whole JSON) below.
-          If pairing isn't silently approved, run{" "}
-          <Text style={tw`font-mono text-xs`}>openclaw devices approve &lt;requestId&gt;</Text> on your Mac.
+          Then scan the QR code displayed in the terminal with your phone, or paste the setup code below.
         </Text>
 
-        <View style={tw`mt-5 flex-row items-center justify-between`}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setShowScanner(true)}
+          style={tw`mt-5 items-center rounded-2xl bg-cyan-600 px-6 py-4`}
+        >
+          <Text style={tw`text-base font-semibold text-white`}>📷 Scan QR code</Text>
+        </Pressable>
+
+        <View style={tw`mt-6 flex-row items-center gap-2`}>
+          <View style={tw`h-px flex-1 bg-slate-300 dark:bg-slate-700`} />
+          <Text style={tw`text-xs uppercase text-slate-500 dark:text-slate-400`}>or paste setup code</Text>
+          <View style={tw`h-px flex-1 bg-slate-300 dark:bg-slate-700`} />
+        </View>
+
+        <View style={tw`mt-3 flex-row items-center justify-between`}>
           <Text style={tw`text-xs font-semibold uppercase text-slate-500 dark:text-slate-400`}>Setup code</Text>
           <Pressable
             accessibilityRole="button"
@@ -103,16 +129,16 @@ export default function PairScreen() {
         <Pressable
           accessibilityRole="button"
           disabled={busy || input.trim().length === 0}
-          onPress={() => void handleConnect()}
+          onPress={() => void connectWith(input)}
           style={tw.style(
             "mt-6 items-center rounded-2xl px-6 py-4",
             busy || input.trim().length === 0
               ? "bg-slate-300 dark:bg-slate-700"
-              : "bg-cyan-600 dark:bg-cyan-500"
+              : "bg-slate-800 dark:bg-slate-200"
           )}
         >
-          <Text style={tw`text-base font-semibold text-white`}>
-            {busy ? `Connecting (${status})…` : "Connect"}
+          <Text style={tw.style("text-base font-semibold", busy || input.trim().length === 0 ? "text-white" : "text-white dark:text-slate-950")}>
+            {busy ? `Connecting (${status})…` : "Connect with code"}
           </Text>
         </Pressable>
 
