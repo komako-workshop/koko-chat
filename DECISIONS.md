@@ -231,3 +231,130 @@ module.exports = config;
 **已知副作用**：
 - `@noble/hashes/crypto.js` 会被 Metro 发出 "subpath not in exports" warning，原因是 `@noble/hashes` 的 `package.json` exports 没声明那个 crypto 子路径。Metro fallback 成功、不影响运行。可忽略。
 - Future：如果 04b-2 把 `libsodium-wrappers` 真正在 RN 上跑起来还有坑，需要 `@more-tech/react-native-libsodium` 原生模块（bare workflow）或 `libsodium-wrappers` 纯 JS（managed workflow，慢）。这部分见 Task 04b-2 / 04c 的决定。
+
+## 2026-05-06 至 2026-05-07 新增：SDK/auth 踩坑 + mini-app runtime 定位
+
+### SDK 版本：Expo 55 → 54
+
+**决定**：APP 跟 Expo Go 的 runtime 对齐，不追最新 SDK。
+
+**理由**：用户设备上的 App Store Expo Go 不是每月都更新。我们把 `expo` 降到 `~54.0.0`、`react` `19.1.0`、`react-native` `0.81.5`，用 `pnpm exec expo install --fix` 让 Expo 自己把所有 peer dep 对齐。
+
+`expo-router` 之后的 expo-\* 子包跳到各自独立 versioning（`expo-router@~6.0.23` 不是 ~54），以后升级要用 `expo install --check` 读 expo 推荐表，不能照抄 `expo` 的版本号。
+
+### OpenClaw Gateway `crypto.subtle` 在 RN Hermes 上不可用
+
+**决定**：`@koko/openclaw-client` 的 Ed25519 走 noble 同步 API，不走 `subtle.digest` 异步路径。
+
+**理由**：`@noble/ed25519` v2 的 async 函数调用 `crypto.subtle.digest('SHA-512')`。RN Hermes 没有 WebCrypto `subtle`，handshake 直接崩。同步路径只需要一个外部 `sha512` 实现，`@noble/hashes/sha2` 已经是依赖，零新装包。
+
+```ts
+ed.etc.sha512Sync = (...messages) =>
+  sha512(messages.length === 1 ? messages[0] : ed.etc.concatBytes(...messages));
+```
+
+Public API 仍然保留 `Promise` 返回，调用方不用改。
+
+### OpenClaw pairing 的 bootstrapToken 和 gatewayToken 是两种东西
+
+**决定**：`BuildConnectParamsArgs` 同时接受 `token`（长期 `gateway.auth.token`）和 `bootstrapToken`（一次性 `openclaw qr` 出来的配对 token）。
+
+**理由**：Gateway 的 `connect.auth` 分 `token` / `bootstrapToken` / `deviceToken` / `password` 四个独立字段。把 bootstrap token 塞进 `token` 会被拒绝 `gateway token mismatch`。APP 的 setupCode parser 同样接受这两种字段，使用者想用哪个都行。
+
+### Dev auto-connect 不经过手粘 setup code
+
+**决定**：开发环境用 `scripts/dev-start.mjs` 读 `~/.openclaw/openclaw.json` 里的 `gateway.auth.token`，通过 Expo `app.config.js` 的 `extra` 注入，APP 在 `__DEV__` 分支里直接 `connect()`。
+
+**理由**：每次 Expo Go reload 都要扫码/粘 setupCode 不现实。bootstrap token 还只有 10 分钟 TTL。生产环境不会带这些 `extra`，整段代码 skip。
+
+副作用：静态 `app.json` 不能读 env，迁到 `app.config.js`。
+
+### 升级 OpenClaw 时要单独校一次 provider
+
+**决定**：升级 `openclaw` 后第一件事是确认 `agents.defaults.model.primary` 和本机 auth 方式（API key vs Codex OAuth）是否匹配。
+
+**背景**：`openclaw@2026.5.5` 升级 + `openclaw doctor --fix` 自动把 `openai-codex/gpt-5.5` 改回了 `openai/gpt-5.5`。我本机是 Codex OAuth，没有 `OPENAI_API_KEY`，导致手机上所有消息直接返回 `No API key found for provider "openai"`。修法 `openclaw models set openai-codex/gpt-5.5 && openclaw gateway restart`。
+
+后续产品化做 `koko setup` 或安装向导时要把这个检查内建进去。
+
+### KokoChat 产品定位：mini-app runtime，不是第三方 OpenClaw client
+
+**决定**：KokoChat 不以"更好的 OpenClaw 客户端"为差异化。差异化是**mobile-first mini-app runtime**：每个 mini-app = OpenClaw agent 能力 + skill 行为 + 原生 GUI + 本地 context + 可选 worker。
+
+**理由**：OpenClaw 自己有官方 Control PWA（4/29 发现的）。如果我们做通用 chat 壳直接对比，用户心智上没理由装 KokoChat。但 OpenClaw Control 没有 mini-app / 卡片 / 收藏 / 课程进度这类**产品型消费体验**。这才是 KokoChat 能立住的缝隙。
+
+对应：原本 Komako session-log 4/29 那四个选项里选 **γ' 自己做产品**，但产品形态是 mini-app runtime 而不是"手机 OpenClaw 壳"。
+
+设计稿：`docs/mini-app-runtime.md`（commit `fcaa04c`）。
+
+### Session key 命名契约
+
+**决定**：KokoChat 的每个 conversation 对应的 OpenClaw session key 格式统一为：
+
+```text
+agent:<agentId>:kokochat:<miniAppId>:<conversationScope>
+```
+
+- `<agentId>` 默认 `main`
+- `<miniAppId>` 是 mini-app id（`claw` / `feed` / `book` / ...）
+- `<conversationScope>` 通常是 `<conversationId>`；Book Tutor 用 `<bookId>`
+
+**KokoChat 不再使用 `agent:main:main`**。那是 OpenClaw CLI / Control UI / 默认 chat 的共享入口，用了会跟 Mac 终端聊天互相污染。
+
+**理由**：
+- `openclaw sessions --json` 输出按前缀自然分区，排查问题方便。
+- 手机 APP 的对话不会被 Mac 终端 `/reset` 吃掉。
+- 不同 mini-app 的 session 完全隔离，cleanup / daily reset / compaction 都各自走各自的。
+- 这是产品契约，skill prompt、UI 逻辑、统计都可以依赖这个前缀结构。
+
+### OpenClaw transcript 是 agent-facing 的 source of truth
+
+**决定**：OpenClaw Gateway 写的 `~/.openclaw/agents/<agent>/sessions/<sessionId>.jsonl` 是 agent 侧的 truth，KokoChat 本地 `conversations/<id>/messages.jsonl` 是 UI cache。
+
+**理由**：OpenClaw 有自己的 compaction / context window / 模型历史语义。APP 侧如果当 truth 会在 compaction 后和 agent 看到的不一致，产生"APP 显示了，但 agent 记不住"的 bug。Mini-app state（Feed interests、Book Tutor outline 等）是 KokoChat 独有的，不受 OpenClaw 管辖，也不受 compaction 影响。
+
+### OpenClaw session daily reset 对 KokoChat 不友好
+
+**背景**：OpenClaw 默认 `session.reset.mode: "daily"`, `atHour: 4`，凌晨 4 点全局 reset。文档 `/concepts/session` 和源码 `reset-aZvMiHFk.js` 都确认这是 `DEFAULT_RESET_MODE`。
+
+**决定**：KokoChat 自己的 webchat channel 应该配成长期 idle（`mode: "idle", idleMinutes: 525600`）。OpenClaw 没有 `mode: "never"`，只能用大 idle 模拟。
+
+**配置方式**（只改 webchat，不动全局）：
+
+```bash
+openclaw config set session.resetByChannel.webchat '{"mode":"idle","idleMinutes":525600}' --strict-json
+openclaw gateway restart
+```
+
+**不做**：不让 APP 直接写用户的 `~/.openclaw/openclaw.json`。应用层只做检测 + 提示，配置由 CLI / onboarding 工具执行。
+
+### Block protocol envelope + versioning
+
+**决定**：agent 输出的 fenced block 必须包一层 envelope：
+
+```ts
+type KokoBlockEnvelope<T> = {
+  type: string;       // 匹配 fenced language tag
+  version: number;    // 从 1 开始
+  id: string;
+  createdAt: number;
+  source?: "skill" | "tool" | "system" | "user";
+  payload: T;
+};
+```
+
+Fenced language tag 用 `koko.<miniAppId>.<kind>`（如 `koko.feed.card`）。
+
+**理由**：
+- `type` 在 JSON 里重复，防止用户复制粘贴把 fenced tag 弄丢。
+- `version` 让客户端升级不会破坏老 APP。
+- `id` + `createdAt` 让 UI 能 dedup / 排序 / 局部更新。
+- 未知 type 或 future version 必须降级渲染为纯文本或折叠 JSON，不能崩。
+
+**Capability declaration**：APP 连接时通过 system instruction 告诉 agent 自己支持的 block type 和版本，agent skill 输出时按 client 支持度降级。
+
+### Action kinds
+
+**决定**：Block payload 里的 `actions` 不是任意字符串指令，而是引用 mini-app 声明过的 `ActionDefinition`。kind 只有四种：`local | agent_feedback | link_open | system`。
+
+**理由**：让"按钮点击"是类型化的，不让 agent 决定客户端执行什么任意命令。安全边界清晰。Feed 的 `not_interested` 是 `agent_feedback`，点一下会合成一条结构化反馈 turn 给 agent，影响下一轮推荐。

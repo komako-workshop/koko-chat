@@ -284,3 +284,134 @@ IDEA.md 写的核心差异化是：
 
 最后 commit 是本段记录。
 
+---
+
+## 2026-05-06 — 五一后回归：iPhone 真机跑通 + SDK 54 降级 + OpenClaw 升级 + mini-app runtime 设计
+
+5/1 到 5/5 没碰。5/6 下午接着 task 04b-2 的尾巴，目标是让 KokoChat APP 在手机上真的跟本地 OpenClaw Gateway 聊起来。
+
+### SDK 版本绕了个圈
+
+- 原来是 Expo SDK 55。iPhone 上 App Store Expo Go 的 runtime 大约是 SDK 54（Komako 那台几个月没更新），用 SDK 55 bundle 会挂。
+- 降回 SDK 54：
+  - `expo` ~55 → ~54.0.0
+  - `react` 19.2 → 19.1
+  - `react-native` 0.83.1 → 0.81.5
+  - `expo-router` ~55 → ~6.0.23（Expo 55 后 expo-* 子包各自独立 versioning，所以版本号跳到个位数）
+  - 其它 expo-* / react-native-* 全部用 `pnpm exec expo install --fix` 对齐
+- commit `6d6de2c`。63 tests / tsc 全绿。
+
+### 白屏 / 闪退三连
+
+三个无关的坑叠在一起：
+
+1. **`ThemeProvider` 无限渲染循环** — twrnc 的 `setColorScheme` 引用每次 render 都变，直接写进 useEffect 就无限触发。用 `setColorSchemeRef` 包一层 ref 隔离（4/29 就修过，5/6 又重新确认仍然有效）。
+2. **`crypto.subtle must be defined`** — RN Hermes 没有 WebCrypto。`@noble/ed25519` 的 async API 通过 `crypto.subtle.digest('SHA-512')` 做哈希，直接死在 handshake 阶段。改用同步 API `ed.getPublicKey` / `ed.sign`，并把 `@noble/hashes/sha2` 的 `sha512` 注进 `ed.etc.sha512Sync`。零新依赖（`sha256` 已在用）。commit `033b34e`。
+3. **`origin not allowed`** — Gateway 的 `gateway.controlUi.allowedOrigins` 白名单里只有旧 IP。换 WiFi 后 LAN IP 变了（192.168.71.66 → 192.168.71.159 → 192.168.71.208），手机连过来 origin 不在列表。用 `openclaw config set gateway.controlUi.allowedOrigins [...]` 加进去 + `openclaw gateway restart`。
+
+### BootstrapToken vs GatewayToken
+
+踩到的关键语义：`openclaw qr` 生成的 setup code 里的 `bootstrapToken` 是**一次性配对 token**，不等于 `gateway.auth.token`。之前 APP 把它当 gateway token 用，Gateway 返回 `unauthorized: gateway token mismatch`。
+
+修法：`BuildConnectParamsArgs` 同时接受 `token` 和 `bootstrapToken`，`auth.token` / `auth.bootstrapToken` 分别填充，签名 payload 的 token 字段取二者之一回退。commit `033b34e`。
+
+### Device approve 流程
+
+iPhone 从 LAN 连过来不是 loopback，所以不触发 OpenClaw 的 `shouldAllowSilentLocalPairing`。第一次连得在 Mac 上：
+
+```bash
+openclaw devices list
+openclaw devices approve <requestId>
+```
+
+之后 Gateway 会在 `hello-ok.auth.deviceToken` 里返回长期 deviceToken，APP 通过 `onDeviceToken` 写进 AsyncStorage。后续 reload 不用再 approve。
+
+### Dev auto-connect
+
+每次 reload 都手粘 setup code 太蠢。做了 `scripts/dev-start.mjs`：启动时读 `~/.openclaw/openclaw.json` 里的 `gateway.auth.token`，注进 `Constants.expoConfig.extra.devGatewayUrl / devGatewayToken`；`_layout.tsx` 里的 `DevAutoConnect` 组件在 `__DEV__ && status === 'disconnected'` 时自动 `connect()` 并跳到 `/chat`。Production 构建里没有这两个 env var，这段整段 skip。commit `9845858`。
+
+为此要从 `app.json` 迁到 `app.config.js`（静态 json 不能读 env）。
+
+### Chat 屏 UI 两个坑
+
+- 中间有个冗余的 in-screen header（`Chat` + `Disconnect` + 分割线）和 Stack navigator 的顶部 header 视觉重复。把 `Disconnect` 挪到 `navigation.setOptions({ headerRight })`，in-screen header 整段删。
+- `keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}` 是瞎写的固定值，实际 header 高度因 device 而异。用 `@react-navigation/elements` 的 `useHeaderHeight()` 读真值；`SafeAreaView edges={['left','right','bottom']}` 避免 top inset 被算两次。
+
+commit `8f85195`。
+
+### 中途事故：升级 OpenClaw 后模型配置跑偏
+
+升级 `openclaw@2026.4.26 → 2026.5.5`，`openclaw doctor --fix` 自动修配置时把 `agents.defaults.model.primary` 从 `openai-codex/gpt-5.5` 改成了 `openai/gpt-5.5`，但本机是 OpenAI Codex OAuth，**没有** `OPENAI_API_KEY`。手机上发消息直接报：
+
+> No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth.
+
+修法：`openclaw models set openai-codex/gpt-5.5` + `openclaw gateway restart`。记下来：**以后升级 OpenClaw 后要重新确认 provider 匹配你本机的 auth 方式**。
+
+### session 归属调研
+
+Komako 问"APP 里聊的到底是不是 main session、为什么看不到以前的历史"。挖了一遍：
+
+- 当前 APP hardcode `sessionKey: "agent:main:main"`，确实是 main session。
+- 但 Mac 端的 main session 之前被 `/reset` 或 `.deleted.*` 过一次，所以手机连上去时 OpenClaw 给 `agent:main:main` 这个 key 重新分配了一个新的 `sessionId`（`c8966e2b-...`），从零开始。
+- OpenClaw 默认 **daily reset at 4 AM**，文档和源码都确认了。我们文档里也写清楚了。
+
+### OpenClaw 机制深挖（为 mini-app runtime 做准备）
+
+OpenClaw 的扩展层：
+
+- **Plugins**：`openclaw plugins install ... / enable ... / list`；118 个 stock 插件可选，目前启用 4 个；manifest 是 `openclaw.plugin.json`。
+- **Skills**：`openclaw skills install <name>` 从 ClawHub 拉，面向内容创作者分发。
+- **Hooks**：在 agent 执行流程里插自定义逻辑。
+- 还有 MCP bridge、channel plugin。
+
+Session key 格式硬规则只有一条：`agent:<agentId>:<rest>`，`<rest>` 任意，Gateway 不管结构。第一次见到新 key 就新建 jsonl 和 sessions.json 条目，各 key 独立 context。
+
+Session lifecycle：
+
+- 默认 `session.reset.mode: "daily"`，`atHour: 4`。
+- 可配 `session.reset` 全局 / `session.resetByType.{direct|group|thread}` / `session.resetByChannel.<channel>`。
+- **没有** `mode: "never"`，要关"不自动 reset"只能用超长 `idleMinutes`（例如 `525600` = 一年）。
+- 推荐配置 `session.resetByChannel.webchat` 为 `{ mode: "idle", idleMinutes: 525600 }`，KokoChat 专用，不影响 wechat/telegram 等其它 channel。
+
+### 产品定位转向：KokoChat = OpenClaw-powered mini-app runtime
+
+跟 Komako 讨论"多会话 + New Chat 以后加小程序生态"。我本来担心复杂度爆炸，但调研完 OpenClaw / Open WebUI / LibreChat / NextChat 后认为可控，并且 KokoChat 真正的差异化应该是 **mobile-first mini-app runtime**，不是"第三方 OpenClaw client"。
+
+Komako 提了第一批 mini-app 想法：
+
+- **Claw** — 最裸的 OpenClaw chat，baseline。
+- **Feed** — 基于本地兴趣 context 持续推荐文章/视频/音频，chat 里出 card，有固定收藏入口。
+- **Book Tutor** — 分 N 轮讲解一本书。
+
+### mini-app runtime 设计稿
+
+写了 `docs/mini-app-runtime.md`（commit `fcaa04c`）。核心：
+
+- 每个 mini-app = **typed conversation**，不是独立 APP 壳。
+- Claw / Feed / Book Tutor 平级，都是一等 mini-app。
+- Session key 命名契约：`agent:main:kokochat:<miniAppId>:<conversationScope>`。**KokoChat 不再直接用 `agent:main:main`**。
+- Block protocol envelope：`{ type, version, id, createdAt, source, payload }`，fenced block language 标签对应 `type`。
+- Action kinds：`local | agent_feedback | link_open | system`。
+- Storage 分层：`app:*` / `conversation:*` / `miniapp:<id>:*`，其中 OpenClaw transcript 是 agent-facing truth，KokoChat 的 messages.jsonl 是 UI cache。
+- Runtime lifecycle: `create → bootstrap → active → suspended → archived`。
+- Cross-mini-app 交互 v1 只允许三条白名单（"continue in Claw" / "save to Feed interests" / "add to Book Tutor"），禁止共享 sessionKey / 直接读对方私有 storage。
+- Capability declaration：client 连上时告诉 agent 自己支持的 block type + version，agent skill 输出降级时按这个兼容。
+- Milestone 拆成三段：**0.5 多会话基础设施** → **1 typed conversation + Feed** → **2 Book Tutor + 抽 registry/SDK**。
+
+Review 时把几个方向纠回：Claw 不是 dev-only 的 debug baseline 而是一等 mini-app；ConversationMode 用 string + registry 而不是 union type；这些都 patch 回文档了。
+
+### 今天（5/7）上半段
+
+工作重心转到巩固：
+
+1. 把昨晚飘了一天的改动切成 3 个干净 commit：
+   - `033b34e` openclaw-client ed25519 + bootstrap token 分离
+   - `9845858` dev auto-connect + app.config.js + dev-start.mjs
+   - `8f85195` chat 屏 header/keyboard 修复
+2. 补 SESSION_LOG（本段）+ DECISIONS（下一段）。
+3. Push。
+
+下半段计划做 Milestone 0.5 的核心：把 `sessionKey` 从硬编码里抽出来，做 conversations store + New Chat + thread list。目标是今晚在模拟器上能创建两个独立会话，各自发一句，`~/.openclaw/agents/main/sessions/sessions.json` 里能看到两个独立的 `agent:main:kokochat:claw:<uuid>` 条目。
+
+不做 mode 选择器、不做 Feed 卡片、不做自动重连 — 那些属于 Milestone 1 及之后。
+
