@@ -85,7 +85,8 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
     const client = new BrowserGatewayClient({
       url: setup.url,
-      token: setup.bootstrapToken,
+      ...(setup.token !== undefined ? { token: setup.token } : {}),
+      ...(setup.bootstrapToken !== undefined ? { bootstrapToken: setup.bootstrapToken } : {}),
       ...(storedDeviceToken !== undefined ? { deviceToken: storedDeviceToken } : {}),
       deviceSeed,
       onStatusChange: (status: ConnectionStatus) => {

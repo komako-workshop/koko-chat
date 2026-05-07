@@ -12,7 +12,8 @@
 
 export interface OpenClawSetup {
   url: string;
-  bootstrapToken: string;
+  bootstrapToken?: string;
+  token?: string;
 }
 
 export function parseSetupCode(input: string): OpenClawSetup {
@@ -67,17 +68,23 @@ function validateSetup(value: unknown): OpenClawSetup {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("setup code must decode to an object");
   }
-  const { url, bootstrapToken } = value as Record<string, unknown>;
+  const { url, bootstrapToken, token } = value as Record<string, unknown>;
   if (typeof url !== "string" || url.length === 0) {
     throw new Error("setup code is missing a url field");
   }
-  if (typeof bootstrapToken !== "string" || bootstrapToken.length === 0) {
-    throw new Error("setup code is missing a bootstrapToken field");
+  const hasBootstrapToken = typeof bootstrapToken === "string" && bootstrapToken.length > 0;
+  const hasToken = typeof token === "string" && token.length > 0;
+  if (!hasBootstrapToken && !hasToken) {
+    throw new Error("setup code is missing a bootstrapToken or token field");
   }
   if (!url.startsWith("ws://") && !url.startsWith("wss://") && !url.startsWith("http://") && !url.startsWith("https://")) {
     throw new Error(`setup code url must start with ws:// or wss://, got ${url}`);
   }
   // http(s) URLs are coerced to ws(s) for convenience.
   const wsUrl = url.startsWith("http") ? url.replace(/^http/, "ws") : url;
-  return { url: wsUrl, bootstrapToken };
+  return {
+    url: wsUrl,
+    ...(hasBootstrapToken ? { bootstrapToken } : {}),
+    ...(hasToken ? { token } : {})
+  };
 }

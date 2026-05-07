@@ -33,8 +33,10 @@ import {
 export interface BrowserGatewayClientOptions {
   /** Full ws:// or wss:// URL. */
   url: string;
+  /** Gateway shared token, used by trusted local clients. */
+  token?: string;
   /** Bootstrap token from the setup code (for first-time device pairing). */
-  token: string;
+  bootstrapToken?: string;
   /** Optional persisted device token from a previous successful handshake. */
   deviceToken?: string;
   /** Persistent 32-byte Ed25519 device seed. */
@@ -111,11 +113,7 @@ export class BrowserGatewayClient {
     }
     this.setStatus("connecting");
 
-    const tokenQuery = `token=${encodeURIComponent(this.options.token)}`;
-    const sep = this.options.url.includes("?") ? "&" : "?";
-    const url = `${this.options.url}${sep}${tokenQuery}`;
-
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(this.options.url);
     this.ws = ws;
     ws.onmessage = (event) => this.handleMessage(event.data);
     ws.onerror = (event) => {
@@ -188,7 +186,8 @@ export class BrowserGatewayClient {
     };
 
     const { params } = await buildConnectParams({
-      token: this.options.token,
+      ...(this.options.token !== undefined ? { token: this.options.token } : {}),
+      ...(this.options.bootstrapToken !== undefined ? { bootstrapToken: this.options.bootstrapToken } : {}),
       ...(this.options.deviceToken !== undefined ? { deviceToken: this.options.deviceToken } : {}),
       deviceSeed: this.options.deviceSeed,
       nonce: challenge.nonce,
