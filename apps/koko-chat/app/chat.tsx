@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View, type ListRenderItemInfo } from "react-native";
-import { Link } from "expo-router";
+import { Link, useNavigation } from "expo-router";
+import { useHeaderHeight } from "@react-navigation/elements";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
 
@@ -41,6 +42,29 @@ export default function ChatScreen() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  // Real header height from the navigator (varies per device: iPhone with
+  // notch ≈ 96, without ≈ 64, iPad different again). Hardcoding 88 here is
+  // what caused the keyboard to eat the input box on some phones.
+  const headerHeight = useHeaderHeight();
+
+  // Surface the Disconnect action in the navigation bar instead of drawing
+  // our own in-screen header — keeps one visual header, and the keyboard
+  // offset math stays correct.
+  const navigation = useNavigation();
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void disconnect()}
+          hitSlop={8}
+          style={tw`rounded-full border border-slate-300 px-3 py-1 dark:border-slate-700`}
+        >
+          <Text style={tw`text-xs text-slate-700 dark:text-slate-200`}>Disconnect</Text>
+        </Pressable>
+      )
+    });
+  }, [disconnect, navigation]);
 
   // Autoscroll to bottom whenever messages grow or the streaming text
   // updates. A soft scroll (animated: false so streaming updates don't
@@ -87,23 +111,12 @@ export default function ChatScreen() {
   }
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-slate-50 dark:bg-slate-950`}>
+    <SafeAreaView style={tw`flex-1 bg-slate-50 dark:bg-slate-950`} edges={["left", "right", "bottom"]}>
       <KeyboardAvoidingView
         style={tw`flex-1`}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={headerHeight}
       >
-        <View style={tw`flex-row items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800`}>
-          <Text style={tw`text-lg font-semibold text-slate-950 dark:text-slate-50`}>Chat</Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => void disconnect()}
-            style={tw`rounded-full border border-slate-300 px-3 py-1 dark:border-slate-700`}
-          >
-            <Text style={tw`text-xs text-slate-700 dark:text-slate-200`}>Disconnect</Text>
-          </Pressable>
-        </View>
-
         <FlatList
           ref={listRef}
           data={messages}
