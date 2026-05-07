@@ -1,5 +1,20 @@
-import { getPublicKeyAsync, signAsync } from "@noble/ed25519";
-import { sha256 } from "@noble/hashes/sha2";
+import * as ed from "@noble/ed25519";
+import { sha256, sha512 } from "@noble/hashes/sha2";
+
+// React Native's Hermes runtime does NOT expose `crypto.subtle`, so the
+// async noble/ed25519 entry points (which compute SHA-512 via WebCrypto)
+// fail with "crypto.subtle must be defined". The noble v2 sync APIs avoid
+// WebCrypto entirely as long as a sync sha512 implementation is provided.
+//
+// We inject @noble/hashes/sha2's sha512 — already required for sha256 below
+// so this adds zero new install size — and use the sync sign / getPublicKey.
+// This keeps device.ts working in:
+//   - Node (with or without webcrypto)
+//   - Browsers (webcrypto present, but we don't need it here either)
+//   - React Native Hermes (no webcrypto, the original blocker)
+ed.etc.sha512Sync = (...messages: Uint8Array[]) =>
+  sha512(messages.length === 1 ? messages[0]! : ed.etc.concatBytes(...messages));
+
 
 // Cross-platform primitives.
 // - randomBytes uses globalThis.crypto which exists in:
@@ -67,7 +82,7 @@ export function buildSignaturePayload(args: SignaturePayloadArgs): string {
 /** Derives a base64url Ed25519 public key and lowercase hex device id from a 32-byte seed. */
 export async function deriveDeviceIdentity(seed: Uint8Array): Promise<{ publicKey: string; deviceId: string }> {
   assertSeed(seed);
-  const publicKeyBytes = await getPublicKeyAsync(seed);
+  const publicKeyBytes = ed.getPublicKey(seed);
   return {
     publicKey: base64url(publicKeyBytes),
     deviceId: bytesToHex(sha256(publicKeyBytes))
@@ -78,7 +93,7 @@ export async function deriveDeviceIdentity(seed: Uint8Array): Promise<{ publicKe
 export async function signDevicePayload(seed: Uint8Array, payload: string): Promise<string> {
   assertSeed(seed);
   const message = new TextEncoder().encode(payload);
-  const signature = await signAsync(message, seed);
+  const signature = ed.sign(message, seed);
   return base64url(signature);
 }
 

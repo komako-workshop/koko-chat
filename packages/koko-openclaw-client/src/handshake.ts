@@ -31,7 +31,9 @@ export interface HelloOkPayload extends JsonRecord {
 /** Arguments used to build a Gateway `connect` request. */
 export interface BuildConnectParamsArgs {
   /** Operator token. */
-  token: string;
+  token?: string;
+  /** One-time bootstrap token from `openclaw qr` / device-pair setup code. */
+  bootstrapToken?: string;
   /** Optional cached device token. */
   deviceToken?: string;
   /** 32-byte Ed25519 seed for this connection. */
@@ -85,7 +87,7 @@ export async function buildConnectParams(args: BuildConnectParamsArgs): Promise<
     role: args.role,
     scopes: args.scopes,
     signedAtMs: signedAt,
-    token: args.token,
+    token: args.token ?? args.bootstrapToken ?? null,
     nonce: args.nonce
   });
   const signature = await signDevicePayload(args.deviceSeed, payload);
@@ -96,7 +98,13 @@ export async function buildConnectParams(args: BuildConnectParamsArgs): Promise<
     signedAt,
     nonce: args.nonce
   };
-  const auth: JsonRecord = { token: args.token };
+  const auth: JsonRecord = {};
+  if (args.token !== undefined) {
+    auth.token = args.token;
+  }
+  if (args.bootstrapToken !== undefined) {
+    auth.bootstrapToken = args.bootstrapToken;
+  }
   if (args.deviceToken !== undefined) {
     auth.deviceToken = args.deviceToken;
   }
