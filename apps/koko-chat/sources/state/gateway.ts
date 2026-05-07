@@ -1,3 +1,14 @@
+/**
+ * Gateway connection store for KokoChat.
+ *
+ * Owns the single OpenClaw WebSocket connection and routes inbound chat
+ * events to the matching conversation's message buffer (see
+ * useConversationStore). It does not own messages itself.
+ *
+ * The client listens once per connect and dispatches by `event.sessionKey`:
+ * any conversation whose meta has that sessionKey receives the update.
+ */
+
 import { create } from "zustand";
 import type { ConnectionStatus, JsonRecord } from "@koko/openclaw-client/protocol";
 import { BrowserGatewayClient } from "@/gateway/BrowserGatewayClient";
@@ -9,6 +20,7 @@ import {
   clearDeviceIdentity
 } from "@/gateway/identityStorage";
 import type { OpenClawSetup } from "@/gateway/setupCode";
+import { useConversationStore, type ChatMessage } from "@/state/conversations";
 
 /** Minimal shape of an OpenClaw chat event payload as observed on the wire. */
 export interface ChatEventPayload extends JsonRecord {
@@ -21,27 +33,18 @@ export interface ChatEventPayload extends JsonRecord {
   errorMessage?: string;
 }
 
-export interface ChatMessage {
-  id: string;
-  role: "user" | "agent";
-  text: string;
-  runId?: string;
-  streaming?: boolean;
-  error?: string;
-}
+export type { ChatMessage };
 
 interface GatewayState {
   client: BrowserGatewayClient | null;
   status: ConnectionStatus;
   setup: OpenClawSetup | null;
   lastError: string | null;
-  messages: ChatMessage[];
-  sessionKey: string;
 
   connect: (setup: OpenClawSetup) => Promise<void>;
   disconnect: () => Promise<void>;
   forgetIdentity: () => Promise<void>;
-  sendUserMessage: (text: string) => Promise<void>;
+  sendUserMessage: (conversationId: string, text: string) => Promise<void>;
   resetError: () => void;
 }
 
@@ -56,12 +59,88 @@ function extractText(event: ChatEventPayload): string {
     return "";
   }
   return blocks
-    .filter((b): b is { type: string; text: string } =>
-      b !== null && typeof b === "object" && "type" in b && (b as { type: unknown }).type === "text" &&
-      "text" in b && typeof (b as { text: unknown }).text === "string"
+    .filter(
+      (b): b is { type: string; text: string } =>
+        b !== null &&
+        typeof b === "object" &&
+        "type" in b &&
+        (b as { type: unknown }).type === "text" &&
+        "text" in b &&
+        typeof (b as { text: unknown }).text === "string"
     )
     .map((b) => b.text)
     .join("");
+}
+
+/**
+ * Look up a conversation id by the sessionKey carried on inbound events.
+ * Returns null when we see traffic for a session we don't know — in that
+ * case we silently drop the event rather than surface it in a random UI.
+ */
+function conversationIdForSessionKey(sessionKey: string | undefined): string | null {
+  if (typeof sessionKey !== "string" || sessionKey.length === 0) return null;
+  const list = useConversationStore.getState().list;
+  const match = list.find((m) => m.sessionKey === sessionKey);
+  return match?.id ?? null;
+}
+
+function applyDelta(
+  conversationId: string,
+  event: ChatEventPayload,
+  done: boolean
+): void {
+  const text = extractText(event);
+  useConversationStore.getState().setMessages(conversationId, (prev) => {
+    const idx = prev.findIndex((m) => m.runId === event.runId && m.role === "agent");
+    if (idx < 0) {
+      return [
+        ...prev,
+        {
+          id: newMessageId(),
+          role: "agent",
+          text,
+          ...(typeof event.runId === "string" ? { runId: event.runId } : {}),
+          streaming: !done
+        }
+      ];
+    }
+    const existing = prev[idx];
+    if (existing === undefined) return prev;
+    const next = [...prev];
+    next[idx] = { ...existing, text, streaming: !done };
+    return next;
+  });
+  if (done) {
+    useConversationStore
+      .getState()
+      .touch(conversationId, text.length > 0 ? text.slice(0, 120) : undefined);
+  }
+}
+
+function applyError(conversationId: string, event: ChatEventPayload): void {
+  useConversationStore.getState().setMessages(conversationId, (prev) => {
+    const idx = prev.findIndex((m) => m.runId === event.runId && m.role === "agent");
+    const errorText = typeof event.errorMessage === "string" ? event.errorMessage : "unknown error";
+    if (idx < 0) {
+      return [
+        ...prev,
+        {
+          id: newMessageId(),
+          role: "agent",
+          text: "",
+          ...(typeof event.runId === "string" ? { runId: event.runId } : {}),
+          streaming: false,
+          error: errorText
+        }
+      ];
+    }
+    const existing = prev[idx];
+    if (existing === undefined) return prev;
+    const next = [...prev];
+    next[idx] = { ...existing, streaming: false, error: errorText };
+    return next;
+  });
+  useConversationStore.getState().touch(conversationId);
 }
 
 export const useGatewayStore = create<GatewayState>((set, get) => ({
@@ -69,10 +148,6 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   status: "disconnected",
   setup: null,
   lastError: null,
-  messages: [],
-  // OpenClaw's main session key. Users running `openclaw` normally have this
-  // session already.
-  sessionKey: "agent:main:main",
 
   async connect(setup) {
     const existing = get().client;
@@ -93,7 +168,6 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
         set({ status });
       },
       onDeviceToken: (deviceToken: string) => {
-        // Persist so subsequent sessions skip pairing approval entirely.
         saveDeviceToken(deviceToken);
         console.info("[koko] gateway issued deviceToken", deviceToken.slice(0, 8), "... (persisted)");
       },
@@ -106,79 +180,16 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       }
     });
 
-    set({ client, setup, lastError: null, messages: [] });
+    set({ client, setup, lastError: null });
 
     // Subscribe to chat events before connect so we don't miss the first delta.
     client.on("chat", (payload: JsonRecord) => {
       const event = payload as unknown as ChatEventPayload;
-      if (event.sessionKey !== get().sessionKey) {
-        return;
-      }
-      if (event.state === "delta" || event.state === "final") {
-        const text = extractText(event);
-        set((state) => {
-          const idx = state.messages.findIndex(
-            (m) => m.runId === event.runId && m.role === "agent"
-          );
-          if (idx < 0) {
-            return {
-              messages: [
-                ...state.messages,
-                {
-                  id: newMessageId(),
-                  role: "agent",
-                  text,
-                  ...(typeof event.runId === "string" ? { runId: event.runId } : {}),
-                  streaming: event.state === "delta"
-                }
-              ]
-            };
-          }
-          const updated = [...state.messages];
-          const existingMsg = updated[idx];
-          if (existingMsg === undefined) {
-            return { messages: state.messages };
-          }
-          updated[idx] = {
-            ...existingMsg,
-            text,
-            streaming: event.state === "delta"
-          };
-          return { messages: updated };
-        });
-      } else if (event.state === "error") {
-        set((state) => {
-          const idx = state.messages.findIndex(
-            (m) => m.runId === event.runId && m.role === "agent"
-          );
-          if (idx < 0) {
-            return {
-              messages: [
-                ...state.messages,
-                {
-                  id: newMessageId(),
-                  role: "agent",
-                  text: "",
-                  ...(typeof event.runId === "string" ? { runId: event.runId } : {}),
-                  streaming: false,
-                  ...(typeof event.errorMessage === "string" ? { error: event.errorMessage } : { error: "unknown error" })
-                }
-              ]
-            };
-          }
-          const updated = [...state.messages];
-          const existingMsg = updated[idx];
-          if (existingMsg === undefined) {
-            return { messages: state.messages };
-          }
-          updated[idx] = {
-            ...existingMsg,
-            streaming: false,
-            ...(typeof event.errorMessage === "string" ? { error: event.errorMessage } : { error: "unknown error" })
-          };
-          return { messages: updated };
-        });
-      }
+      const conversationId = conversationIdForSessionKey(event.sessionKey);
+      if (conversationId === null) return;
+      if (event.state === "delta") applyDelta(conversationId, event, false);
+      else if (event.state === "final") applyDelta(conversationId, event, true);
+      else if (event.state === "error") applyError(conversationId, event);
     });
 
     try {
@@ -196,11 +207,9 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
   async disconnect() {
     const client = get().client;
-    if (client === null) {
-      return;
-    }
+    if (client === null) return;
     await client.disconnect();
-    set({ client: null, status: "disconnected", messages: [], setup: null });
+    set({ client: null, status: "disconnected", setup: null });
   },
 
   async forgetIdentity() {
@@ -208,25 +217,27 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     clearDeviceIdentity();
   },
 
-  async sendUserMessage(text) {
-    const { client, sessionKey } = get();
+  async sendUserMessage(conversationId, text) {
+    const { client } = get();
     if (client === null) {
       throw new Error("not connected");
     }
-    const trimmed = text.trim();
-    if (trimmed.length === 0) {
-      return;
+    const meta = useConversationStore.getState().list.find((m) => m.id === conversationId);
+    if (meta === undefined) {
+      throw new Error(`unknown conversation: ${conversationId}`);
     }
-    set((state) => ({
-      messages: [
-        ...state.messages,
-        { id: newMessageId(), role: "user", text: trimmed }
-      ]
-    }));
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+
+    useConversationStore.getState().setMessages(conversationId, (prev) => [
+      ...prev,
+      { id: newMessageId(), role: "user", text: trimmed }
+    ]);
+    useConversationStore.getState().touch(conversationId, trimmed.slice(0, 120));
 
     const idempotencyKey = `koko-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     await client.call("chat.send", {
-      sessionKey,
+      sessionKey: meta.sessionKey,
       message: trimmed,
       idempotencyKey
     });

@@ -1,11 +1,21 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View, type ListRenderItemInfo } from "react-native";
-import { Link, useNavigation } from "expo-router";
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+  type ListRenderItemInfo
+} from "react-native";
+import { Link, useLocalSearchParams, useNavigation, router } from "expo-router";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
 
-import { type ChatMessage, useGatewayStore } from "@/state/gateway";
+import { useGatewayStore } from "@/state/gateway";
+import { useConversationStore, type ChatMessage } from "@/state/conversations";
 
 function messageKey(message: ChatMessage): string {
   return `${message.role}:${message.runId ?? "local"}:${message.id}`;
@@ -25,7 +35,12 @@ function renderMessage({ item }: ListRenderItemInfo<ChatMessage>): React.ReactEl
       {item.error !== undefined ? (
         <Text style={tw`text-sm text-rose-300`}>⚠️ {item.error}</Text>
       ) : (
-        <Text style={tw.style("text-base", isAgent ? "text-slate-950 dark:text-slate-50" : "text-white")}>
+        <Text
+          style={tw.style(
+            "text-base",
+            isAgent ? "text-slate-950 dark:text-slate-50" : "text-white"
+          )}
+        >
           {item.text}
           {item.streaming === true ? <Text style={tw`opacity-60`}> ▋</Text> : null}
         </Text>
@@ -35,24 +50,48 @@ function renderMessage({ item }: ListRenderItemInfo<ChatMessage>): React.ReactEl
 }
 
 export default function ChatScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const conversationId = typeof id === "string" ? id : null;
+
+  const conversation = useConversationStore((s) =>
+    conversationId !== null ? s.list.find((m) => m.id === conversationId) ?? null : null
+  );
+  const messages = useConversationStore((s) =>
+    conversationId !== null ? s.messages[conversationId] ?? EMPTY : EMPTY
+  );
   const status = useGatewayStore((s) => s.status);
-  const messages = useGatewayStore((s) => s.messages);
   const sendUserMessage = useGatewayStore((s) => s.sendUserMessage);
-  const disconnect = useGatewayStore((s) => s.disconnect);
+
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
-  // Real header height from the navigator (varies per device: iPhone with
-  // notch ≈ 96, without ≈ 64, iPad different again). Hardcoding 88 here is
-  // what caused the keyboard to eat the input box on some phones.
   const headerHeight = useHeaderHeight();
 
-  // Surface the Disconnect action in the navigation bar instead of drawing
-  // our own in-screen header — keeps one visual header, and the keyboard
-  // offset math stays correct.
+  // Register this conversation as the currently active one so side effects
+  // (routing in from a notification, cross-mini-app nav, etc.) can reason
+  // about "which conversation is the user looking at right now".
+  useEffect(() => {
+    if (conversationId === null) return;
+    useConversationStore.getState().select(conversationId);
+    return () => {
+      // Only clear active if we're leaving for a non-chat screen — in the
+      // thread list we don't want a stale selection. The cleanest signal is
+      // that another ChatScreen's select() will overwrite ours before this
+      // cleanup runs, so we only clear when no conversation is active.
+      const current = useConversationStore.getState().activeId;
+      if (current === conversationId) {
+        useConversationStore.getState().clearActive();
+      }
+    };
+  }, [conversationId]);
+
+  // Set the nav header title to the conversation title, and surface
+  // Disconnect as headerRight so we never draw a second in-screen header.
   const navigation = useNavigation();
+  const disconnect = useGatewayStore((s) => s.disconnect);
   useLayoutEffect(() => {
     navigation.setOptions({
+      title: conversation?.title ?? "Chat",
       headerRight: () => (
         <Pressable
           accessibilityRole="button"
@@ -64,15 +103,11 @@ export default function ChatScreen() {
         </Pressable>
       )
     });
-  }, [disconnect, navigation]);
+  }, [conversation?.title, disconnect, navigation]);
 
-  // Autoscroll to bottom whenever messages grow or the streaming text
-  // updates. A soft scroll (animated: false so streaming updates don't
-  // fight fast incoming deltas).
+  // Autoscroll to bottom on new messages / streaming updates.
   useEffect(() => {
-    if (messages.length === 0) {
-      return;
-    }
+    if (messages.length === 0) return;
     const timer = setTimeout(() => {
       listRef.current?.scrollToEnd({ animated: false });
     }, 16);
@@ -80,17 +115,38 @@ export default function ChatScreen() {
   }, [messages]);
 
   async function handleSend(): Promise<void> {
+    if (conversationId === null) return;
     if (sending || draft.trim().length === 0) return;
     const text = draft;
     setDraft("");
     setSending(true);
     try {
-      await sendUserMessage(text);
+      await sendUserMessage(conversationId, text);
     } catch (error) {
       console.error("send failed", error);
     } finally {
       setSending(false);
     }
+  }
+
+  // Conversation not found or invalid id. Offer a way back.
+  if (conversationId === null || conversation === null) {
+    return (
+      <SafeAreaView style={tw`flex-1 bg-slate-50 dark:bg-slate-950`}>
+        <View style={tw`flex-1 items-center justify-center px-6`}>
+          <Text style={tw`text-center text-lg text-slate-700 dark:text-slate-200`}>
+            Conversation not found
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.replace("/")}
+            style={tw`mt-6 rounded-2xl bg-cyan-600 px-6 py-3`}
+          >
+            <Text style={tw`text-base font-semibold text-white`}>Back to threads</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   if (status !== "connected" && status !== "handshaking") {
@@ -111,7 +167,10 @@ export default function ChatScreen() {
   }
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-slate-50 dark:bg-slate-950`} edges={["left", "right", "bottom"]}>
+    <SafeAreaView
+      style={tw`flex-1 bg-slate-50 dark:bg-slate-950`}
+      edges={["left", "right", "bottom"]}
+    >
       <KeyboardAvoidingView
         style={tw`flex-1`}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -137,7 +196,9 @@ export default function ChatScreen() {
           }
         />
 
-        <View style={tw`flex-row items-center border-t border-slate-200 bg-slate-100 px-3 py-3 dark:border-slate-800 dark:bg-slate-900`}>
+        <View
+          style={tw`flex-row items-center border-t border-slate-200 bg-slate-100 px-3 py-3 dark:border-slate-800 dark:bg-slate-900`}
+        >
           <TextInput
             value={draft}
             onChangeText={setDraft}
@@ -152,7 +213,9 @@ export default function ChatScreen() {
             onPress={() => void handleSend()}
             style={tw.style(
               "rounded-full px-5 py-2.5",
-              sending || draft.trim().length === 0 ? "bg-slate-300 dark:bg-slate-700" : "bg-cyan-600"
+              sending || draft.trim().length === 0
+                ? "bg-slate-300 dark:bg-slate-700"
+                : "bg-cyan-600"
             )}
           >
             <Text style={tw`text-base font-semibold text-white`}>Send</Text>
@@ -162,3 +225,5 @@ export default function ChatScreen() {
     </SafeAreaView>
   );
 }
+
+const EMPTY: ChatMessage[] = [];

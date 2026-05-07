@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { router, Stack, usePathname } from "expo-router";
+import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Constants from "expo-constants";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -10,15 +10,20 @@ import { ErrorBoundary } from "@/providers/ErrorBoundary";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { hydrateStorage } from "@/storage/mmkv";
 import { parseSetupCode } from "@/gateway/setupCode";
+import { useConversationStore } from "@/state/conversations";
 import { useGatewayStore } from "@/state/gateway";
 
 export default function RootLayout() {
   // Load persisted KV from AsyncStorage before exposing routes, so that
-  // zustand persist reads see the stored values. On Web this is a no-op
-  // (localStorage is already synchronous).
+  // identityStorage and the conversation store both see their data. On
+  // Web this is a no-op (localStorage is already synchronous).
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    void hydrateStorage().then(() => setHydrated(true));
+    void hydrateStorage().then(() => {
+      // Rehydrate the conversation registry once the sync KV is ready.
+      useConversationStore.getState().rehydrate();
+      setHydrated(true);
+    });
   }, []);
 
   if (!hydrated) {
@@ -36,7 +41,7 @@ export default function RootLayout() {
               <Stack screenOptions={{ headerShown: true }}>
                 <Stack.Screen name="index" options={{ title: "KokoChat" }} />
                 <Stack.Screen name="pair" options={{ title: "Pair" }} />
-                <Stack.Screen name="chat" options={{ title: "Chat" }} />
+                <Stack.Screen name="chat/[id]" options={{ title: "Chat" }} />
                 <Stack.Screen name="settings" options={{ title: "Settings" }} />
               </Stack>
             </ThemeProvider>
@@ -49,18 +54,17 @@ export default function RootLayout() {
 
 /**
  * Dev-only side effect: when scripts/dev-start.mjs has populated
- * `extra.devSetupCode`, auto-connect to the local Gateway on first mount.
+ * `extra.devGatewayUrl` + `extra.devGatewayToken`, auto-connect to the
+ * local Gateway on first mount so we don't have to rescan a QR on every
+ * reload. Production builds skip this branch entirely.
  *
- * - Production builds (no devSetupCode) skip this entirely.
- * - We only auto-connect once per APP boot, even if the component remounts.
- * - We don't navigate anywhere; the user can land on Home and the
- *   Gateway: connected indicator will light up. Tapping Chat then works.
+ * We do NOT navigate here anymore: with multiple conversations the user
+ * should land on the thread list, not an arbitrary chat.
  */
 function DevAutoConnect(): null {
   const ranRef = useRef(false);
   const status = useGatewayStore((s) => s.status);
   const connect = useGatewayStore((s) => s.connect);
-  const pathname = usePathname();
 
   useEffect(() => {
     if (ranRef.current) return;
@@ -84,15 +88,12 @@ function DevAutoConnect(): null {
         // eslint-disable-next-line no-console
         console.info("[koko-dev] auto-connecting to local Gateway:", setup.url);
         await connect(setup);
-        if (pathname === "/") {
-          router.replace("/chat");
-        }
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn("[koko-dev] auto-connect failed:", err);
       }
     })();
-  }, [connect, pathname, status]);
+  }, [connect, status]);
 
   return null;
 }

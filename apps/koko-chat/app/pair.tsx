@@ -35,7 +35,7 @@ export default function PairScreen() {
       const setup = parseSetupCode(raw);
       setBusy(true);
       await connect(setup);
-      router.replace("/chat");
+      router.replace("/");
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : String(error));
     } finally {
