@@ -39,7 +39,7 @@ export default function RootLayout() {
               <DevAutoConnect />
               <StatusBar style="auto" />
               <Stack screenOptions={{ headerShown: true }}>
-                <Stack.Screen name="index" options={{ title: "KokoChat" }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 <Stack.Screen name="pair" options={{ title: "Pair" }} />
                 <Stack.Screen name="chat/[id]" options={{ title: "Chat" }} />
                 <Stack.Screen name="settings" options={{ title: "Settings" }} />
