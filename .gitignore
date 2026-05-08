@@ -36,3 +36,7 @@ tmp/
 # Local app state (if any future bridge stores files here)
 .koko/
 ~/.koko-chat/
+
+# Research — large intermediate datasets. Keep the .md writeups only.
+docs/research/*.json
+docs/research/roleplay-import-sample/
