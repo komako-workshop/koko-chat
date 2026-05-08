@@ -246,10 +246,10 @@ function sameDay(a: number, b: number): boolean {
   );
 }
 
-// WeChat-style dimensions. Avatar 48, row height 72, body indent = avatar + gap.
-const AVATAR_SIZE = 48;
-const ROW_HORIZONTAL_PADDING = 16;
-const AVATAR_RIGHT_GAP = 12;
+// WeChat-style dimensions. Avatar 52, row height 82, body indent = avatar + gap.
+const AVATAR_SIZE = 52;
+const ROW_HORIZONTAL_PADDING = 14;
+const AVATAR_RIGHT_GAP = 14;
 const SEPARATOR_INSET = ROW_HORIZONTAL_PADDING + AVATAR_SIZE + AVATAR_RIGHT_GAP;
 
 const styles = StyleSheet.create({
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    height: 72,
+    height: 82,
     paddingLeft: ROW_HORIZONTAL_PADDING,
     paddingRight: ROW_HORIZONTAL_PADDING,
     position: "relative"
@@ -283,13 +283,13 @@ const styles = StyleSheet.create({
   avatar: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
-    borderRadius: 10,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     marginRight: AVATAR_RIGHT_GAP
   },
   avatarGlyph: {
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: "600"
   },
   rowBody: {
@@ -304,15 +304,15 @@ const styles = StyleSheet.create({
     paddingRight: 8
   },
   rowTitle: {
-    fontSize: 16,
-    fontWeight: "500"
+    fontSize: 17,
+    fontWeight: "600"
   },
   rowPreview: {
-    marginTop: 4,
-    fontSize: 13
+    marginTop: 5,
+    fontSize: 14
   },
   rowTime: {
-    fontSize: 11
+    fontSize: 13
   },
   separator: {
     position: "absolute",
