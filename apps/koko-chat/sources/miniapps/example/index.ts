@@ -3,6 +3,7 @@ import {
   type OutboundMessageBuilder
 } from "@/runtime/outboundMessages";
 import { inferOnce } from "@/runtime/openclaw";
+import { registerMiniApp } from "@/runtime/miniApps";
 import {
   useConversationStore,
   type ChatMessage
@@ -14,7 +15,7 @@ import {
  * The smallest realistic mini-app, intended as a developer reference. It does
  * three things in one mode:
  *
- *   1. Defines a `mode: "example"` so KokoChat treats it as its own mini-app.
+ *   1. Declares itself in the mini-app registry.
  *   2. Registers an outbound message builder that runs `inferOnce` on every
  *      user message and appends the agent's reply as a normal agent message.
  *   3. Uses no custom UI: the existing /chat/[id] screen renders everything.
@@ -33,8 +34,8 @@ import {
  *   - mini-app-owned storage
  *   - any custom screens
  *
- * If you are starting a new mini-app, copy this folder, change the mode, and
- * grow from there.
+ * If you are starting a new mini-app, copy this folder, change the descriptor,
+ * and grow from there.
  */
 
 const MINI_APP_ID = "example";
@@ -136,5 +137,20 @@ export function registerExampleMiniApp(): void {
   if (registered) return;
   registered = true;
 
+  registerMiniApp({
+    id: MINI_APP_ID,
+    displayName: "Example",
+    listGlyph: "Ex",
+    showInLauncher: true,
+    defaultTitle: (createdAt) => `Example ${formatTime(createdAt)}`,
+    onCreate: () => useConversationStore.getState().create({ mode: MINI_APP_ID })
+  });
   registerOutboundMessageBuilder(MINI_APP_ID, exampleOutboundBuilder);
+}
+
+function formatTime(timestamp: number): string {
+  const d = new Date(timestamp);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
 }

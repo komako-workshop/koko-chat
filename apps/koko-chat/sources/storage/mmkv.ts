@@ -80,6 +80,10 @@ function deleteNative(name: string): void {
   });
 }
 
+function getAllKeysNative(): string[] {
+  return [...memory.keys()];
+}
+
 function getStringWeb(name: string): string | undefined {
   if (typeof localStorage === "undefined") return undefined;
   const value = localStorage.getItem(prefixed(name));
@@ -94,6 +98,18 @@ function setWeb(name: string, value: string | boolean | number): void {
 function deleteWeb(name: string): void {
   if (typeof localStorage === "undefined") return;
   localStorage.removeItem(prefixed(name));
+}
+
+function getAllKeysWeb(): string[] {
+  if (typeof localStorage === "undefined") return [];
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key !== null && key.startsWith(PREFIX)) {
+      keys.push(key.slice(PREFIX.length));
+    }
+  }
+  return keys;
 }
 
 const isWeb = Platform.OS === "web";
@@ -113,5 +129,8 @@ export const mmkv = {
   delete(name: string): void {
     if (isWeb) deleteWeb(name);
     else deleteNative(name);
+  },
+  getAllKeys(): string[] {
+    return isWeb ? getAllKeysWeb() : getAllKeysNative();
   }
 };

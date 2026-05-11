@@ -113,7 +113,7 @@ The runtime should provide helpers for:
 Mini-app developers should compose their own context strings for now. This is
 more flexible while product shapes are still unknown.
 
-For example, a roleplay mini-app can decide how to combine:
+For example, a character-chat mini-app can decide how to combine:
 
 - character card
 - world state
@@ -237,8 +237,7 @@ Longer term, a mini-app manifest can declare:
 ## Design Guardrails
 
 - Keep OpenClaw runtime helpers independent from any specific mini-app.
-- Do not bake `tavern`, `roleplay`, or any product-specific context rules into
-  runtime helpers.
+- Do not bake product-specific context rules into runtime helpers.
 - Keep prompt construction in mini-app code for now.
 - Keep UI dynamic-loading out of v1.
 - Keep conversation metadata small: pointers and list snapshots only.

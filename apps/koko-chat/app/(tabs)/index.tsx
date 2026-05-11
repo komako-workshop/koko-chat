@@ -15,6 +15,7 @@ import { router, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
 
+import { getLauncherMiniApps, getMiniAppListGlyph, type MiniAppDescriptor } from "@/runtime/miniApps";
 import { useConversationStore, type ConversationMeta } from "@/state/conversations";
 import { useSettingsStore } from "@/state/settings";
 
@@ -42,15 +43,13 @@ export default function ChatsTabScreen(): React.ReactElement {
   }, [navigation]);
 
   function handleNewChat(): void {
-    const options = ["取消", "默认 Claw", "Example"];
+    const launchers = getLauncherMiniApps();
+    const options = ["取消", ...launchers.map((app) => app.displayName)];
     const onSelect = (index: number): void => {
-      if (index === 1) {
-        const meta = createConversation({ mode: "claw" });
-        router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
-      } else if (index === 2) {
-        const meta = createConversation({ mode: "example" });
-        router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
-      }
+      if (index <= 0) return;
+      const app = launchers[index - 1];
+      if (app === undefined) return;
+      void createFromLauncher(app);
     };
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions(
@@ -59,11 +58,20 @@ export default function ChatsTabScreen(): React.ReactElement {
       );
     } else {
       Alert.alert("新建会话", undefined, [
-        { text: "默认 Claw", onPress: () => onSelect(1) },
-        { text: "Example", onPress: () => onSelect(2) },
+        ...launchers.map((app, index) => ({
+          text: app.displayName,
+          onPress: () => onSelect(index + 1)
+        })),
         { text: "取消", style: "cancel" }
       ]);
     }
+  }
+
+  async function createFromLauncher(app: MiniAppDescriptor): Promise<void> {
+    const meta = app.onCreate !== undefined
+      ? await app.onCreate()
+      : createConversation({ mode: app.id });
+    router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
   }
 
   function handleLongPress(conversation: ConversationMeta): void {
@@ -137,7 +145,7 @@ export default function ChatsTabScreen(): React.ReactElement {
               { color: isDark ? "#9ca3af" : "#64748b" }
             ]}
           >
-            {avatarGlyph(item.title)}
+            {getMiniAppListGlyph(item.mode) ?? avatarGlyph(item.title)}
           </Text>
         </View>
 

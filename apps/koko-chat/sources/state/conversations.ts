@@ -32,18 +32,13 @@
 
 import { create } from "zustand";
 
+import { getDefaultConversationTitle, warnUnknownMiniAppId } from "@/runtime/miniApps";
 import { mmkv } from "@/storage/mmkv";
 
 export const DEFAULT_AGENT_ID = "main";
 
-/**
- * Internal union of mini-app ids recognized by the host. Using a finite
- * union (rather than plain `string`) lets TypeScript catch missing cases
- * in registries and switch statements while KokoChat does not yet support
- * third-party packages. When third-party distribution is introduced this
- * should widen to a registry-derived string.
- */
-export type MiniAppId = "claw" | "example";
+/** Conversation mode / mini-app id. Runtime validation lives in the mini-app registry. */
+export type MiniAppId = string;
 
 /**
  * Pointer from a conversation to a piece of data owned by a mini-app.
@@ -208,28 +203,6 @@ export function buildSessionKey(
   return `agent:${agentId}:kokochat:${mode}:${scope}`.toLowerCase();
 }
 
-function defaultTitleFor(mode: MiniAppId, createdAt: number): string {
-  const d = new Date(createdAt);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  // Mini-apps are free to rename their conversations immediately after
-  // create() returns; this default is only meant to avoid blank rows.
-  switch (mode) {
-    case "example":
-      return `Example ${hh}:${mm}`;
-    case "claw":
-    default:
-      return `Chat ${hh}:${mm}`;
-  }
-}
-
-/** Known mini-app ids, used when validating data loaded from disk. */
-const KNOWN_MINI_APP_IDS: readonly MiniAppId[] = ["claw", "example"];
-
-function isMiniAppId(value: unknown): value is MiniAppId {
-  return typeof value === "string" && (KNOWN_MINI_APP_IDS as readonly string[]).includes(value);
-}
-
 function readIndex(): string[] {
   const raw = mmkv.getString(INDEX_KEY);
   if (raw === undefined || raw.length === 0) return [];
@@ -255,10 +228,8 @@ function readMeta(conversationId: string): ConversationMeta | null {
     if (typeof parsed.id !== "string" || typeof parsed.sessionKey !== "string") {
       return null;
     }
-    // Legacy records created before the MiniAppId union widened may have
-    // stored modes that no longer exist; fall back to `claw` so the row
-    // is still usable rather than dropping it on the floor.
-    const mode: MiniAppId = isMiniAppId(parsed.mode) ? parsed.mode : "claw";
+    const mode: MiniAppId = typeof parsed.mode === "string" && parsed.mode.length > 0 ? parsed.mode : "claw";
+    warnUnknownMiniAppId(mode);
     return { ...(parsed as ConversationMeta), mode };
   } catch {
     return null;
@@ -303,7 +274,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const title =
       input?.title !== undefined && input.title.length > 0
         ? input.title
-        : defaultTitleFor(mode, createdAt);
+        : getDefaultConversationTitle(mode, createdAt);
     const scope = input?.sessionScope ?? id;
     const meta: ConversationMeta = {
       id,

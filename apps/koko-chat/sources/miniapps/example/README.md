@@ -16,7 +16,8 @@ There is no custom UI. The existing `/chat/[id]` screen is reused.
 
 ## Files
 
-- `index.ts` — registers the outbound builder for `mode: "example"`.
+- `index.ts` — registers the mini-app descriptor and outbound builder for
+  `mode: "example"`.
 - `README.md` — this file.
 
 ## How to Try It
@@ -31,12 +32,13 @@ There is no custom UI. The existing `/chat/[id]` screen is reused.
 ## What to Copy When Starting a New Mini-App
 
 1. Duplicate this folder under `sources/miniapps/<your-id>/`.
-2. Add the new mode to `MiniAppId` in `sources/state/conversations.ts`.
-3. Add a `defaultTitleFor` branch for the new mode.
-4. Add the new id to `KNOWN_MINI_APP_IDS`.
-5. Register your `register<Pascal>MiniApp()` in
+2. Change the descriptor passed to `registerMiniApp(...)`: id, displayName,
+   defaultTitle, listGlyph, and showInLauncher.
+3. Register your `register<Pascal>MiniApp()` in
    `sources/miniapps/index.ts`.
-6. Add a `+` entry in the conversation list if your mini-app needs one.
+
+You should not need to edit `sources/state/conversations.ts` or the
+conversation-list `+` menu for a normal built-in mini-app.
 
 ## What to Read Next
 

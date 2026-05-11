@@ -33,7 +33,7 @@ You write:
 - conversation entry points (creating conversations, navigating to them)
 - whatever UI you want inside that conversation
 - prompt construction for OpenClaw
-- your own data storage if you need it
+- namespaced storage via `getMiniAppStorage(miniAppId)` if you need it
 
 You do not write:
 
@@ -177,7 +177,26 @@ Rules:
 - Keep `ConversationMeta` small. Use `artifactRef` and `listSnapshot` only as
   pointers / cached values. Real data lives in your own store.
 - Do not mutate other mini-apps' conversations.
-- The mode is your namespace. Pick one in `MiniAppId` and own it.
+- The mode is your namespace. Declare it in your mini-app descriptor and own it.
+
+## Mini-App Storage
+
+Use the host-provided namespaced storage instead of writing raw MMKV keys:
+
+```ts
+import { getMiniAppStorage } from "@/runtime/miniAppStorage";
+
+const storage = getMiniAppStorage("example");
+storage.setJson("draft", { text: "hello" });
+const draft = storage.getJson<{ text: string }>("draft");
+```
+
+Behavior:
+
+- Keys are stored under this mini-app only.
+- `keys()` and `clear()` only see this mini-app's namespace.
+- Values are synchronous and backed by the existing KokoChat storage layer.
+- No schema, migration, encryption, or quota API is provided yet.
 
 ## Outbound Message Hook
 
@@ -252,10 +271,20 @@ exports a single registration function:
 
 ```ts
 // sources/miniapps/example/index.ts
+import { registerMiniApp } from "@/runtime/miniApps";
+
 let registered = false;
 export function registerExampleMiniApp(): void {
   if (registered) return;
   registered = true;
+
+  registerMiniApp({
+    id: "example",
+    displayName: "Example",
+    showInLauncher: true,
+    listGlyph: "Ex",
+    defaultTitle: (createdAt) => `Example ${formatTime(createdAt)}`
+  });
 
   // Register block renderers, outbound builders, etc. here.
 }
@@ -275,8 +304,10 @@ Rules:
 
 - Registration must be idempotent.
 - Do not import any UI from this `index.ts` file. Keep registration cheap.
-- New `MiniAppId` values must be added to the union in
-  `sources/state/conversations.ts`.
+- Conversation `mode` is a runtime string. Normal mini-apps should not need to
+  edit `sources/state/conversations.ts`.
+- `showInLauncher: true` makes the mini-app appear in the conversation-list `+`
+  menu. No app-menu edit is needed.
 
 ## Errors and Edge Cases
 

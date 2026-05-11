@@ -1,0 +1,78 @@
+import type { ConversationMeta } from "@/state/conversations";
+
+export interface MiniAppDescriptor {
+  /** Stable mini-app id. Also used as ConversationMeta.mode. */
+  id: string;
+  /** Human-readable name shown in launchers and developer tools. */
+  displayName: string;
+  /** Whether the app should be visible in the conversation-list + menu. */
+  showInLauncher?: boolean;
+  /** Fallback glyph used by host list rows when no avatar is present. */
+  listGlyph?: string;
+  /** Default title for conversations created without an explicit title. */
+  defaultTitle?: (createdAt: number) => string;
+  /** Optional custom create behavior for the + menu. */
+  onCreate?: () => ConversationMeta | Promise<ConversationMeta>;
+}
+
+const miniApps = new Map<string, MiniAppDescriptor>();
+const warnedUnknownIds = new Set<string>();
+
+registerMiniApp({
+  id: "claw",
+  displayName: "默认 Claw",
+  showInLauncher: true,
+  listGlyph: "🦞",
+  defaultTitle: (createdAt) => `Chat ${formatTime(createdAt)}`
+});
+
+export function registerMiniApp(descriptor: MiniAppDescriptor): void {
+  const id = normalizeMiniAppId(descriptor.id);
+  if (id.length === 0) {
+    throw new Error("mini-app id is empty");
+  }
+  const existing = miniApps.get(id);
+  if (existing !== undefined && existing !== descriptor) {
+    console.warn(`[koko] replacing mini-app descriptor: ${id}`);
+  }
+  miniApps.set(id, { ...descriptor, id });
+}
+
+export function getMiniAppDescriptor(id: string): MiniAppDescriptor | undefined {
+  return miniApps.get(normalizeMiniAppId(id));
+}
+
+export function getRegisteredMiniApps(): MiniAppDescriptor[] {
+  return [...miniApps.values()];
+}
+
+export function getLauncherMiniApps(): MiniAppDescriptor[] {
+  return getRegisteredMiniApps().filter((descriptor) => descriptor.showInLauncher !== false);
+}
+
+export function getDefaultConversationTitle(mode: string, createdAt: number): string {
+  const descriptor = getMiniAppDescriptor(mode);
+  return descriptor?.defaultTitle?.(createdAt) ?? `${descriptor?.displayName ?? "Chat"} ${formatTime(createdAt)}`;
+}
+
+export function getMiniAppListGlyph(mode: string): string | undefined {
+  return getMiniAppDescriptor(mode)?.listGlyph;
+}
+
+export function warnUnknownMiniAppId(mode: string): void {
+  if (!__DEV__) return;
+  if (miniApps.has(mode) || warnedUnknownIds.has(mode)) return;
+  warnedUnknownIds.add(mode);
+  console.warn(`[koko] conversation references unregistered mini-app id: ${mode}`);
+}
+
+function normalizeMiniAppId(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function formatTime(timestamp: number): string {
+  const d = new Date(timestamp);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
