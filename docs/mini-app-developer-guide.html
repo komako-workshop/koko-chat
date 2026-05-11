@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KokoChat Mini-App Developer Guide</title>
+  <style>
+    :root{--bg:#f8fafc;--card:#fff;--fg:#0f172a;--muted:#64748b;--line:#e2e8f0;--blue:#0369a1;--green:#047857;--amber:#b45309;--rose:#be123c;--code:#0f172a;--soft:#f1f5f9}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,"PingFang SC",sans-serif;line-height:1.65}.wrap{display:grid;grid-template-columns:260px 1fr;max-width:1240px;margin:0 auto}nav{position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);padding:28px 18px}nav h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:20px 0 8px}nav a{display:block;text-decoration:none;color:#334155;font-size:14px;padding:5px 0}nav a:hover{color:var(--blue)}main{max-width:860px;padding:48px 44px 96px}h1{font-size:38px;line-height:1.15;margin:0 0 12px}h2{font-size:25px;margin:48px 0 14px}h3{font-size:18px;margin:26px 0 8px}p{margin:0 0 14px;color:#334155}.lead{font-size:18px;color:var(--muted)}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin:16px 0}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.flow{display:grid;gap:10px;margin:14px 0}.step{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px}.step b{color:var(--fg)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:1px 5px;color:var(--code)}pre{background:#0f172a;color:#e2e8f0;border-radius:14px;padding:16px;overflow:auto;font-size:13px;line-height:1.55}pre code{background:transparent;border:0;color:inherit;padding:0}.tag{display:inline-block;border-radius:999px;padding:3px 9px;font-size:12px;background:var(--soft);color:#334155;margin:2px}.tag.green{background:#dcfce7;color:var(--green)}.tag.blue{background:#e0f2fe;color:var(--blue)}.tag.amber{background:#fef3c7;color:var(--amber)}.tag.rose{background:#ffe4e6;color:var(--rose)}table{border-collapse:collapse;width:100%;font-size:14px;margin:14px 0;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}th,td{text-align:left;border-bottom:1px solid var(--line);padding:10px 12px;vertical-align:top}th{background:#f1f5f9;color:#475569}tr:last-child td{border-bottom:0}.callout{border-left:4px solid var(--blue);background:#e0f2fe;border-radius:10px;padding:14px 16px;margin:16px 0;color:#0c4a6e}.warn{border-left-color:var(--amber);background:#fef3c7;color:#78350f}.danger{border-left-color:var(--rose);background:#ffe4e6;color:#881337}.small{font-size:13px;color:var(--muted)}ul{margin-top:0}li{margin:4px 0}@media(max-width:900px){.wrap{display:block}nav{display:none}main{padding:32px 22px}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <h3>Overview</h3>
+      <a href="#mental">心智模型</a>
+      <a href="#flow">开发流程</a>
+      <a href="#descriptor">Descriptor</a>
+      <h3>OpenClaw</h3>
+      <a href="#agent">Agent 默认规则</a>
+      <a href="#skills">Skills 与 Core Tools</a>
+      <a href="#toolsets">推荐能力集</a>
+      <h3>KokoChat</h3>
+      <a href="#runtime">Runtime API</a>
+      <a href="#storage">Storage</a>
+      <a href="#conversation">Conversation</a>
+      <a href="#outbound">Outbound Hook</a>
+      <a href="#blocks">Message Blocks</a>
+      <h3>Reference</h3>
+      <a href="#files">文件索引</a>
+      <a href="#handoff">给开发窗口的话</a>
+    </nav>
+    <main>
+      <h1>KokoChat Mini-App Developer Guide</h1>
+      <p class="lead">面向第一批内置小程序开发者：UI 在 KokoChat，能力在 OpenClaw。小程序只声明自己需要什么 agent、skills、core tools，然后用 KokoChat runtime 调用。</p>
+
+      <section id="mental">
+        <h2>心智模型</h2>
+        <div class="grid">
+          <div class="card"><h3>KokoChat 负责</h3><ul><li>移动端 UI 与导航</li><li>Conversation 列表和聊天壳</li><li>mini-app registry</li><li>OpenClaw Gateway 连接</li><li>runtime API: <code>inferOnce</code> / agent session</li></ul></div>
+          <div class="card"><h3>OpenClaw 负责</h3><ul><li>agent 运行</li><li>skill / tool 能力</li><li>Mac 端网络与本地文件</li><li>shell / browser / web fetch 等能力</li><li>长期 transcript 与工具副作用</li></ul></div>
+        </div>
+        <div class="callout">第一版小程序仍然是内置小程序，随 KokoChat 打包。未来可以走 WebView mini-app runtime，但现在不要动态加载 RN 代码。</div>
+      </section>
+
+      <section id="flow">
+        <h2>推荐开发流程</h2>
+        <div class="flow">
+          <div class="step"><b>1. 复制 example 模板</b><br><code>apps/koko-chat/sources/miniapps/example/</code></div>
+          <div class="step"><b>2. 注册 mini-app descriptor</b><br>声明 <code>id</code>、<code>displayName</code>、<code>openclaw.defaultAgentId</code>、<code>requiredSkills</code>、<code>requiredCoreTools</code>。</div>
+          <div class="step"><b>3. 选 OpenClaw 能力集</b><br>先从 core tools 中选最小集合，再加本地 skill 文件夹。</div>
+          <div class="step"><b>4. 写 UI / outbound / blocks</b><br>KokoChat 端负责用户体验和结果渲染。</div>
+          <div class="step"><b>5. 用 Self-Test 和真实 mini-app 流程回归</b><br>先确认 Gateway、<code>inferOnce</code>、agent session 正常。</div>
+        </div>
+      </section>
+
+      <section id="descriptor">
+        <h2>Mini-App Descriptor</h2>
+        <p>Descriptor 是小程序的声明入口。它让 host 知道如何显示、创建和路由这个 mini-app。</p>
+        <pre><code class="language-ts">registerMiniApp({
+  id: "tavern",
+  displayName: "Tavern",
+  showInLauncher: true,
+  listGlyph: "🍺",
+  defaultTitle: (createdAt) => `Tavern ${formatTime(createdAt)}`,
+  openclaw: {
+    defaultAgentId: "tavern",
+    requiredSkills: ["kokochat-tavern-search"],
+    requiredCoreTools: ["web_search", "web_fetch"],
+    localSkillDirs: ["openclaw/skills/kokochat-tavern-search"]
+  }
+});</code></pre>
+        <table><tr><th>字段</th><th>含义</th></tr><tr><td><code>id</code></td><td>mini-app id，也是 conversation mode。</td></tr><tr><td><code>displayName</code></td><td>显示在 + 菜单和开发工具中的名称。</td></tr><tr><td><code>showInLauncher</code></td><td>是否出现在会话列表 + 菜单。</td></tr><tr><td><code>listGlyph</code></td><td>会话列表无头像时的 glyph。</td></tr><tr><td><code>defaultTitle</code></td><td>未传 title 时的默认会话标题。</td></tr><tr><td><code>openclaw.defaultAgentId</code></td><td>该 mini-app 默认调用的 OpenClaw agent。</td></tr><tr><td><code>openclaw.requiredSkills</code></td><td>该 agent 需要可见的 optional skills。</td></tr><tr><td><code>openclaw.requiredCoreTools</code></td><td>该 agent 需要的 OpenClaw core tools。</td></tr><tr><td><code>openclaw.localSkillDirs</code></td><td>随 repo 提供的本地 skill 文件夹。</td></tr></table>
+      </section>
+
+      <section id="agent">
+        <h2>Agent 默认规则</h2>
+        <ul><li><code>claw</code> 默认使用 <code>main</code> agent。</li><li>其他 mini-app 默认使用同名 agent，例如 <code>tavern -> tavern</code>。</li><li><code>descriptor.openclaw.defaultAgentId</code> 可以覆盖。</li><li><code>inferOnce</code> / <code>createAgentSession</code> 显式传 <code>agentId</code> 优先级最高。</li></ul>
+        <pre><code>agent:main:kokochat:claw:&lt;scope&gt;
+agent:tavern:kokochat:tavern:&lt;scope&gt;</code></pre>
+        <div class="warn callout">不要让产品 mini-app 默认污染 <code>main</code>。main 是用户的“家”，mini-app agent 是具体产品工作间。</div>
+      </section>
+
+      <section id="skills">
+        <h2>Skills 与 Core Tools</h2>
+        <p><span class="tag blue">Core tools</span> 是 OpenClaw 内建工具，如 <code>web_fetch</code>、<code>read</code>、<code>exec</code>。<span class="tag green">Skills</span> 是可选能力包，通常由 <code>SKILL.md</code> 和可执行脚本组成。</p>
+        <table><tr><th>类型</th><th>稳定性</th><th>适合做什么</th></tr><tr><td>Core tools</td><td>更像基础设施，但具体 profile/policy 仍需确认</td><td>Web、文件、shell、session、memory、media 等通用能力</td></tr><tr><td>Optional skills</td><td>用户安装情况不同</td><td>产品特定能力，如 <code>kokochat-tavern-search</code></td></tr></table>
+        <p>原则：mini-app agent 使用明确的能力子集。不要默认继承 main agent 的全部 skills。</p>
+      </section>
+
+      <section id="toolsets">
+        <h2>推荐能力集</h2>
+        <table><tr><th>Mini-App 类型</th><th>建议 Core Tools</th><th>建议 Skills</th></tr><tr><td>纯聊天</td><td><code>session_status</code> 或 none</td><td>产品 prompt/skill</td></tr><tr><td>搜索/发现</td><td><code>web_search</code>, <code>web_fetch</code></td><td>一个业务 skill，如 <code>kokochat-tavern-search</code></td></tr><tr><td>本地导入/解析</td><td><code>read</code>, maybe <code>image</code></td><td>parser/import skill</td></tr><tr><td>Codex/Manus 类</td><td><code>read</code>, <code>write</code>, <code>edit</code>, <code>apply_patch</code>, <code>exec</code>, <code>process</code>, <code>sessions_spawn</code>, <code>update_plan</code></td><td>coding/product skills</td></tr><tr><td>定时/后台</td><td><code>cron</code>, <code>session_status</code></td><td>task skill</td></tr></table>
+      </section>
+
+      <section id="runtime">
+        <h2>Runtime API</h2>
+        <h3>一次性推理</h3>
+        <pre><code class="language-ts">const result = await inferOnce({
+  miniAppId: "tavern",
+  prompt
+});</code></pre>
+        <p>这会走默认 agent 规则，生成临时 session，等待完成，读取结果，并删除临时 session。它不是纯 LLM API，而是一次临时 OpenClaw agent 调用。</p>
+        <h3>长期 Agent Session</h3>
+        <pre><code class="language-ts">const session = await createAgentSession({ miniAppId: "tavern", scope: conversationId });
+const send = await sendAgentMessage({ sessionKey: session.key, message });
+await waitForAgentRun({ runId: send.runId });
+const history = await readAgentHistory({ sessionKey: session.key });</code></pre>
+      </section>
+
+      <section id="storage"><h2>Storage</h2><pre><code class="language-ts">const storage = getMiniAppStorage("tavern");
+storage.setJson("settings", { safety: "sfw" });
+const settings = storage.getJson("settings");</code></pre><p>所有 key 都在 mini-app namespace 下。不要直接写裸 MMKV key。</p></section>
+
+      <section id="conversation"><h2>Conversation</h2><pre><code class="language-ts">const meta = useConversationStore.getState().create({
+  mode: "tavern",
+  title: "Tavern",
+  listSnapshot: { title: "Tavern", subtitle: "Find characters" }
+});</code></pre><p><code>ConversationMeta</code> 只放 mode、sessionKey、artifactRef、listSnapshot 等轻量元信息。完整业务数据放 mini-app storage 或 OpenClaw 侧数据目录。</p></section>
+
+      <section id="outbound"><h2>Outbound Hook</h2><p>当前 outbound builder 同时承担“改写发送内容”和“拦截本次发送”的角色。若返回 <code>localOnly: true</code>，host 不发 Gateway，mini-app 自己负责写 agent 回复。</p><pre><code class="language-ts">registerOutboundMessageBuilder("tavern", async ({ visibleText, conversation }) => {
+  runMyFlow(conversation.id, visibleText);
+  return { visibleText, gatewayText: visibleText, localOnly: true };
+});</code></pre><div class="warn callout">这个 API 后续可能会拆成 <code>interceptUserSend</code> 与 <code>buildOutboundMessage</code>。</div></section>
+
+      <section id="blocks"><h2>Message Blocks</h2><p>用于在聊天流中渲染结构化卡片。模型输出必须先经过 mini-app parser/validator，再变成 block data。</p><pre><code class="language-ts">registerSharedBlockRenderer("koko.tavern.character_card", CharacterCardRenderer);</code></pre></section>
+
+      <section id="files"><h2>文件索引</h2><table><tr><th>文件</th><th>用途</th></tr><tr><td><code>docs/mini-app-runtime.md</code></td><td>Runtime API 细节</td></tr><tr><td><code>docs/mini-app-skills.md</code></td><td>OpenClaw skills 集成</td></tr><tr><td><code>docs/openclaw-core-tools-for-mini-apps.md</code></td><td>Core tools 选择说明</td></tr><tr><td><code>docs/openclaw-skills-catalog.html</code></td><td>本机 skills/tools 清单</td></tr><tr><td><code>sources/runtime/openclaw.ts</code></td><td><code>inferOnce</code> / agent session</td></tr><tr><td><code>sources/runtime/miniApps.ts</code></td><td>mini-app registry</td></tr><tr><td><code>sources/runtime/miniAppStorage.ts</code></td><td>namespaced storage</td></tr><tr><td><code>sources/miniapps/example/</code></td><td>最小模板</td></tr></table></section>
+
+      <section id="handoff"><h2>给开发窗口的话</h2><div class="card"><p>Tavern 小程序直接走 agent + skill 架构，不做 prompt-only demo。注册 descriptor 时声明 <code>id: "tavern"</code>、<code>openclaw.defaultAgentId: "tavern"</code>、<code>requiredSkills: ["kokochat-tavern-search"]</code>、<code>requiredCoreTools: ["web_search", "web_fetch"]</code>、<code>localSkillDirs: ["openclaw/skills/kokochat-tavern-search"]</code>。调用时使用 <code>inferOnce({ miniAppId: "tavern", prompt })</code>，不要显式传 <code>agentId: "main"</code>。KokoChat 端只收集用户需求、调用 tavern agent、解析/校验结构化结果并渲染角色卡；搜索 character-tavern.com、抓取、解析、归一化都属于 <code>kokochat-tavern-search</code> skill/tool。</p></div></section>
+    </main>
+  </div>
+</body>
+</html>

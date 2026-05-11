@@ -143,6 +143,10 @@ export function registerExampleMiniApp(): void {
     listGlyph: "Ex",
     showInLauncher: true,
     defaultTitle: (createdAt) => `Example ${formatTime(createdAt)}`,
+    // Keep the developer reference app usable on a stock OpenClaw install.
+    // Real mini-apps should normally omit this so their default agent id is
+    // their own mini-app id.
+    openclaw: { defaultAgentId: "main" },
     onCreate: () => useConversationStore.getState().create({ mode: MINI_APP_ID })
   });
   registerOutboundMessageBuilder(MINI_APP_ID, exampleOutboundBuilder);

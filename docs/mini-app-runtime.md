@@ -101,8 +101,7 @@ import {
 const session = await createAgentSession({
   miniAppId: "example",
   scope: "main",
-  label: "Example chat",
-  agentId: "main"
+  label: "Example chat"
 });
 
 const send = await sendAgentMessage({
@@ -136,8 +135,7 @@ Use `buildKokoChatSessionKey` to derive keys. Do not invent your own format.
 ```ts
 const key = buildKokoChatSessionKey({
   miniAppId: "example",
-  scope: "main",
-  agentId: "main"
+  scope: "main"
 });
 // agent:main:kokochat:example:main
 ```
@@ -147,7 +145,8 @@ Convention:
 - `miniAppId` is your mode.
 - `scope` should be unique per logical session. For conversation-bound sessions
   use the conversation id.
-- `agentId` defaults to `main`. Only override if you know what you are doing.
+- `agentId` follows the mini-app descriptor rules below. Only pass it directly
+  for explicit overrides.
 
 A `ConversationMeta` already carries a `sessionKey`, built when `create()` is
 called. Prefer using that for chat-bound sessions instead of generating a new
@@ -283,7 +282,15 @@ export function registerExampleMiniApp(): void {
     displayName: "Example",
     showInLauncher: true,
     listGlyph: "Ex",
-    defaultTitle: (createdAt) => `Example ${formatTime(createdAt)}`
+    defaultTitle: (createdAt) => `Example ${formatTime(createdAt)}`,
+    openclaw: {
+      // Optional. If omitted, non-claw mini-apps default to agentId === id.
+      // Example overrides to main so it works on a stock OpenClaw install.
+      defaultAgentId: "main",
+      requiredSkills: [],
+      requiredCoreTools: [],
+      localSkillDirs: []
+    }
   });
 
   // Register block renderers, outbound builders, etc. here.
@@ -308,6 +315,47 @@ Rules:
   edit `sources/state/conversations.ts`.
 - `showInLauncher: true` makes the mini-app appear in the conversation-list `+`
   menu. No app-menu edit is needed.
+
+## Agent IDs And Skills
+
+Each mini-app should normally use its own OpenClaw agent id. This prevents
+product-specific prompts, tool use, and transcripts from polluting the user's
+main assistant.
+
+Default agent rule:
+
+- `claw` uses `main`.
+- every other mini-app uses `agentId === miniAppId`.
+- `descriptor.openclaw.defaultAgentId` overrides the default.
+- an explicit `agentId` passed to `inferOnce` / `createAgentSession` wins over
+  everything else.
+
+Example:
+
+```ts
+registerMiniApp({
+  id: "tavern",
+  displayName: "Tavern",
+  openclaw: {
+    defaultAgentId: "tavern",
+    requiredSkills: ["kokochat-tavern-search"],
+    requiredCoreTools: ["web_search", "web_fetch"],
+    localSkillDirs: ["openclaw/skills/kokochat-tavern-search"]
+  }
+});
+```
+
+Then this call uses `agent:tavern:...` automatically:
+
+```ts
+await inferOnce({ miniAppId: "tavern", prompt });
+```
+
+The OpenClaw agent and required skills still need to exist on the OpenClaw side.
+`requiredCoreTools` records which built-in OpenClaw tools the agent is expected
+to use; `localSkillDirs` records skill folders shipped with the mini-app repo.
+See `docs/mini-app-skills.md` and
+`docs/openclaw-core-tools-for-mini-apps.md` for the current convention.
 
 ## Errors and Edge Cases
 

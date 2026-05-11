@@ -11,6 +11,17 @@ export interface MiniAppDescriptor {
   listGlyph?: string;
   /** Default title for conversations created without an explicit title. */
   defaultTitle?: (createdAt: number) => string;
+  /** OpenClaw-side requirements and defaults for this mini-app. */
+  openclaw?: {
+    /** Defaults to `main` for claw and to the mini-app id for all other apps. */
+    defaultAgentId?: string;
+    /** Skills expected to be visible to this mini-app's agent. */
+    requiredSkills?: string[];
+    /** Core OpenClaw tools this mini-app agent is expected to use. */
+    requiredCoreTools?: string[];
+    /** Local skill folders shipped with this mini-app package / repository. */
+    localSkillDirs?: string[];
+  };
   /** Optional custom create behavior for the + menu. */
   onCreate?: () => ConversationMeta | Promise<ConversationMeta>;
 }
@@ -23,7 +34,8 @@ registerMiniApp({
   displayName: "默认 Claw",
   showInLauncher: true,
   listGlyph: "🦞",
-  defaultTitle: (createdAt) => `Chat ${formatTime(createdAt)}`
+  defaultTitle: (createdAt) => `Chat ${formatTime(createdAt)}`,
+  openclaw: { defaultAgentId: "main" }
 });
 
 export function registerMiniApp(descriptor: MiniAppDescriptor): void {
@@ -59,6 +71,35 @@ export function getMiniAppListGlyph(mode: string): string | undefined {
   return getMiniAppDescriptor(mode)?.listGlyph;
 }
 
+export function resolveMiniAppAgentId(miniAppId: string, explicitAgentId?: string): string {
+  if (explicitAgentId !== undefined && explicitAgentId.trim().length > 0) {
+    return normalizeAgentId(explicitAgentId);
+  }
+  const id = normalizeMiniAppId(miniAppId);
+  const descriptorAgentId = getMiniAppDescriptor(id)?.openclaw?.defaultAgentId;
+  if (descriptorAgentId !== undefined && descriptorAgentId.trim().length > 0) {
+    return normalizeAgentId(descriptorAgentId);
+  }
+  return id === "claw" ? "main" : normalizeAgentId(id);
+}
+
+export interface MiniAppOpenClawRequirements {
+  agentId: string;
+  requiredSkills: string[];
+  requiredCoreTools: string[];
+  localSkillDirs: string[];
+}
+
+export function getMiniAppOpenClawRequirements(miniAppId: string): MiniAppOpenClawRequirements {
+  const descriptor = getMiniAppDescriptor(miniAppId);
+  return {
+    agentId: resolveMiniAppAgentId(miniAppId),
+    requiredSkills: uniqueStrings(descriptor?.openclaw?.requiredSkills),
+    requiredCoreTools: uniqueStrings(descriptor?.openclaw?.requiredCoreTools),
+    localSkillDirs: uniqueStrings(descriptor?.openclaw?.localSkillDirs)
+  };
+}
+
 export function warnUnknownMiniAppId(mode: string): void {
   if (!__DEV__) return;
   if (miniApps.has(mode) || warnedUnknownIds.has(mode)) return;
@@ -68,6 +109,24 @@ export function warnUnknownMiniAppId(mode: string): void {
 
 function normalizeMiniAppId(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function normalizeAgentId(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : "main";
+}
+
+function uniqueStrings(values: string[] | undefined): string[] {
+  if (values === undefined) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const normalized = value.trim();
+    if (normalized.length === 0 || seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
 }
 
 function formatTime(timestamp: number): string {

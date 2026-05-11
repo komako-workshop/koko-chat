@@ -32,7 +32,11 @@
 
 import { create } from "zustand";
 
-import { getDefaultConversationTitle, warnUnknownMiniAppId } from "@/runtime/miniApps";
+import {
+  getDefaultConversationTitle,
+  resolveMiniAppAgentId,
+  warnUnknownMiniAppId
+} from "@/runtime/miniApps";
 import { mmkv } from "@/storage/mmkv";
 
 export const DEFAULT_AGENT_ID = "main";
@@ -198,9 +202,9 @@ function uuid(): string {
 export function buildSessionKey(
   mode: MiniAppId,
   scope: string,
-  agentId: string = DEFAULT_AGENT_ID
+  agentId?: string
 ): string {
-  return `agent:${agentId}:kokochat:${mode}:${scope}`.toLowerCase();
+  return `agent:${resolveMiniAppAgentId(mode, agentId)}:kokochat:${mode}:${scope}`.toLowerCase();
 }
 
 function readIndex(): string[] {

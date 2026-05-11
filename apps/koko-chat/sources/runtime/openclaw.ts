@@ -3,8 +3,8 @@ import type { JsonRecord } from "@koko/openclaw-client/protocol";
 import type { BrowserGatewayClient } from "@/gateway/BrowserGatewayClient";
 import { useGatewayStore } from "@/state/gateway";
 import type { MiniAppId } from "@/state/conversations";
+import { resolveMiniAppAgentId } from "@/runtime/miniApps";
 
-const DEFAULT_AGENT_ID = "main";
 const DEFAULT_INFER_TIMEOUT_MS = 60_000;
 const DEFAULT_HISTORY_LIMIT = 8;
 const DEFAULT_HISTORY_MAX_CHARS = 8_000;
@@ -135,9 +135,10 @@ export interface AbortAgentRunResult {
 export function buildKokoChatSessionKey({
   miniAppId,
   scope,
-  agentId = DEFAULT_AGENT_ID
+  agentId
 }: BuildKokoChatSessionKeyInput): string {
-  const safeAgentId = normalizeSessionPart(agentId, DEFAULT_AGENT_ID);
+  const resolvedAgentId = resolveMiniAppAgentId(miniAppId, agentId);
+  const safeAgentId = normalizeSessionPart(resolvedAgentId, "main");
   const safeMiniAppId = normalizeSessionPart(miniAppId, "app");
   const safeScope = normalizeSessionScope(scope);
   return `agent:${safeAgentId}:kokochat:${safeMiniAppId}:${safeScope}`;
@@ -219,7 +220,7 @@ export async function createAgentSession(
   });
   const payload = await client.call("sessions.create", {
     key,
-    agentId: input.agentId ?? DEFAULT_AGENT_ID,
+    agentId: resolveMiniAppAgentId(input.miniAppId, input.agentId),
     ...(input.label !== undefined ? { label: input.label } : {}),
     ...(input.model !== undefined ? { model: input.model } : {}),
     ...(input.initialMessage !== undefined ? { message: input.initialMessage } : {})
