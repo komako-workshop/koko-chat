@@ -15,14 +15,52 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
 
 import { useGatewayStore } from "@/state/gateway";
-import { useConversationStore, type ChatMessage } from "@/state/conversations";
+import { useConversationStore, type ChatMessage, type ConversationMeta } from "@/state/conversations";
+import { MessageBlockView } from "@/runtime/messageBlocks";
 
 function messageKey(message: ChatMessage): string {
   return `${message.role}:${message.runId ?? "local"}:${message.id}`;
 }
 
-function renderMessage({ item }: ListRenderItemInfo<ChatMessage>): React.ReactElement {
+function renderMessageText(message: ChatMessage, isAgent: boolean): React.ReactElement | null {
+  if (message.text.length === 0 && message.streaming !== true) return null;
+  return (
+    <Text
+      style={tw.style(
+        "text-base",
+        isAgent ? "text-slate-950 dark:text-slate-50" : "text-white"
+      )}
+    >
+      {message.text}
+      {message.streaming === true ? <Text style={tw`opacity-60`}> ▋</Text> : null}
+    </Text>
+  );
+}
+
+function renderMessageBlocks(
+  message: ChatMessage,
+  conversation: ConversationMeta
+): React.ReactElement | null {
+  if (message.blocks === undefined || message.blocks.length === 0) return null;
+  return (
+    <View style={tw`gap-2`}>
+      {message.blocks.map((block, index) => (
+        <MessageBlockView
+          key={`${block.type}:${block.version}:${index}`}
+          block={block}
+          conversation={conversation}
+        />
+      ))}
+    </View>
+  );
+}
+
+function renderMessage(
+  { item }: ListRenderItemInfo<ChatMessage>,
+  conversation: ConversationMeta
+): React.ReactElement {
   const isAgent = item.role === "agent";
+  const hasBlocks = item.blocks !== undefined && item.blocks.length > 0;
   return (
     <View
       style={tw.style(
@@ -34,16 +72,13 @@ function renderMessage({ item }: ListRenderItemInfo<ChatMessage>): React.ReactEl
     >
       {item.error !== undefined ? (
         <Text style={tw`text-sm text-rose-300`}>⚠️ {item.error}</Text>
+      ) : hasBlocks ? (
+        <View style={tw`gap-2`}>
+          {renderMessageBlocks(item, conversation)}
+          {item.text.length > 0 ? renderMessageText(item, isAgent) : null}
+        </View>
       ) : (
-        <Text
-          style={tw.style(
-            "text-base",
-            isAgent ? "text-slate-950 dark:text-slate-50" : "text-white"
-          )}
-        >
-          {item.text}
-          {item.streaming === true ? <Text style={tw`opacity-60`}> ▋</Text> : null}
-        </Text>
+        renderMessageText(item, isAgent)
       )}
     </View>
   );
@@ -180,7 +215,7 @@ export default function ChatScreen() {
           ref={listRef}
           data={messages}
           keyExtractor={messageKey}
-          renderItem={renderMessage}
+          renderItem={(item) => renderMessage(item, conversation)}
           contentContainerStyle={tw`px-4 py-4`}
           onContentSizeChange={() => {
             if (messages.length > 0) {

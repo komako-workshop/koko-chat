@@ -10,8 +10,13 @@ import { ErrorBoundary } from "@/providers/ErrorBoundary";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { hydrateStorage } from "@/storage/mmkv";
 import { parseSetupCode } from "@/gateway/setupCode";
+import { registerMiniApps } from "@/miniapps";
 import { useConversationStore } from "@/state/conversations";
 import { useGatewayStore } from "@/state/gateway";
+
+// Register mini-app block renderers and outbound builders once at module load,
+// before any conversation can render. Idempotent.
+registerMiniApps();
 
 export default function RootLayout() {
   // Load persisted KV from AsyncStorage before exposing routes, so that
@@ -43,6 +48,10 @@ export default function RootLayout() {
                 <Stack.Screen name="pair" options={{ title: "Pair" }} />
                 <Stack.Screen name="chat/[id]" options={{ title: "Chat" }} />
                 <Stack.Screen name="settings" options={{ title: "Settings" }} />
+                <Stack.Screen
+                  name="dev/runtime-selftest"
+                  options={{ title: "OpenClaw Runtime Self-Test" }}
+                />
               </Stack>
             </ThemeProvider>
           </AppStateProvider>

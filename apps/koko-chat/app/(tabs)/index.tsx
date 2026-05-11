@@ -42,8 +42,28 @@ export default function ChatsTabScreen(): React.ReactElement {
   }, [navigation]);
 
   function handleNewChat(): void {
-    const meta = createConversation();
-    router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
+    const options = ["取消", "默认 Claw", "Example"];
+    const onSelect = (index: number): void => {
+      if (index === 1) {
+        const meta = createConversation({ mode: "claw" });
+        router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
+      } else if (index === 2) {
+        const meta = createConversation({ mode: "example" });
+        router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
+      }
+    };
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options, cancelButtonIndex: 0, title: "新建会话" },
+        onSelect
+      );
+    } else {
+      Alert.alert("新建会话", undefined, [
+        { text: "默认 Claw", onPress: () => onSelect(1) },
+        { text: "Example", onPress: () => onSelect(2) },
+        { text: "取消", style: "cancel" }
+      ]);
+    }
   }
 
   function handleLongPress(conversation: ConversationMeta): void {

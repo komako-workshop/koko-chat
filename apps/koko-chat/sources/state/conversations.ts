@@ -6,18 +6,24 @@
  *
  *   agent:<agentId>:kokochat:<miniAppId>:<conversationScope>
  *
- * For Milestone 0.5 there is only one mini-app mode (`claw`), and the
- * scope is the conversation id itself. Feed / Book Tutor will be added
- * later as additional mini-app ids; this store already allows them.
+ * `<miniAppId>` selects which mini-app family owns the conversation.
+ * `<conversationScope>` is usually the conversation id itself, but a
+ * mini-app is allowed to widen it when the same OpenClaw session should be
+ * shared across multiple conversations belonging to the same artifact.
  *
  * This store owns:
  *   - conversation metadata (id, title, sessionKey, mode, timestamps)
+ *   - a small denormalized snapshot used to render list rows without
+ *     waiting for any mini-app storage to hydrate
+ *   - an artifact ref pointing at mini-app-owned data. The store never
+ *     reads inside that ref; it only carries the pointer.
  *   - the active conversation selection
  *   - the in-memory messages cache per conversation
  *
  * It explicitly does NOT own:
  *   - the OpenClaw Gateway connection (see useGatewayStore)
  *   - the canonical transcript (OpenClaw Gateway owns that on disk)
+ *   - any mini-app private state (see mini-app storage namespaces)
  *
  * The messages cache here is a UI cache, not the source of truth. On
  * reconnect or rehydrate we can start empty and still show new traffic;
@@ -29,7 +35,48 @@ import { create } from "zustand";
 import { mmkv } from "@/storage/mmkv";
 
 export const DEFAULT_AGENT_ID = "main";
-export type MiniAppId = "claw";
+
+/**
+ * Internal union of mini-app ids recognized by the host. Using a finite
+ * union (rather than plain `string`) lets TypeScript catch missing cases
+ * in registries and switch statements while KokoChat does not yet support
+ * third-party packages. When third-party distribution is introduced this
+ * should widen to a registry-derived string.
+ */
+export type MiniAppId = "claw" | "example";
+
+/**
+ * Pointer from a conversation to a piece of data owned by a mini-app.
+ * The host never interprets `type` or `id`; it only carries the ref so
+ * the owning mini-app can resolve its own record.
+ *
+ * Ownership rule (MVP): the mini-app named by `miniAppId` is the sole
+ * writer of this artifact. Other mini-apps may only read through
+ * owner-exposed actions.
+ */
+export interface ArtifactRef {
+  /** Namespaced artifact type, e.g. "koko.example.note". */
+  type: string;
+  /** Mini-app-owned stable id of the artifact. */
+  id: string;
+  /** Mini-app that owns writes for this artifact. */
+  miniAppId: MiniAppId;
+}
+
+/**
+ * Minimum data needed to draw a conversation list row before any
+ * mini-app storage has hydrated. Written at conversation-create time and
+ * refreshed only on a small number of owner-driven events (rename,
+ * avatar change). List rendering must not block on mini-app storage.
+ */
+export interface ConversationListSnapshot {
+  title: string;
+  subtitle?: string;
+  /** Name of an icon to render when no avatar is available. Host-defined. */
+  icon?: string;
+  /** Remote or local avatar URI (mini-app storage is the source of truth). */
+  avatarUri?: string;
+}
 
 export interface ConversationMeta {
   id: string;
@@ -40,15 +87,35 @@ export interface ConversationMeta {
   updatedAt: number;
   lastPreview?: string;
   archived?: boolean;
+  /**
+   * Conversation this one was spawned from, when applicable. Parallel
+   * siblings, not parent-child UI.
+   */
+  parentConversationId?: string;
+  /** Optional pointer to the artifact this conversation is "about". */
+  artifactRef?: ArtifactRef;
+  /** Denormalized data for fast list rendering. */
+  listSnapshot?: ConversationListSnapshot;
 }
 
 export interface ChatMessage {
   id: string;
   role: "user" | "agent";
   text: string;
+  /** Structured render payloads. Plain text remains the compatibility path. */
+  blocks?: MessageBlock[];
   runId?: string;
   streaming?: boolean;
   error?: string;
+}
+
+export interface MessageBlock<TData = unknown> {
+  /** Globally namespaced block type, e.g. "koko.example.card". */
+  type: string;
+  /** Block schema version for renderer-side compatibility decisions. */
+  version: number;
+  /** Mini-app-defined payload. Must be validated before executing actions. */
+  data: TData;
 }
 
 interface ConversationState {
@@ -60,7 +127,7 @@ interface ConversationState {
   messages: Record<string, ChatMessage[]>;
 
   rehydrate(): void;
-  create(input?: { mode?: MiniAppId; title?: string }): ConversationMeta;
+  create(input?: CreateConversationInput): ConversationMeta;
   select(conversationId: string): void;
   clearActive(): void;
   rename(conversationId: string, title: string): void;
@@ -71,6 +138,26 @@ interface ConversationState {
     updater: (prev: ChatMessage[]) => ChatMessage[]
   ): void;
   touch(conversationId: string, preview?: string): void;
+}
+
+/**
+ * Inputs accepted by `create()`. All fields are optional; the host will
+ * fill sensible defaults (mode defaults to `claw`, scope to the new
+ * conversation id, title to a timestamp-based placeholder).
+ *
+ * `sessionScope` widens the OpenClaw session namespace beyond a single
+ * conversation id. For the common case (one conversation = one session)
+ * callers leave this undefined. Mini-apps that need several conversations
+ * to share a session pass something stable like
+ * `<artifactType>:<artifactId>:<conversationId>`.
+ */
+export interface CreateConversationInput {
+  mode?: MiniAppId;
+  title?: string;
+  sessionScope?: string;
+  parentConversationId?: string;
+  artifactRef?: ArtifactRef;
+  listSnapshot?: ConversationListSnapshot;
 }
 
 const INDEX_KEY = "koko.conversations.index.v1";
@@ -108,26 +195,39 @@ function uuid(): string {
 }
 
 /**
- * Build the OpenClaw sessionKey for a new conversation, following the
- * product contract documented in docs/mini-app-runtime.md.
+ * Build the OpenClaw sessionKey for a conversation. The `scope` is the
+ * mini-app's chosen namespace inside the mode bucket; passing the
+ * conversation id is the safe default. See `CreateConversationInput`
+ * for when widening the scope makes sense.
  */
 export function buildSessionKey(
   mode: MiniAppId,
-  conversationId: string,
+  scope: string,
   agentId: string = DEFAULT_AGENT_ID
 ): string {
-  return `agent:${agentId}:kokochat:${mode}:${conversationId}`.toLowerCase();
+  return `agent:${agentId}:kokochat:${mode}:${scope}`.toLowerCase();
 }
 
 function defaultTitleFor(mode: MiniAppId, createdAt: number): string {
   const d = new Date(createdAt);
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
+  // Mini-apps are free to rename their conversations immediately after
+  // create() returns; this default is only meant to avoid blank rows.
   switch (mode) {
+    case "example":
+      return `Example ${hh}:${mm}`;
     case "claw":
     default:
       return `Chat ${hh}:${mm}`;
   }
+}
+
+/** Known mini-app ids, used when validating data loaded from disk. */
+const KNOWN_MINI_APP_IDS: readonly MiniAppId[] = ["claw", "example"];
+
+function isMiniAppId(value: unknown): value is MiniAppId {
+  return typeof value === "string" && (KNOWN_MINI_APP_IDS as readonly string[]).includes(value);
 }
 
 function readIndex(): string[] {
@@ -150,12 +250,16 @@ function readMeta(conversationId: string): ConversationMeta | null {
   const raw = mmkv.getString(`${CONVERSATION_PREFIX}${conversationId}`);
   if (raw === undefined || raw.length === 0) return null;
   try {
-    const parsed = JSON.parse(raw) as ConversationMeta;
+    const parsed = JSON.parse(raw) as Partial<ConversationMeta> & Record<string, unknown>;
     if (typeof parsed !== "object" || parsed === null) return null;
     if (typeof parsed.id !== "string" || typeof parsed.sessionKey !== "string") {
       return null;
     }
-    return parsed;
+    // Legacy records created before the MiniAppId union widened may have
+    // stored modes that no longer exist; fall back to `claw` so the row
+    // is still usable rather than dropping it on the floor.
+    const mode: MiniAppId = isMiniAppId(parsed.mode) ? parsed.mode : "claw";
+    return { ...(parsed as ConversationMeta), mode };
   } catch {
     return null;
   }
@@ -196,13 +300,23 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const mode: MiniAppId = input?.mode ?? "claw";
     const id = uuid();
     const createdAt = now();
+    const title =
+      input?.title !== undefined && input.title.length > 0
+        ? input.title
+        : defaultTitleFor(mode, createdAt);
+    const scope = input?.sessionScope ?? id;
     const meta: ConversationMeta = {
       id,
       mode,
-      title: input?.title !== undefined && input.title.length > 0 ? input.title : defaultTitleFor(mode, createdAt),
-      sessionKey: buildSessionKey(mode, id),
+      title,
+      sessionKey: buildSessionKey(mode, scope),
       createdAt,
-      updatedAt: createdAt
+      updatedAt: createdAt,
+      ...(input?.parentConversationId !== undefined
+        ? { parentConversationId: input.parentConversationId }
+        : {}),
+      ...(input?.artifactRef !== undefined ? { artifactRef: input.artifactRef } : {}),
+      ...(input?.listSnapshot !== undefined ? { listSnapshot: input.listSnapshot } : {})
     };
     writeMeta(meta);
     const ids = [id, ...readIndex().filter((existing) => existing !== id)];
@@ -230,7 +344,16 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     if (next.length === 0) return;
     const existing = get().list.find((m) => m.id === conversationId);
     if (existing === undefined) return;
-    const updated: ConversationMeta = { ...existing, title: next, updatedAt: now() };
+    const updated: ConversationMeta = {
+      ...existing,
+      title: next,
+      updatedAt: now(),
+      // Keep the list snapshot in sync when present, otherwise the list
+      // row would keep showing the stale artifact-provided title.
+      ...(existing.listSnapshot !== undefined
+        ? { listSnapshot: { ...existing.listSnapshot, title: next } }
+        : {})
+    };
     writeMeta(updated);
     set((state) => ({
       list: [updated, ...state.list.filter((m) => m.id !== conversationId)].sort(compareByUpdatedDesc)

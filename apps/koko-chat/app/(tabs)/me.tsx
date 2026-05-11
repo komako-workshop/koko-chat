@@ -149,6 +149,17 @@ export default function MeTabScreen(): React.ReactElement {
           />
         </Group>
 
+        {/* Group: developer tools (dev builds only; harmless to ship) */}
+        <Group>
+          <Link href="/dev/runtime-selftest" asChild>
+            <Row
+              icon="hammer-outline"
+              label="OpenClaw Runtime Self-Test"
+              chevron
+            />
+          </Link>
+        </Group>
+
         {/* Group: danger zone */}
         <Group>
           <Row

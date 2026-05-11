@@ -20,6 +20,7 @@ import {
   clearDeviceIdentity
 } from "@/gateway/identityStorage";
 import type { OpenClawSetup } from "@/gateway/setupCode";
+import { buildOutboundMessage, isFirstUserTurn } from "@/runtime/outboundMessages";
 import { useConversationStore, type ChatMessage } from "@/state/conversations";
 
 /** Minimal shape of an OpenClaw chat event payload as observed on the wire. */
@@ -229,16 +230,31 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
 
+    const messages = useConversationStore.getState().getMessages(conversationId);
+    const outbound = await buildOutboundMessage({
+      conversation: meta,
+      visibleText: trimmed,
+      isFirstUserTurn: isFirstUserTurn(messages)
+    });
+    const visibleText = outbound.visibleText.trim();
+    const gatewayText = outbound.gatewayText.trim();
+    if (visibleText.length === 0) return;
+
     useConversationStore.getState().setMessages(conversationId, (prev) => [
       ...prev,
-      { id: newMessageId(), role: "user", text: trimmed }
+      { id: newMessageId(), role: "user", text: visibleText }
     ]);
-    useConversationStore.getState().touch(conversationId, trimmed.slice(0, 120));
+    useConversationStore.getState().touch(conversationId, visibleText.slice(0, 120));
+
+    if (outbound.localOnly === true) return;
+    if (gatewayText.length === 0) {
+      throw new Error("outbound gatewayText is empty");
+    }
 
     const idempotencyKey = `koko-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     await client.call("chat.send", {
       sessionKey: meta.sessionKey,
-      message: trimmed,
+      message: gatewayText,
       idempotencyKey
     });
   },
