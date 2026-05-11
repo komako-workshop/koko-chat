@@ -122,7 +122,11 @@ const settings = storage.getJson("settings");</code></pre><p>所有 key 都在 m
   return { visibleText, gatewayText: visibleText, localOnly: true };
 });</code></pre><div class="warn callout">这个 API 后续可能会拆成 <code>interceptUserSend</code> 与 <code>buildOutboundMessage</code>。</div></section>
 
-      <section id="blocks"><h2>Message Blocks</h2><p>用于在聊天流中渲染结构化卡片。模型输出必须先经过 mini-app parser/validator，再变成 block data。</p><pre><code class="language-ts">registerSharedBlockRenderer("koko.tavern.character_card", CharacterCardRenderer);</code></pre></section>
+      <section id="blocks"><h2>Message Blocks</h2><p>用于在聊天流中渲染结构化卡片。模型输出必须先经过 mini-app parser/validator，再变成 block data。注册 renderer 时推荐提供 guard，host 会先校验 <code>block.data</code>，失败则显示 fallback。</p><pre><code class="language-ts">registerSharedBlockRenderer(
+  "koko.tavern.character_card",
+  isCharacterCardData,
+  CharacterCardRenderer
+);</code></pre><p>从 agent 文本里提取 fenced block 时使用共享工具：<code>extractFencedBlock(text, "koko.tavern.recommendations")</code>。它只负责提取 body，不负责 JSON parse 或 schema 校验。</p></section>
 
       <section id="files"><h2>文件索引</h2><table><tr><th>文件</th><th>用途</th></tr><tr><td><code>docs/mini-app-runtime.md</code></td><td>Runtime API 细节</td></tr><tr><td><code>docs/mini-app-skills.md</code></td><td>OpenClaw skills 集成</td></tr><tr><td><code>docs/openclaw-core-tools-for-mini-apps.md</code></td><td>Core tools 选择说明</td></tr><tr><td><code>docs/openclaw-skills-catalog.html</code></td><td>本机 skills/tools 清单</td></tr><tr><td><code>sources/runtime/openclaw.ts</code></td><td><code>inferOnce</code> / agent session</td></tr><tr><td><code>sources/runtime/miniApps.ts</code></td><td>mini-app registry</td></tr><tr><td><code>sources/runtime/miniAppStorage.ts</code></td><td>namespaced storage</td></tr><tr><td><code>sources/miniapps/example/</code></td><td>最小模板</td></tr></table></section>
 

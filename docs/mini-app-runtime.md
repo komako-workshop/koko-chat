@@ -231,12 +231,29 @@ Notes:
 
 ## Message Blocks
 
-For structured cards inside a conversation, register a block renderer:
+For structured cards inside a conversation, register a block renderer. Prefer
+the guarded overload so the host validates `block.data` before calling your
+renderer:
 
 ```ts
-import { registerSharedBlockRenderer } from "@/runtime/messageBlocks";
+import {
+  extractFencedBlock,
+  registerSharedBlockRenderer
+} from "@/runtime/messageBlocks";
 
-registerSharedBlockRenderer("koko.example.card", ExampleCardRenderer);
+interface ExampleCardData {
+  title: string;
+}
+
+function isExampleCardData(data: unknown): data is ExampleCardData {
+  return typeof data === "object" && data !== null && "title" in data;
+}
+
+registerSharedBlockRenderer(
+  "koko.example.card",
+  isExampleCardData,
+  ExampleCardRenderer
+);
 ```
 
 Then put a block on a `ChatMessage`:
@@ -262,6 +279,19 @@ renderer file using `router` and `runtime/openclaw` helpers.
 
 Block types are global. Pick a clear namespace like
 `koko.<miniAppId>.<thing>` and avoid collisions.
+
+For structured agent output, use fenced blocks and the shared extractor:
+
+```ts
+const found = extractFencedBlock(agentText, "koko.example.card");
+if (found !== null) {
+  const parsed = JSON.parse(found.body);
+  // validate parsed, then turn it into MessageBlock[]
+}
+```
+
+`extractFencedBlock` and `extractAllFencedBlocks` only find fenced content; they
+do not parse JSON or validate data. Keep schema validation in your mini-app.
 
 ## Mini-App Registration
 

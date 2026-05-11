@@ -246,6 +246,33 @@ Whether a restart is required depends on how OpenClaw reloads skill metadata in
 the installed version. Treat restart as the safe path until we document a faster
 reload.
 
+## Framework Feedback From Tavern
+
+Building the first real Tavern mini-app exposed several OpenClaw-side gaps that
+KokoChat should not paper over in React Native code:
+
+- **Agent workspaces do not share skills.** A skill installed under the main
+  workspace is not automatically visible to a separate mini-app agent workspace.
+  Today the practical workaround is to sync the skill folder into each agent
+  workspace that needs it. Preferred OpenClaw-side fix: a CLI such as
+  `openclaw skills install --to-agent <id> <skill-id>` that copies/syncs the
+  skill and records what was installed.
+- **Agent creation should accept skills.** Creating a mini-app agent currently
+  requires a second config edit to set `agents.list[].skills`. Preferred shape:
+  `openclaw agents add tavern --workspace ... --skills kokochat-tavern-search --non-interactive`.
+- **Skill scripts need a portable path.** SKILL.md files should not need to hard
+  code `/Users/.../.openclaw/.../skills/<id>/bin/tool.mjs`. Preferred
+  OpenClaw-side fix: inject `OPENCLAW_SKILL_DIR` when a skill tells the agent to
+  execute a bundled script.
+- **Installer belongs on OpenClaw side.** The future installer should be an
+  OpenClaw skill such as `kokochat-installer`, not a KokoChat mobile function.
+  It should read mini-app descriptors, create agents, sync local skill folders,
+  patch skill allowlists, run readiness checks, and report back to the user.
+
+Until these exist, first-party mini-apps may include a repo-local install script
+for their OpenClaw-side setup, but that is a workaround rather than the target
+developer experience.
+
 ## What KokoChat Should Not Do
 
 - Do not expose OpenClaw Gateway tokens to mini-app code or future WebView
@@ -262,7 +289,9 @@ shape:
 
 - automatic agent readiness check from `MiniAppDescriptor.openclaw`
 - automatic skill install / sync from repository to OpenClaw workspace
+- `kokochat-installer` OpenClaw skill to perform mini-app OpenClaw-side setup
 - a verified executable-tool skill template
+- portable skill script path support such as `OPENCLAW_SKILL_DIR`
 - faster skill reload guidance
 - optional helper to create per-mini-app OpenClaw agents
 - optional helper to configure per-agent core tool profiles / allowlists
