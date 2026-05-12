@@ -74,7 +74,7 @@ registerMiniApp({
     defaultAgentId: "tavern",
     requiredSkills: ["kokochat-tavern-search"],
     requiredCoreTools: ["web_search", "web_fetch"],
-    localSkillDirs: ["openclaw/skills/kokochat-tavern-search"]
+    localSkillDirs: ["miniapps/tavern/openclaw/skills/kokochat-tavern-search"]
   }
 });
 ```
@@ -94,23 +94,24 @@ Field meaning:
 
 Default rule:
 
-- `claw` uses OpenClaw agent `main`.
-- every other mini-app defaults to an OpenClaw agent with the same id as the
+- every mini-app defaults to an OpenClaw agent with the same id as the
   mini-app.
+- KokoChat's home assistant is `koko` and uses OpenClaw agent `koko`; it is
+  intentionally separate from the user's existing OpenClaw `main` assistant.
 - `openclaw.defaultAgentId` overrides that default.
 - an explicit `agentId` passed to `inferOnce` or `createAgentSession` wins.
 
 Examples:
 
 ```text
-claw    -> agent:main:kokochat:claw:<scope>
+koko    -> agent:koko:kokochat:koko:<scope>
 tavern  -> agent:tavern:kokochat:tavern:<scope>
 book    -> agent:book:kokochat:book:<scope>
 ```
 
 This keeps product-specific prompts, transcripts, and tool use out of the
 user's main assistant by default. A mini-app that intentionally augments the
-main assistant can explicitly set `defaultAgentId: "main"`.
+user's OpenClaw main assistant can explicitly set `defaultAgentId: "main"`.
 
 ## Product Capabilities Should Be Agent Skills
 
@@ -149,15 +150,15 @@ building a prompt-only demo that will need to be replaced.
 First-party KokoChat skills should live in this repository first:
 
 ```text
-openclaw/skills/kokochat-<miniAppId>-<capability>/
+miniapps/<miniAppId>/openclaw/skills/kokochat-<miniAppId>-<capability>/
 ```
 
 Examples:
 
 ```text
-openclaw/skills/kokochat-tavern-search/
-openclaw/skills/kokochat-book-summary/
-openclaw/skills/kokochat-codex-workspace/
+miniapps/tavern/openclaw/skills/kokochat-tavern-search/
+miniapps/book/openclaw/skills/kokochat-book-summary/
+miniapps/codex/openclaw/skills/kokochat-codex-workspace/
 ```
 
 The repository copy is the source of truth. Installing currently means copying
@@ -178,7 +179,7 @@ We do not yet have a blessed OpenClaw tool-registration template in this repo.
 Until that is verified, use the simplest useful shape:
 
 ```text
-openclaw/skills/kokochat-tavern-search/
+miniapps/tavern/openclaw/skills/kokochat-tavern-search/
   SKILL.md
   bin/
     tavern-search.mjs

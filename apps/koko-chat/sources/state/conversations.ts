@@ -141,7 +141,7 @@ interface ConversationState {
 
 /**
  * Inputs accepted by `create()`. All fields are optional; the host will
- * fill sensible defaults (mode defaults to `claw`, scope to the new
+ * fill sensible defaults (mode defaults to `koko`, scope to the new
  * conversation id, title to a timestamp-based placeholder).
  *
  * `sessionScope` widens the OpenClaw session namespace beyond a single
@@ -232,7 +232,8 @@ function readMeta(conversationId: string): ConversationMeta | null {
     if (typeof parsed.id !== "string" || typeof parsed.sessionKey !== "string") {
       return null;
     }
-    const mode: MiniAppId = typeof parsed.mode === "string" && parsed.mode.length > 0 ? parsed.mode : "claw";
+    if (parsed.mode === "claw") return null;
+    const mode: MiniAppId = typeof parsed.mode === "string" && parsed.mode.length > 0 ? parsed.mode : "koko";
     warnUnknownMiniAppId(mode);
     return { ...(parsed as ConversationMeta), mode };
   } catch {
@@ -272,7 +273,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   create(input) {
-    const mode: MiniAppId = input?.mode ?? "claw";
+    const mode: MiniAppId = input?.mode ?? "koko";
     const id = uuid();
     const createdAt = now();
     const title =

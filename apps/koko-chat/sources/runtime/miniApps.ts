@@ -1,4 +1,8 @@
+import type { ImageSourcePropType } from "react-native";
+
 import type { ConversationMeta } from "@/state/conversations";
+
+const kokoAvatar = require("../../assets/brand/chat-avatar.png") as ImageSourcePropType;
 
 export interface MiniAppDescriptor {
   /** Stable mini-app id. Also used as ConversationMeta.mode. */
@@ -9,11 +13,15 @@ export interface MiniAppDescriptor {
   showInLauncher?: boolean;
   /** Fallback glyph used by host list rows when no avatar is present. */
   listGlyph?: string;
+  /** Bundled image used by host list rows when available. */
+  listImage?: ImageSourcePropType;
   /** Default title for conversations created without an explicit title. */
   defaultTitle?: (createdAt: number) => string;
+  /** Reuse one conversation for launcher opens instead of creating a new row. */
+  singletonSessionScope?: string;
   /** OpenClaw-side requirements and defaults for this mini-app. */
   openclaw?: {
-    /** Defaults to `main` for claw and to the mini-app id for all other apps. */
+    /** Defaults to the mini-app id unless overridden. */
     defaultAgentId?: string;
     /** Skills expected to be visible to this mini-app's agent. */
     requiredSkills?: string[];
@@ -30,12 +38,14 @@ const miniApps = new Map<string, MiniAppDescriptor>();
 const warnedUnknownIds = new Set<string>();
 
 registerMiniApp({
-  id: "claw",
-  displayName: "默认 Claw",
+  id: "koko",
+  displayName: "Koko",
   showInLauncher: true,
-  listGlyph: "🦞",
-  defaultTitle: (createdAt) => `Chat ${formatTime(createdAt)}`,
-  openclaw: { defaultAgentId: "main" }
+  listGlyph: "K",
+  listImage: kokoAvatar,
+  defaultTitle: () => "Koko",
+  singletonSessionScope: "home",
+  openclaw: { defaultAgentId: "koko" }
 });
 
 export function registerMiniApp(descriptor: MiniAppDescriptor): void {
@@ -71,6 +81,10 @@ export function getMiniAppListGlyph(mode: string): string | undefined {
   return getMiniAppDescriptor(mode)?.listGlyph;
 }
 
+export function getMiniAppListImage(mode: string): ImageSourcePropType | undefined {
+  return getMiniAppDescriptor(mode)?.listImage;
+}
+
 export function resolveMiniAppAgentId(miniAppId: string, explicitAgentId?: string): string {
   if (explicitAgentId !== undefined && explicitAgentId.trim().length > 0) {
     return normalizeAgentId(explicitAgentId);
@@ -80,7 +94,7 @@ export function resolveMiniAppAgentId(miniAppId: string, explicitAgentId?: strin
   if (descriptorAgentId !== undefined && descriptorAgentId.trim().length > 0) {
     return normalizeAgentId(descriptorAgentId);
   }
-  return id === "claw" ? "main" : normalizeAgentId(id);
+  return normalizeAgentId(id);
 }
 
 export interface MiniAppOpenClawRequirements {

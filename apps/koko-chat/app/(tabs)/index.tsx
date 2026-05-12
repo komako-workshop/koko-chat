@@ -3,6 +3,7 @@ import {
   ActionSheetIOS,
   Alert,
   FlatList,
+  Image,
   Platform,
   Pressable,
   StyleSheet,
@@ -15,8 +16,13 @@ import { router, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
 
-import { getLauncherMiniApps, getMiniAppListGlyph, type MiniAppDescriptor } from "@/runtime/miniApps";
-import { useConversationStore, type ConversationMeta } from "@/state/conversations";
+import {
+  getLauncherMiniApps,
+  getMiniAppListGlyph,
+  getMiniAppListImage,
+  type MiniAppDescriptor
+} from "@/runtime/miniApps";
+import { buildSessionKey, useConversationStore, type ConversationMeta } from "@/state/conversations";
 import { useSettingsStore } from "@/state/settings";
 
 /**
@@ -68,9 +74,18 @@ export default function ChatsTabScreen(): React.ReactElement {
   }
 
   async function createFromLauncher(app: MiniAppDescriptor): Promise<void> {
-    const meta = app.onCreate !== undefined
-      ? await app.onCreate()
-      : createConversation({ mode: app.id });
+    let meta: ConversationMeta;
+    if (app.onCreate !== undefined) {
+      meta = await app.onCreate();
+    } else if (app.singletonSessionScope !== undefined) {
+      const sessionKey = buildSessionKey(app.id, app.singletonSessionScope);
+      meta = conversations.find((item) => item.sessionKey === sessionKey) ?? createConversation({
+        mode: app.id,
+        sessionScope: app.singletonSessionScope
+      });
+    } else {
+      meta = createConversation({ mode: app.id });
+    }
     router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
   }
 
@@ -121,6 +136,7 @@ export default function ChatsTabScreen(): React.ReactElement {
 
   const renderRow = ({ item, index }: ListRenderItemInfo<ConversationMeta>) => {
     const isLast = index === conversations.length - 1;
+    const listImage = getMiniAppListImage(item.mode);
     return (
       <Pressable
         onPress={() => router.push({ pathname: "/chat/[id]", params: { id: item.id } })}
@@ -139,14 +155,22 @@ export default function ChatsTabScreen(): React.ReactElement {
             { backgroundColor: isDark ? "#1f2937" : "#e5e7eb" }
           ]}
         >
-          <Text
-            style={[
-              styles.avatarGlyph,
-              { color: isDark ? "#9ca3af" : "#64748b" }
-            ]}
-          >
-            {getMiniAppListGlyph(item.mode) ?? avatarGlyph(item.title)}
-          </Text>
+          {listImage !== undefined ? (
+            <Image
+              source={listImage}
+              style={styles.avatarImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <Text
+              style={[
+                styles.avatarGlyph,
+                { color: isDark ? "#9ca3af" : "#64748b" }
+              ]}
+            >
+              {getMiniAppListGlyph(item.mode) ?? avatarGlyph(item.title)}
+            </Text>
+          )}
         </View>
 
         <View style={styles.rowBody}>
@@ -319,6 +343,10 @@ const styles = StyleSheet.create({
   avatarGlyph: {
     fontSize: 21,
     fontWeight: "600"
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%"
   },
   rowBody: {
     flex: 1,

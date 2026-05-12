@@ -314,7 +314,7 @@ export function registerExampleMiniApp(): void {
     listGlyph: "Ex",
     defaultTitle: (createdAt) => `Example ${formatTime(createdAt)}`,
     openclaw: {
-      // Optional. If omitted, non-claw mini-apps default to agentId === id.
+      // Optional. If omitted, mini-apps default to agentId === id.
       // Example overrides to main so it works on a stock OpenClaw install.
       defaultAgentId: "main",
       requiredSkills: [],
@@ -349,13 +349,14 @@ Rules:
 ## Agent IDs And Skills
 
 Each mini-app should normally use its own OpenClaw agent id. This prevents
-product-specific prompts, tool use, and transcripts from polluting the user's
-main assistant.
+product-specific prompts, tool use, and transcripts from polluting unrelated
+agents. KokoChat's home assistant is `koko`, separate from the user's OpenClaw
+`main` assistant.
 
 Default agent rule:
 
-- `claw` uses `main`.
-- every other mini-app uses `agentId === miniAppId`.
+- every mini-app uses `agentId === miniAppId` by default.
+- KokoChat home mode is `koko`, so it uses OpenClaw agent `koko`.
 - `descriptor.openclaw.defaultAgentId` overrides the default.
 - an explicit `agentId` passed to `inferOnce` / `createAgentSession` wins over
   everything else.
@@ -370,7 +371,7 @@ registerMiniApp({
     defaultAgentId: "tavern",
     requiredSkills: ["kokochat-tavern-search"],
     requiredCoreTools: ["web_search", "web_fetch"],
-    localSkillDirs: ["openclaw/skills/kokochat-tavern-search"]
+    localSkillDirs: ["miniapps/tavern/openclaw/skills/kokochat-tavern-search"]
   }
 });
 ```

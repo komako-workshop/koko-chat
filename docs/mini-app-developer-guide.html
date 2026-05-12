@@ -66,7 +66,7 @@
     defaultAgentId: "tavern",
     requiredSkills: ["kokochat-tavern-search"],
     requiredCoreTools: ["web_search", "web_fetch"],
-    localSkillDirs: ["openclaw/skills/kokochat-tavern-search"]
+    localSkillDirs: ["miniapps/tavern/openclaw/skills/kokochat-tavern-search"]
   }
 });</code></pre>
         <table><tr><th>字段</th><th>含义</th></tr><tr><td><code>id</code></td><td>mini-app id，也是 conversation mode。</td></tr><tr><td><code>displayName</code></td><td>显示在 + 菜单和开发工具中的名称。</td></tr><tr><td><code>showInLauncher</code></td><td>是否出现在会话列表 + 菜单。</td></tr><tr><td><code>listGlyph</code></td><td>会话列表无头像时的 glyph。</td></tr><tr><td><code>defaultTitle</code></td><td>未传 title 时的默认会话标题。</td></tr><tr><td><code>openclaw.defaultAgentId</code></td><td>该 mini-app 默认调用的 OpenClaw agent。</td></tr><tr><td><code>openclaw.requiredSkills</code></td><td>该 agent 需要可见的 optional skills。</td></tr><tr><td><code>openclaw.requiredCoreTools</code></td><td>该 agent 需要的 OpenClaw core tools。</td></tr><tr><td><code>openclaw.localSkillDirs</code></td><td>随 repo 提供的本地 skill 文件夹。</td></tr></table>
@@ -74,8 +74,8 @@
 
       <section id="agent">
         <h2>Agent 默认规则</h2>
-        <ul><li><code>claw</code> 默认使用 <code>main</code> agent。</li><li>其他 mini-app 默认使用同名 agent，例如 <code>tavern -> tavern</code>。</li><li><code>descriptor.openclaw.defaultAgentId</code> 可以覆盖。</li><li><code>inferOnce</code> / <code>createAgentSession</code> 显式传 <code>agentId</code> 优先级最高。</li></ul>
-        <pre><code>agent:main:kokochat:claw:&lt;scope&gt;
+        <ul><li>KokoChat 主助手使用 <code>koko</code> agent，不复用用户原本的 OpenClaw <code>main</code> agent。</li><li>其他 mini-app 默认使用同名 agent，例如 <code>tavern -> tavern</code>。</li><li><code>descriptor.openclaw.defaultAgentId</code> 可以覆盖。</li><li><code>inferOnce</code> / <code>createAgentSession</code> 显式传 <code>agentId</code> 优先级最高。</li></ul>
+        <pre><code>agent:koko:kokochat:koko:&lt;scope&gt;
 agent:tavern:kokochat:tavern:&lt;scope&gt;</code></pre>
         <div class="warn callout">不要让产品 mini-app 默认污染 <code>main</code>。main 是用户的“家”，mini-app agent 是具体产品工作间。</div>
       </section>
@@ -105,6 +105,7 @@ agent:tavern:kokochat:tavern:&lt;scope&gt;</code></pre>
 const send = await sendAgentMessage({ sessionKey: session.key, message });
 await waitForAgentRun({ runId: send.runId });
 const history = await readAgentHistory({ sessionKey: session.key });</code></pre>
+        <div class="warn callout"><b>initialMessage 不是 system prompt。</b> 如果调用 <code>createAgentSession({ initialMessage })</code>，这条内容会作为创建 session 后立刻发送的一条 user/task message 进入 transcript；它不会成为贯穿始终的 system instruction。稳定产品规则应该放在 OpenClaw agent 的 workspace / identity / skill 文件中，例如 <code>SKILL.md</code> 或 agent workspace 里的说明文档。若需要 agent 在会话开始时读取某个 workspace 文档，可以在 <code>initialMessage</code> 中明确提示“请先阅读 TAVERN.md 并遵守其中说明”，但这仍然只是启动提示，不等同于 system prompt。</div>
       </section>
 
       <section id="storage"><h2>Storage</h2><pre><code class="language-ts">const storage = getMiniAppStorage("tavern");
@@ -130,7 +131,7 @@ const settings = storage.getJson("settings");</code></pre><p>所有 key 都在 m
 
       <section id="files"><h2>文件索引</h2><table><tr><th>文件</th><th>用途</th></tr><tr><td><code>docs/mini-app-runtime.md</code></td><td>Runtime API 细节</td></tr><tr><td><code>docs/mini-app-skills.md</code></td><td>OpenClaw skills 集成</td></tr><tr><td><code>docs/openclaw-core-tools-for-mini-apps.md</code></td><td>Core tools 选择说明</td></tr><tr><td><code>docs/openclaw-skills-catalog.html</code></td><td>本机 skills/tools 清单</td></tr><tr><td><code>sources/runtime/openclaw.ts</code></td><td><code>inferOnce</code> / agent session</td></tr><tr><td><code>sources/runtime/miniApps.ts</code></td><td>mini-app registry</td></tr><tr><td><code>sources/runtime/miniAppStorage.ts</code></td><td>namespaced storage</td></tr><tr><td><code>sources/miniapps/example/</code></td><td>最小模板</td></tr></table></section>
 
-      <section id="handoff"><h2>给开发窗口的话</h2><div class="card"><p>Tavern 小程序直接走 agent + skill 架构，不做 prompt-only demo。注册 descriptor 时声明 <code>id: "tavern"</code>、<code>openclaw.defaultAgentId: "tavern"</code>、<code>requiredSkills: ["kokochat-tavern-search"]</code>、<code>requiredCoreTools: ["web_search", "web_fetch"]</code>、<code>localSkillDirs: ["openclaw/skills/kokochat-tavern-search"]</code>。调用时使用 <code>inferOnce({ miniAppId: "tavern", prompt })</code>，不要显式传 <code>agentId: "main"</code>。KokoChat 端只收集用户需求、调用 tavern agent、解析/校验结构化结果并渲染角色卡；搜索 character-tavern.com、抓取、解析、归一化都属于 <code>kokochat-tavern-search</code> skill/tool。</p></div></section>
+      <section id="handoff"><h2>给开发窗口的话</h2><div class="card"><p>Tavern 小程序直接走 agent + skill 架构，不做 prompt-only demo。注册 descriptor 时声明 <code>id: "tavern"</code>、<code>openclaw.defaultAgentId: "tavern"</code>、<code>requiredSkills: ["kokochat-tavern-search"]</code>、<code>requiredCoreTools: ["web_search", "web_fetch"]</code>、<code>localSkillDirs: ["miniapps/tavern/openclaw/skills/kokochat-tavern-search"]</code>。调用时使用 <code>inferOnce({ miniAppId: "tavern", prompt })</code>，不要显式传 <code>agentId: "main"</code>。KokoChat 端只收集用户需求、调用 tavern agent、解析/校验结构化结果并渲染角色卡；搜索 character-tavern.com、抓取、解析、归一化都属于 <code>kokochat-tavern-search</code> skill/tool。</p></div></section>
     </main>
   </div>
 </body>

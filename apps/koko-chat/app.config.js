@@ -13,10 +13,10 @@ const config = {
   scheme: "koko",
   version: "0.0.1",
   orientation: "portrait",
-  icon: "./assets/icon.png",
+  icon: "./assets/brand/app-logo.png",
   userInterfaceStyle: "automatic",
   splash: {
-    image: "./assets/splash-icon.png",
+    image: "./assets/brand/app-logo.png",
     resizeMode: "contain",
     backgroundColor: "#ffffff"
   },
@@ -26,7 +26,7 @@ const config = {
   },
   android: {
     adaptiveIcon: {
-      foregroundImage: "./assets/adaptive-icon.png",
+      foregroundImage: "./assets/brand/app-logo.png",
       backgroundColor: "#ffffff"
     },
     package: "ai.komako.kokochat"

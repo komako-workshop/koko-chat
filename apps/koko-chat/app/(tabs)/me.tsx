@@ -1,6 +1,7 @@
 import { useLayoutEffect } from "react";
 import {
   Alert,
+  Image,
   Pressable,
   ScrollView,
   Text,
@@ -16,6 +17,8 @@ import tw from "twrnc";
 import { useGatewayStore } from "@/state/gateway";
 import { useConversationStore } from "@/state/conversations";
 import { useSettingsStore } from "@/state/settings";
+
+const appLogo = require("../../assets/brand/app-logo.png");
 
 /**
  * Me tab ("我"): WeChat-style profile page with grouped list rows.
@@ -84,9 +87,9 @@ export default function MeTabScreen(): React.ReactElement {
           style={tw`flex-row items-center bg-white px-4 py-5 dark:bg-slate-950`}
         >
           <View
-            style={tw`h-16 w-16 items-center justify-center rounded-xl bg-slate-200 dark:bg-slate-800`}
+            style={tw`h-16 w-16 items-center justify-center overflow-hidden rounded-xl bg-slate-200 dark:bg-slate-800`}
           >
-            <Text style={tw`text-3xl`}>🦞</Text>
+            <Image source={appLogo} style={tw`h-full w-full`} resizeMode="cover" />
           </View>
           <View style={tw`ml-4 flex-1`}>
             <Text style={tw`text-xl font-semibold text-slate-950 dark:text-slate-50`}>

@@ -31,7 +31,7 @@ export async function buildOutboundMessage(input: OutboundMessageInput): Promise
   const builder = outboundMessageBuilders[input.conversation.mode];
   if (builder !== undefined) return builder(input);
 
-  // Host default and current `claw` behavior: send exactly what the user sees.
+    // Host default behavior: send exactly what the user sees.
   return {
     visibleText: input.visibleText,
     gatewayText: input.visibleText
