@@ -8,10 +8,6 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "relay:dev": "pnpm --filter @koko/relay dev",
-    "relay:build": "pnpm --filter @koko/relay build",
-    "relay:test": "pnpm --filter @koko/relay test",
-    "cli:dev": "pnpm --filter @koko/cli dev",
     "app:dev": "pnpm --filter @koko/app dev",
     "protocol:build": "pnpm --filter @koko/protocol build",
     "lint": "pnpm -r lint",

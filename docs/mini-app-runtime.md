@@ -421,7 +421,6 @@ See `docs/mini-app-skills.md` and
 | Block renderer registry     | `sources/runtime/messageBlocks.tsx`    |
 | Conversation store          | `sources/state/conversations.ts`       |
 | Gateway client + chat IO    | `sources/state/gateway.ts`             |
-| Live RPC smoke test         | `scripts/spike-openclaw-runtime.mjs`   |
 | Example mini-app            | `sources/miniapps/example/`            |
 
 ## Self-Test
