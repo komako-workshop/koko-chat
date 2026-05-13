@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  AppState,
   FlatList,
+  Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,6 +20,8 @@ import tw from "twrnc";
 import { useGatewayStore } from "@/state/gateway";
 import { useConversationStore, type ChatMessage, type ConversationMeta } from "@/state/conversations";
 import { MessageBlockView } from "@/runtime/messageBlocks";
+
+const KOKO_CHAT_AVATAR = require("../../assets/brand/chat-avatar.png");
 
 function messageKey(message: ChatMessage): string {
   return `${message.role}:${message.runId ?? "local"}:${message.id}`;
@@ -61,13 +66,11 @@ function renderMessage(
 ): React.ReactElement {
   const isAgent = item.role === "agent";
   const hasBlocks = item.blocks !== undefined && item.blocks.length > 0;
-  return (
+  const bubble = (
     <View
       style={tw.style(
-        "my-1.5 max-w-[88%] rounded-2xl px-4 py-3",
-        isAgent
-          ? "self-start bg-white dark:bg-slate-800"
-          : "self-end bg-cyan-600"
+        "my-1.5 rounded-2xl px-4 py-3",
+        isAgent ? "max-w-[82%] bg-white dark:bg-slate-800" : "max-w-[88%] bg-cyan-600"
       )}
     >
       {item.error !== undefined ? (
@@ -80,6 +83,21 @@ function renderMessage(
       ) : (
         renderMessageText(item, isAgent)
       )}
+    </View>
+  );
+
+  if (isAgent) {
+    return (
+      <View style={tw`flex-row items-end gap-2 self-start`}>
+        <Image source={KOKO_CHAT_AVATAR} style={tw`h-8 w-8 rounded-full`} />
+        {bubble}
+      </View>
+    );
+  }
+
+  return (
+    <View style={tw`self-end`}>
+      {bubble}
     </View>
   );
 }
@@ -148,6 +166,19 @@ export default function ChatScreen() {
     }, 16);
     return () => clearTimeout(timer);
   }, [messages]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active") {
+        // iOS can restore a stale keyboard frame after backgrounding, which
+        // makes KeyboardAvoidingView collapse the FlatList and place the input
+        // bar directly under the header. Dismissing before suspension avoids
+        // resuming into that broken layout state.
+        Keyboard.dismiss();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   async function handleSend(): Promise<void> {
     if (conversationId === null) return;
