@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -15,11 +16,11 @@ import {
 import { Link, useLocalSearchParams, useNavigation, router } from "expo-router";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { SafeAreaView } from "react-native-safe-area-context";
-import tw from "twrnc";
 
 import { useGatewayStore } from "@/state/gateway";
 import { useConversationStore, type ChatMessage, type ConversationMeta } from "@/state/conversations";
 import { MessageBlockView } from "@/runtime/messageBlocks";
+import { KokoColors, KokoRadius } from "@/theme/koko";
 
 const KOKO_CHAT_AVATAR = require("../../assets/brand/chat-avatar.png");
 
@@ -30,14 +31,11 @@ function messageKey(message: ChatMessage): string {
 function renderMessageText(message: ChatMessage, isAgent: boolean): React.ReactElement | null {
   if (message.text.length === 0 && message.streaming !== true) return null;
   return (
-    <Text
-      style={tw.style(
-        "text-base",
-        isAgent ? "text-slate-950 dark:text-slate-50" : "text-white"
-      )}
-    >
+    <Text style={[styles.messageText, isAgent ? styles.agentText : styles.userText]}>
       {message.text}
-      {message.streaming === true ? <Text style={tw`opacity-60`}> ▋</Text> : null}
+      {message.streaming === true ? (
+        <Text style={styles.streamingCursor}> ▋</Text>
+      ) : null}
     </Text>
   );
 }
@@ -48,7 +46,7 @@ function renderMessageBlocks(
 ): React.ReactElement | null {
   if (message.blocks === undefined || message.blocks.length === 0) return null;
   return (
-    <View style={tw`gap-2`}>
+    <View style={styles.blocksColumn}>
       {message.blocks.map((block, index) => (
         <MessageBlockView
           key={`${block.type}:${block.version}:${index}`}
@@ -67,16 +65,11 @@ function renderMessage(
   const isAgent = item.role === "agent";
   const hasBlocks = item.blocks !== undefined && item.blocks.length > 0;
   const bubble = (
-    <View
-      style={tw.style(
-        "my-1.5 rounded-2xl px-4 py-3",
-        isAgent ? "max-w-[82%] bg-white dark:bg-slate-800" : "max-w-[88%] bg-cyan-600"
-      )}
-    >
+    <View style={[styles.bubble, isAgent ? styles.agentBubble : styles.userBubble]}>
       {item.error !== undefined ? (
-        <Text style={tw`text-sm text-rose-300`}>⚠️ {item.error}</Text>
+        <Text style={styles.errorText}>⚠️ {item.error}</Text>
       ) : hasBlocks ? (
-        <View style={tw`gap-2`}>
+        <View style={styles.blocksColumn}>
           {renderMessageBlocks(item, conversation)}
           {item.text.length > 0 ? renderMessageText(item, isAgent) : null}
         </View>
@@ -88,18 +81,14 @@ function renderMessage(
 
   if (isAgent) {
     return (
-      <View style={tw`flex-row items-end gap-2 self-start`}>
-        <Image source={KOKO_CHAT_AVATAR} style={tw`h-8 w-8 rounded-full`} />
+      <View style={styles.agentRow}>
+        <Image source={KOKO_CHAT_AVATAR} style={styles.avatar} />
         {bubble}
       </View>
     );
   }
 
-  return (
-    <View style={tw`self-end`}>
-      {bubble}
-    </View>
-  );
+  return <View style={styles.userRow}>{bubble}</View>;
 }
 
 export default function ChatScreen() {
@@ -127,10 +116,6 @@ export default function ChatScreen() {
     if (conversationId === null) return;
     useConversationStore.getState().select(conversationId);
     return () => {
-      // Only clear active if we're leaving for a non-chat screen — in the
-      // thread list we don't want a stale selection. The cleanest signal is
-      // that another ChatScreen's select() will overwrite ours before this
-      // cleanup runs, so we only clear when no conversation is active.
       const current = useConversationStore.getState().activeId;
       if (current === conversationId) {
         useConversationStore.getState().clearActive();
@@ -138,27 +123,13 @@ export default function ChatScreen() {
     };
   }, [conversationId]);
 
-  // Set the nav header title to the conversation title, and surface
-  // Disconnect as headerRight so we never draw a second in-screen header.
   const navigation = useNavigation();
-  const disconnect = useGatewayStore((s) => s.disconnect);
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: conversation?.title ?? "Chat",
-      headerRight: () => (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => void disconnect()}
-          hitSlop={8}
-          style={tw`rounded-full border border-slate-300 px-3 py-1 dark:border-slate-700`}
-        >
-          <Text style={tw`text-xs text-slate-700 dark:text-slate-200`}>Disconnect</Text>
-        </Pressable>
-      )
+      title: conversation?.title ?? "聊天"
     });
-  }, [conversation?.title, disconnect, navigation]);
+  }, [conversation?.title, navigation]);
 
-  // Autoscroll to bottom on new messages / streaming updates.
   useEffect(() => {
     if (messages.length === 0) return;
     const timer = setTimeout(() => {
@@ -195,20 +166,17 @@ export default function ChatScreen() {
     }
   }
 
-  // Conversation not found or invalid id. Offer a way back.
   if (conversationId === null || conversation === null) {
     return (
-      <SafeAreaView style={tw`flex-1 bg-slate-50 dark:bg-slate-950`}>
-        <View style={tw`flex-1 items-center justify-center px-6`}>
-          <Text style={tw`text-center text-lg text-slate-700 dark:text-slate-200`}>
-            Conversation not found
-          </Text>
+      <SafeAreaView style={styles.screen}>
+        <View style={styles.fallback}>
+          <Text style={styles.fallbackTitle}>找不到该会话</Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => router.replace("/")}
-            style={tw`mt-6 rounded-2xl bg-cyan-600 px-6 py-3`}
+            style={styles.fallbackButton}
           >
-            <Text style={tw`text-base font-semibold text-white`}>Back to threads</Text>
+            <Text style={styles.fallbackButtonText}>回到聊天列表</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -217,14 +185,13 @@ export default function ChatScreen() {
 
   if (status !== "connected" && status !== "handshaking") {
     return (
-      <SafeAreaView style={tw`flex-1 bg-slate-50 dark:bg-slate-950`}>
-        <View style={tw`flex-1 items-center justify-center px-6`}>
-          <Text style={tw`text-center text-lg text-slate-700 dark:text-slate-200`}>
-            Not connected to OpenClaw Gateway ({status})
-          </Text>
+      <SafeAreaView style={styles.screen}>
+        <View style={styles.fallback}>
+          <Text style={styles.fallbackTitle}>未连接到 OpenClaw Gateway</Text>
+          <Text style={styles.fallbackSubtitle}>当前状态：{status}</Text>
           <Link href="/pair" asChild>
-            <Pressable style={tw`mt-6 rounded-2xl bg-cyan-600 px-6 py-3`}>
-              <Text style={tw`text-base font-semibold text-white`}>Go Pair</Text>
+            <Pressable style={styles.fallbackButton}>
+              <Text style={styles.fallbackButtonText}>去配对</Text>
             </Pressable>
           </Link>
         </View>
@@ -232,13 +199,12 @@ export default function ChatScreen() {
     );
   }
 
+  const sendDisabled = sending || draft.trim().length === 0;
+
   return (
-    <SafeAreaView
-      style={tw`flex-1 bg-slate-50 dark:bg-slate-950`}
-      edges={["left", "right", "bottom"]}
-    >
+    <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
       <KeyboardAvoidingView
-        style={tw`flex-1`}
+        style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={headerHeight}
       >
@@ -247,44 +213,37 @@ export default function ChatScreen() {
           data={messages}
           keyExtractor={messageKey}
           renderItem={(item) => renderMessage(item, conversation)}
-          contentContainerStyle={tw`px-4 py-4`}
+          contentContainerStyle={styles.listContent}
           onContentSizeChange={() => {
             if (messages.length > 0) {
               listRef.current?.scrollToEnd({ animated: false });
             }
           }}
           ListEmptyComponent={
-            <View style={tw`mt-16 items-center`}>
-              <Text style={tw`text-slate-500 dark:text-slate-400`}>
-                Say something to your OpenClaw agent…
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>
+                跟 Koko 说点什么吧～
               </Text>
             </View>
           }
         />
 
-        <View
-          style={tw`flex-row items-center border-t border-slate-200 bg-slate-100 px-3 py-3 dark:border-slate-800 dark:bg-slate-900`}
-        >
+        <View style={styles.inputBar}>
           <TextInput
             value={draft}
             onChangeText={setDraft}
-            placeholder="Message…"
-            placeholderTextColor={tw.color("slate-400") ?? "#94a3b8"}
+            placeholder="说点什么…"
+            placeholderTextColor={KokoColors.inkPlaceholder}
             multiline
-            style={tw`mr-2 max-h-28 flex-1 rounded-2xl bg-white px-4 py-2.5 text-base text-slate-950 dark:bg-slate-800 dark:text-slate-50`}
+            style={styles.input}
           />
           <Pressable
             accessibilityRole="button"
-            disabled={sending || draft.trim().length === 0}
+            disabled={sendDisabled}
             onPress={() => void handleSend()}
-            style={tw.style(
-              "rounded-full px-5 py-2.5",
-              sending || draft.trim().length === 0
-                ? "bg-slate-300 dark:bg-slate-700"
-                : "bg-cyan-600"
-            )}
+            style={[styles.sendButton, sendDisabled && styles.sendButtonDisabled]}
           >
-            <Text style={tw`text-base font-semibold text-white`}>Send</Text>
+            <Text style={styles.sendButtonText}>发送</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -293,3 +252,142 @@ export default function ChatScreen() {
 }
 
 const EMPTY: ChatMessage[] = [];
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: KokoColors.bg
+  },
+  flex: {
+    flex: 1
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 16
+  },
+  agentRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    alignSelf: "flex-start",
+    maxWidth: "88%",
+    marginBottom: 4
+  },
+  userRow: {
+    alignSelf: "flex-end",
+    maxWidth: "88%",
+    marginBottom: 4
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: KokoRadius.pill,
+    marginRight: 8,
+    backgroundColor: KokoColors.primarySoft
+  },
+  bubble: {
+    marginVertical: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: KokoRadius.xl,
+    flexShrink: 1
+  },
+  agentBubble: {
+    backgroundColor: KokoColors.surface,
+    borderTopLeftRadius: 8
+  },
+  userBubble: {
+    backgroundColor: KokoColors.primary,
+    borderTopRightRadius: 8
+  },
+  messageText: {
+    fontSize: 16,
+    lineHeight: 24
+  },
+  agentText: {
+    color: KokoColors.ink
+  },
+  userText: {
+    color: "#FFFFFF"
+  },
+  streamingCursor: {
+    opacity: 0.6
+  },
+  errorText: {
+    fontSize: 14,
+    color: KokoColors.danger
+  },
+  blocksColumn: {
+    gap: 8
+  },
+  inputBar: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: KokoColors.surfaceMuted,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: KokoColors.hairline
+  },
+  input: {
+    flex: 1,
+    maxHeight: 120,
+    marginRight: 8,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderRadius: KokoRadius.xl,
+    backgroundColor: KokoColors.surface,
+    fontSize: 16,
+    color: KokoColors.ink
+  },
+  sendButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: KokoRadius.pill,
+    backgroundColor: KokoColors.primary
+  },
+  sendButtonDisabled: {
+    backgroundColor: KokoColors.primarySoft
+  },
+  sendButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#FFFFFF"
+  },
+  emptyState: {
+    marginTop: 64,
+    alignItems: "center"
+  },
+  emptyText: {
+    fontSize: 14,
+    color: KokoColors.inkMuted
+  },
+  fallback: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24
+  },
+  fallbackTitle: {
+    fontSize: 17,
+    color: KokoColors.ink,
+    textAlign: "center"
+  },
+  fallbackSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    color: KokoColors.inkSecondary
+  },
+  fallbackButton: {
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: KokoRadius.xl,
+    backgroundColor: KokoColors.primary
+  },
+  fallbackButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#FFFFFF"
+  }
+});

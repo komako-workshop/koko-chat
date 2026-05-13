@@ -4,32 +4,32 @@ import {
   Image,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   View,
   type GestureResponderEvent
 } from "react-native";
 import Constants from "expo-constants";
 import { Ionicons } from "@expo/vector-icons";
-import { Link, router, useNavigation } from "expo-router";
+import { Link, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import tw from "twrnc";
 
 import { useGatewayStore } from "@/state/gateway";
 import { useConversationStore } from "@/state/conversations";
-import { useSettingsStore } from "@/state/settings";
+import { KokoColors, KokoRadius } from "@/theme/koko";
 
 const appLogo = require("../../assets/brand/app-logo.png");
 
 /**
- * Me tab ("我"): WeChat-style profile page with grouped list rows.
+ * Me tab ("我"): warm grouped-list profile screen.
  *
- * Top: avatar + handle + secondary line (app version).
- * Groups:
- *   - Gateway status + manage connection
- *   - Pair a new OpenClaw Gateway (route to /pair)
- *   - Appearance (dark mode toggle for now)
- *   - About (version, debug info)
- *   - Danger zone: forget identity / clear conversations
+ * Sections:
+ *   - Header: app logo + handle + version / conversation count
+ *   - Gateway: status, pair, optional disconnect
+ *   - About / dev tools
+ *   - Danger zone: forget device identity
+ *
+ * No dark mode toggle. Colors come from `theme/koko`.
  */
 export default function MeTabScreen(): React.ReactElement {
   const navigation = useNavigation();
@@ -41,8 +41,6 @@ export default function MeTabScreen(): React.ReactElement {
   const disconnect = useGatewayStore((s) => s.disconnect);
   const forgetIdentity = useGatewayStore((s) => s.forgetIdentity);
   const conversationCount = useConversationStore((s) => s.list.length);
-  const darkMode = useSettingsStore((s) => s.darkMode);
-  const toggleDarkMode = useSettingsStore((s) => s.toggleDarkMode);
 
   const appVersion = Constants.expoConfig?.version ?? "0.0.1";
 
@@ -77,33 +75,18 @@ export default function MeTabScreen(): React.ReactElement {
   }
 
   return (
-    <SafeAreaView
-      style={tw`flex-1 bg-slate-100 dark:bg-black`}
-      edges={["top", "left", "right"]}
-    >
-      <ScrollView contentContainerStyle={tw`pb-12`}>
-        {/* Profile header */}
-        <View
-          style={tw`flex-row items-center bg-white px-4 py-5 dark:bg-slate-950`}
-        >
-          <View
-            style={tw`h-16 w-16 items-center justify-center overflow-hidden rounded-xl bg-slate-200 dark:bg-slate-800`}
-          >
-            <Image source={appLogo} style={tw`h-full w-full`} resizeMode="cover" />
+    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.profile}>
+          <View style={styles.profileAvatar}>
+            <Image source={appLogo} style={styles.profileAvatarImage} resizeMode="cover" />
           </View>
-          <View style={tw`ml-4 flex-1`}>
-            <Text style={tw`text-xl font-semibold text-slate-950 dark:text-slate-50`}>
-              KokoChat
-            </Text>
-            <Text style={tw`mt-1 text-xs text-slate-500 dark:text-slate-400`}>
+          <View style={styles.profileText}>
+            <Text style={styles.profileTitle}>KokoChat</Text>
+            <Text style={styles.profileSubtitle}>
               v{appVersion} · {conversationCount} 个会话
             </Text>
           </View>
-          <Ionicons
-            name="chevron-forward"
-            size={18}
-            color={tw.color("slate-400") ?? "#94a3b8"}
-          />
         </View>
 
         {/* Group: connection */}
@@ -115,7 +98,7 @@ export default function MeTabScreen(): React.ReactElement {
             valueTone={gatewayStatus === "connected" ? "good" : "warn"}
           />
           <Link href="/pair" asChild>
-            <Row icon="qr-code-outline" label="配对 Gateway" chevron />
+            <Row icon="qr-code-outline" label="配对 OpenClaw" chevron last={gatewayStatus !== "connected"} />
           </Link>
           {gatewayStatus === "connected" ? (
             <Row
@@ -123,21 +106,12 @@ export default function MeTabScreen(): React.ReactElement {
               label="断开连接"
               destructive
               onPress={() => void handleDisconnect()}
+              last
             />
           ) : null}
         </Group>
 
-        {/* Group: appearance */}
-        <Group>
-          <Row
-            icon="moon-outline"
-            label="深色模式"
-            value={darkMode ? "已开启" : "已关闭"}
-            onPress={() => toggleDarkMode()}
-          />
-        </Group>
-
-        {/* Group: about */}
+        {/* Group: about + dev tools */}
         <Group>
           <Row
             icon="information-circle-outline"
@@ -146,38 +120,28 @@ export default function MeTabScreen(): React.ReactElement {
             onPress={() => {
               Alert.alert(
                 "KokoChat",
-                `版本 v${appVersion}\n\nA mobile mini-app runtime on top of OpenClaw.`
+                `版本 v${appVersion}\n\n手机上的 OpenClaw,聊天 + AI 小程序。`
               );
             }}
           />
-        </Group>
-
-        {/* Group: developer tools (dev builds only; harmless to ship) */}
-        <Group>
           <Link href="/dev/runtime-selftest" asChild>
-            <Row
-              icon="hammer-outline"
-              label="OpenClaw Runtime Self-Test"
-              chevron
-            />
+            <Row icon="hammer-outline" label="OpenClaw Runtime 自检" chevron last />
           </Link>
         </Group>
 
-        {/* Group: danger zone */}
+        {/* Danger zone */}
         <Group>
           <Row
             icon="trash-outline"
             label="忘记此设备"
             destructive
             onPress={() => void handleForgetIdentity()}
+            last
           />
         </Group>
 
-        <View style={tw`mt-6 items-center`}>
-          <Text style={tw`text-xs text-slate-400 dark:text-slate-600`}>
-            Made for OpenClaw ·{"\u2002"}
-            <Text onPress={() => router.push("/")}>{""}</Text>
-          </Text>
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Made for OpenClaw · by Komako</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -185,13 +149,7 @@ export default function MeTabScreen(): React.ReactElement {
 }
 
 function Group({ children }: { children: React.ReactNode }): React.ReactElement {
-  return (
-    <View
-      style={tw`mt-3 overflow-hidden rounded-lg mx-3 bg-white dark:bg-slate-950`}
-    >
-      {children}
-    </View>
-  );
+  return <View style={styles.group}>{children}</View>;
 }
 
 type RowProps = {
@@ -201,6 +159,7 @@ type RowProps = {
   valueTone?: "default" | "good" | "warn";
   chevron?: boolean;
   destructive?: boolean;
+  last?: boolean;
   onPress?: (event: GestureResponderEvent) => void;
 };
 
@@ -211,44 +170,122 @@ const Row = ({
   valueTone = "default",
   chevron,
   destructive,
+  last,
   onPress
 }: RowProps): React.ReactElement => {
-  const labelColor = destructive
-    ? "text-rose-600 dark:text-rose-400"
-    : "text-slate-950 dark:text-slate-50";
-  const iconColor = destructive
-    ? tw.color("rose-600") ?? "#dc2626"
-    : tw.color("slate-700") ?? "#334155";
-  const valueColorClass =
+  const labelColor = destructive ? KokoColors.danger : KokoColors.ink;
+  const iconColor = destructive ? KokoColors.danger : KokoColors.inkSecondary;
+  const valueColor =
     valueTone === "good"
-      ? "text-emerald-600 dark:text-emerald-400"
+      ? KokoColors.success
       : valueTone === "warn"
-        ? "text-rose-500 dark:text-rose-400"
-        : "text-slate-400 dark:text-slate-500";
+        ? KokoColors.danger
+        : KokoColors.inkMuted;
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) =>
-        tw.style(
-          "flex-row items-center border-b border-slate-200 px-4 py-3 dark:border-slate-800",
-          pressed ? "bg-slate-100 dark:bg-slate-900" : ""
-        )
-      }
+      style={({ pressed }) => [
+        styles.row,
+        !last && styles.rowSeparator,
+        pressed && { backgroundColor: KokoColors.surfaceSoft }
+      ]}
     >
       <Ionicons name={icon} size={20} color={iconColor} />
-      <Text style={tw.style("ml-3 flex-1 text-base", labelColor)}>{label}</Text>
+      <Text style={[styles.rowLabel, { color: labelColor }]}>{label}</Text>
       {value !== undefined ? (
-        <Text style={tw.style("text-sm", valueColorClass)}>{value}</Text>
+        <Text style={[styles.rowValue, { color: valueColor }]}>{value}</Text>
       ) : null}
       {chevron === true ? (
         <Ionicons
           name="chevron-forward"
           size={16}
-          color={tw.color("slate-400") ?? "#94a3b8"}
-          style={tw`ml-2`}
+          color={KokoColors.inkMuted}
+          style={styles.rowChevron}
         />
       ) : null}
     </Pressable>
   );
 };
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: KokoColors.bg
+  },
+  scroll: {
+    paddingBottom: 48
+  },
+  profile: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: KokoColors.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: KokoColors.hairline
+  },
+  profileAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: KokoRadius.lg,
+    overflow: "hidden",
+    backgroundColor: KokoColors.primarySoft
+  },
+  profileAvatarImage: {
+    width: "100%",
+    height: "100%"
+  },
+  profileText: {
+    marginLeft: 14,
+    flex: 1
+  },
+  profileTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: KokoColors.ink
+  },
+  profileSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    color: KokoColors.inkSecondary
+  },
+  group: {
+    marginTop: 14,
+    marginHorizontal: 12,
+    borderRadius: KokoRadius.lg,
+    overflow: "hidden",
+    backgroundColor: KokoColors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: KokoColors.hairline
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 13
+  },
+  rowSeparator: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: KokoColors.hairline
+  },
+  rowLabel: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 16
+  },
+  rowValue: {
+    fontSize: 13
+  },
+  rowChevron: {
+    marginLeft: 8
+  },
+  footer: {
+    marginTop: 24,
+    alignItems: "center"
+  },
+  footerText: {
+    fontSize: 11,
+    color: KokoColors.inkMuted
+  }
+});

@@ -3,20 +3,20 @@ import { persist } from "zustand/middleware";
 
 import { createMmkvStorage } from "@/storage/persist";
 
+/**
+ * Minimal settings state. KokoChat is single-theme (light) and does not
+ * expose appearance toggles, so the store is intentionally tiny. New
+ * persisted settings should go here.
+ */
 export interface SettingsState {
-  darkMode: boolean;
-  tapCount: number;
-  toggleDarkMode: () => void;
-  incrementTap: () => void;
+  /** Internal counter retained for future onboarding tap-to-reveal hooks. */
+  internalNoop: number;
 }
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
-      darkMode: false,
-      tapCount: 0,
-      toggleDarkMode: () => set((state) => ({ darkMode: !state.darkMode })),
-      incrementTap: () => set((state) => ({ tapCount: state.tapCount + 1 }))
+    () => ({
+      internalNoop: 0
     }),
     { name: "koko-settings", storage: createMmkvStorage<SettingsState>() }
   )

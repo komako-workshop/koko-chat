@@ -13,6 +13,7 @@ import { parseSetupCode } from "@/gateway/setupCode";
 import { registerMiniApps } from "@/miniapps";
 import { useConversationStore } from "@/state/conversations";
 import { useGatewayStore } from "@/state/gateway";
+import { KokoColors } from "@/theme/koko";
 
 // Register mini-app block renderers and outbound builders once at module load,
 // before any conversation can render. Idempotent.
@@ -42,15 +43,24 @@ export default function RootLayout() {
           <AppStateProvider>
             <ThemeProvider>
               <DevAutoConnect />
-              <StatusBar style="auto" />
-              <Stack screenOptions={{ headerShown: true }}>
+              <StatusBar style="dark" />
+              <Stack
+                screenOptions={{
+                  headerShown: true,
+                  headerStyle: { backgroundColor: KokoColors.bg },
+                  headerTitleStyle: { color: KokoColors.ink, fontWeight: "600" },
+                  headerTintColor: KokoColors.primaryDeep,
+                  headerShadowVisible: false,
+                  contentStyle: { backgroundColor: KokoColors.bg }
+                }}
+              >
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="pair" options={{ title: "Pair" }} />
-                <Stack.Screen name="chat/[id]" options={{ title: "Chat" }} />
-                <Stack.Screen name="settings" options={{ title: "Settings" }} />
+                <Stack.Screen name="pair" options={{ title: "配对 OpenClaw" }} />
+                <Stack.Screen name="chat/[id]" options={{ title: "聊天" }} />
+                <Stack.Screen name="settings" options={{ title: "设置" }} />
                 <Stack.Screen
                   name="dev/runtime-selftest"
-                  options={{ title: "OpenClaw Runtime Self-Test" }}
+                  options={{ title: "Runtime 自检" }}
                 />
               </Stack>
             </ThemeProvider>

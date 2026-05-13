@@ -14,9 +14,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { router, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import tw from "twrnc";
 
-import { ensureOpenClawAgent } from "@/runtime/openclaw";
+import { openKokoHome } from "@/miniapps/koko";
 import {
   getLauncherMiniApps,
   getMiniAppListGlyph,
@@ -25,29 +24,25 @@ import {
 } from "@/runtime/miniApps";
 import { useGatewayStore } from "@/state/gateway";
 import { buildSessionKey, useConversationStore, type ConversationMeta } from "@/state/conversations";
-import { useSettingsStore } from "@/state/settings";
+import { KokoColors, KokoRadius } from "@/theme/koko";
 
 /**
- * WeChat-like conversation list. First tab in the bottom tab bar.
+ * Chat list — first tab.
  *
- * Visual targets:
- *   - Rounded square avatar placeholder on the left
- *   - Two-line content on the right (title + last preview)
- *   - Timestamp in the top-right of each row
- *   - Hairline separators that start after the avatar (WeChat pattern)
- *   - Large bold "聊天" header at the top with a "+" button on the right
+ * Pinned Koko home row at the top, then user-created conversations
+ * (newest first). The Koko palette gives the screen a warm off-white
+ * feel; user messages use the Koko orange and agent rows stay on white
+ * cards. No dark mode.
  */
 export default function ChatsTabScreen(): React.ReactElement {
   const conversations = useConversationStore((s) => s.list);
   const createConversation = useConversationStore((s) => s.create);
   const archiveConversation = useConversationStore((s) => s.archive);
   const renameConversation = useConversationStore((s) => s.rename);
-  const isDark = useSettingsStore((s) => s.darkMode);
   const gatewayStatus = useGatewayStore((s) => s.status);
 
   const navigation = useNavigation();
   useLayoutEffect(() => {
-    // The tabs layout hides the header; we render our own.
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
@@ -92,21 +87,15 @@ export default function ChatsTabScreen(): React.ReactElement {
     router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
   }
 
-  async function openKokoHome(): Promise<void> {
+  async function handleOpenKokoHome(): Promise<void> {
     if (gatewayStatus !== "connected") {
       Alert.alert("OpenClaw 未连接", "请先配对并连接 Gateway，然后再打开 Koko。");
       return;
     }
     try {
-      await ensureOpenClawAgent({ agentId: "koko", name: "koko" });
-      const sessionKey = buildSessionKey("koko", "home");
-      const meta = conversations.find((item) => item.sessionKey === sessionKey) ?? createConversation({
-        mode: "koko",
-        sessionScope: "home",
-        title: "Koko",
-        listSnapshot: { title: "Koko", subtitle: "你的 KokoChat 主助手" }
+      await openKokoHome((conversationId) => {
+        router.push({ pathname: "/chat/[id]", params: { id: conversationId } });
       });
-      router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
     } catch (error) {
       Alert.alert("打开 Koko 失败", error instanceof Error ? error.message : String(error));
     }
@@ -148,7 +137,6 @@ export default function ChatsTabScreen(): React.ReactElement {
         onSelect
       );
     } else {
-      // Simple Alert-based fallback for Android until we add a cross-platform sheet.
       Alert.alert(conversation.title, undefined, [
         { text: "重命名", onPress: () => onSelect(1) },
         { text: "删除会话", style: "destructive", onPress: () => onSelect(2) },
@@ -165,19 +153,13 @@ export default function ChatsTabScreen(): React.ReactElement {
         onPress={() => router.push({ pathname: "/chat/[id]", params: { id: item.id } })}
         onLongPress={() => handleLongPress(item)}
         delayLongPress={350}
-        android_ripple={{ color: isDark ? "#1c1c1e" : "#e5e5ea" }}
+        android_ripple={{ color: KokoColors.surfaceSoft }}
         style={({ pressed }) => [
           styles.row,
-          { backgroundColor: isDark ? "#000" : "#fff" },
-          pressed && { backgroundColor: isDark ? "#1c1c1e" : "#ececec" }
+          pressed && { backgroundColor: KokoColors.surfaceSoft }
         ]}
       >
-        <View
-          style={[
-            styles.avatar,
-            { backgroundColor: isDark ? "#1f2937" : "#e5e7eb" }
-          ]}
-        >
+        <View style={styles.avatar}>
           {listImage !== undefined ? (
             <Image
               source={listImage}
@@ -185,12 +167,7 @@ export default function ChatsTabScreen(): React.ReactElement {
               resizeMode="cover"
             />
           ) : (
-            <Text
-              style={[
-                styles.avatarGlyph,
-                { color: isDark ? "#9ca3af" : "#64748b" }
-              ]}
-            >
+            <Text style={styles.avatarGlyph}>
               {getMiniAppListGlyph(item.mode) ?? avatarGlyph(item.title)}
             </Text>
           )}
@@ -198,84 +175,47 @@ export default function ChatsTabScreen(): React.ReactElement {
 
         <View style={styles.rowBody}>
           <View style={styles.rowText}>
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.rowTitle,
-                { color: isDark ? "#f8fafc" : "#0f172a" }
-              ]}
-            >
+            <Text numberOfLines={1} style={styles.rowTitle}>
               {item.title}
             </Text>
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.rowPreview,
-                { color: isDark ? "#94a3b8" : "#8e8e93" }
-              ]}
-            >
+            <Text numberOfLines={1} style={styles.rowPreview}>
               {item.lastPreview ?? "暂无消息"}
             </Text>
           </View>
-          <Text
-            style={[
-              styles.rowTime,
-              { color: isDark ? "#64748b" : "#8e8e93" }
-            ]}
-          >
-            {formatRelative(item.updatedAt)}
-          </Text>
+          <Text style={styles.rowTime}>{formatRelative(item.updatedAt)}</Text>
         </View>
 
-        {isLast ? null : (
-          <View
-            style={[
-              styles.separator,
-              { backgroundColor: isDark ? "#1f2937" : "#e5e5ea" }
-            ]}
-          />
-        )}
+        {isLast ? null : <View style={styles.separator} />}
       </Pressable>
     );
   };
 
   return (
-    <SafeAreaView
-      style={[styles.screen, { backgroundColor: isDark ? "#000" : "#fff" }]}
-      edges={["top", "left", "right"]}
-    >
+    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
       <View style={styles.header}>
-        <Text
-          style={[styles.headerTitle, { color: isDark ? "#f8fafc" : "#0f172a" }]}
-        >
-          聊天
-        </Text>
+        <Text style={styles.headerTitle}>聊天</Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="New chat"
+          accessibilityLabel="新建会话"
           onPress={handleNewChat}
           hitSlop={12}
           style={styles.headerButton}
         >
-          <Ionicons
-            name="add-circle-outline"
-            size={28}
-            color={isDark ? "#f8fafc" : "#0f172a"}
-          />
+          <Ionicons name="add-circle-outline" size={28} color={KokoColors.ink} />
         </Pressable>
       </View>
 
-        <FlatList
-          data={conversations}
-          keyExtractor={(item) => item.id}
-          renderItem={renderRow}
-          style={{ backgroundColor: isDark ? "#000" : "#fff" }}
-          ListHeaderComponent={<KokoPinnedRow isDark={isDark} onPress={() => void openKokoHome()} />}
-          ListEmptyComponent={
-            <View style={tw`mt-24 items-center px-6`}>
-            <Text
-              style={tw`text-center text-sm text-slate-400 dark:text-slate-500`}
-            >
+      <FlatList
+        data={conversations}
+        keyExtractor={(item) => item.id}
+        renderItem={renderRow}
+        style={styles.list}
+        ListHeaderComponent={
+          <KokoPinnedRow onPress={() => void handleOpenKokoHome()} />
+        }
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Text style={styles.emptyText}>
               还没有会话{"\n"}点右上角 + 开始一段新对话
             </Text>
           </View>
@@ -285,54 +225,47 @@ export default function ChatsTabScreen(): React.ReactElement {
   );
 }
 
-function KokoPinnedRow({
-  isDark,
-  onPress
-}: {
-  isDark: boolean;
-  onPress: () => void;
-}): React.ReactElement {
+function KokoPinnedRow({ onPress }: { onPress: () => void }): React.ReactElement {
   const listImage = getMiniAppListImage("koko");
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      android_ripple={{ color: isDark ? "#1c1c1e" : "#e5e5ea" }}
+      android_ripple={{ color: KokoColors.surfaceSoft }}
       style={({ pressed }) => [
         styles.row,
-        { backgroundColor: isDark ? "#000" : "#fff" },
-        pressed && { backgroundColor: isDark ? "#1c1c1e" : "#ececec" }
+        styles.pinnedRow,
+        pressed && { backgroundColor: KokoColors.primarySoft }
       ]}
     >
-      <View
-        style={[
-          styles.avatar,
-          { backgroundColor: isDark ? "#1f2937" : "#e5e7eb" }
-        ]}
-      >
+      <View style={[styles.avatar, styles.pinnedAvatar]}>
         {listImage !== undefined ? (
           <Image source={listImage} style={styles.avatarImage} resizeMode="cover" />
         ) : (
-          <Text style={[styles.avatarGlyph, { color: isDark ? "#9ca3af" : "#64748b" }]}>K</Text>
+          <Text style={styles.avatarGlyph}>K</Text>
         )}
       </View>
       <View style={styles.rowBody}>
         <View style={styles.rowText}>
-          <Text numberOfLines={1} style={[styles.rowTitle, { color: isDark ? "#f8fafc" : "#0f172a" }]}>Koko</Text>
-          <Text numberOfLines={1} style={[styles.rowPreview, { color: isDark ? "#94a3b8" : "#8e8e93" }]}>你的 KokoChat 主助手</Text>
+          <Text numberOfLines={1} style={styles.rowTitle}>
+            Koko
+          </Text>
+          <Text numberOfLines={1} style={styles.rowPreview}>
+            你的 KokoChat 主助手
+          </Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={isDark ? "#64748b" : "#8e8e93"} />
+        <Ionicons name="chevron-forward" size={16} color={KokoColors.inkMuted} />
       </View>
-      <View style={[styles.separator, { backgroundColor: isDark ? "#1f2937" : "#e5e5ea" }]} />
+      <View style={styles.separator} />
     </Pressable>
   );
 }
 
 function avatarGlyph(title: string): string {
   const trimmed = title.trim();
-  if (trimmed.length === 0) return "🦞";
+  if (trimmed.length === 0) return "✨";
   const firstCodePoint = trimmed[Symbol.iterator]().next();
-  return typeof firstCodePoint.value === "string" ? firstCodePoint.value : "🦞";
+  return typeof firstCodePoint.value === "string" ? firstCodePoint.value : "✨";
 }
 
 function formatRelative(timestamp: number): string {
@@ -365,7 +298,6 @@ function sameDay(a: number, b: number): boolean {
   );
 }
 
-// WeChat-style dimensions. Avatar 52, row height 82, body indent = avatar + gap.
 const AVATAR_SIZE = 52;
 const ROW_HORIZONTAL_PADDING = 14;
 const AVATAR_RIGHT_GAP = 14;
@@ -373,7 +305,8 @@ const SEPARATOR_INSET = ROW_HORIZONTAL_PADDING + AVATAR_SIZE + AVATAR_RIGHT_GAP;
 
 const styles = StyleSheet.create({
   screen: {
-    flex: 1
+    flex: 1,
+    backgroundColor: KokoColors.bg
   },
   header: {
     flexDirection: "row",
@@ -385,11 +318,15 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: "700"
+    fontWeight: "700",
+    color: KokoColors.ink
   },
   headerButton: {
     padding: 4,
-    borderRadius: 999
+    borderRadius: KokoRadius.pill
+  },
+  list: {
+    backgroundColor: KokoColors.bg
   },
   row: {
     flexDirection: "row",
@@ -397,19 +334,29 @@ const styles = StyleSheet.create({
     height: 82,
     paddingLeft: ROW_HORIZONTAL_PADDING,
     paddingRight: ROW_HORIZONTAL_PADDING,
-    position: "relative"
+    position: "relative",
+    backgroundColor: KokoColors.bg
+  },
+  pinnedRow: {
+    backgroundColor: KokoColors.primaryWash
   },
   avatar: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
-    borderRadius: 8,
+    borderRadius: KokoRadius.lg,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: AVATAR_RIGHT_GAP
+    marginRight: AVATAR_RIGHT_GAP,
+    backgroundColor: KokoColors.surfaceSoft,
+    overflow: "hidden"
+  },
+  pinnedAvatar: {
+    backgroundColor: KokoColors.primarySoft
   },
   avatarGlyph: {
     fontSize: 21,
-    fontWeight: "600"
+    fontWeight: "600",
+    color: KokoColors.inkSecondary
   },
   avatarImage: {
     width: "100%",
@@ -428,20 +375,35 @@ const styles = StyleSheet.create({
   },
   rowTitle: {
     fontSize: 17,
-    fontWeight: "600"
+    fontWeight: "600",
+    color: KokoColors.ink
   },
   rowPreview: {
     marginTop: 5,
-    fontSize: 14
+    fontSize: 14,
+    color: KokoColors.inkSecondary
   },
   rowTime: {
-    fontSize: 13
+    fontSize: 13,
+    color: KokoColors.inkMuted
   },
   separator: {
     position: "absolute",
     left: SEPARATOR_INSET,
     right: 0,
     bottom: 0,
-    height: StyleSheet.hairlineWidth
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: KokoColors.hairline
+  },
+  empty: {
+    marginTop: 96,
+    alignItems: "center",
+    paddingHorizontal: 24
+  },
+  emptyText: {
+    textAlign: "center",
+    fontSize: 14,
+    color: KokoColors.inkMuted,
+    lineHeight: 22
   }
 });

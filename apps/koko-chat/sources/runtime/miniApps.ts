@@ -2,8 +2,6 @@ import type { ImageSourcePropType } from "react-native";
 
 import type { ConversationMeta } from "@/state/conversations";
 
-const kokoAvatar = require("../../assets/brand/chat-avatar.png") as ImageSourcePropType;
-
 export interface MiniAppDescriptor {
   /** Stable mini-app id. Also used as ConversationMeta.mode. */
   id: string;
@@ -36,17 +34,6 @@ export interface MiniAppDescriptor {
 
 const miniApps = new Map<string, MiniAppDescriptor>();
 const warnedUnknownIds = new Set<string>();
-
-registerMiniApp({
-  id: "koko",
-  displayName: "Koko",
-  showInLauncher: false,
-  listGlyph: "K",
-  listImage: kokoAvatar,
-  defaultTitle: () => "Koko",
-  singletonSessionScope: "home",
-  openclaw: { defaultAgentId: "koko" }
-});
 
 export function registerMiniApp(descriptor: MiniAppDescriptor): void {
   const id = normalizeMiniAppId(descriptor.id);

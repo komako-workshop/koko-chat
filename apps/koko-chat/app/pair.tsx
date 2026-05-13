@@ -1,12 +1,20 @@
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from "react-native";
 import { Link, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
-import tw from "twrnc";
 
 import { parseSetupCode } from "@/gateway/setupCode";
 import { useGatewayStore } from "@/state/gateway";
+import { KokoColors, KokoRadius } from "@/theme/koko";
 
 /**
  * Pairing flow (Claw-mediated, text-only).
@@ -23,7 +31,6 @@ import { useGatewayStore } from "@/state/gateway";
  * needing to solve QR rendering / scanning in each.
  */
 
-/** Prompt the user sends to their already-paired Claw. */
 const PAIRING_PROMPT = "请帮我生成一个新的 KokoChat 配对码。";
 
 async function readClipboardText(): Promise<string | null> {
@@ -91,105 +98,184 @@ export default function PairScreen() {
   const connectDisabled = busy || input.trim().length === 0;
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-slate-50 dark:bg-slate-950`}>
-      <ScrollView
-        contentContainerStyle={tw`px-6 pb-12 pt-4`}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={tw`text-3xl font-bold text-slate-950 dark:text-slate-50`}>
-          添加到 OpenClaw
-        </Text>
-        <Text style={tw`mt-2 text-sm leading-5 text-slate-600 dark:text-slate-300`}>
+    <SafeAreaView style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>添加到 OpenClaw</Text>
+        <Text style={styles.intro}>
           KokoChat 需要通过你已有的 OpenClaw 拿到一个配对码。
         </Text>
 
-        {/* Step 1: copy prompt */}
-        <Text style={tw`mt-8 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400`}>
-          第 1 步 · 把下面这句话发给你的 OpenClaw
-        </Text>
-        <View
-          style={tw`mt-2 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900`}
-        >
-          <Text
-            selectable
-            style={tw`text-base leading-6 text-slate-900 dark:text-slate-50`}
-          >
+        <Text style={styles.stepLabel}>第 1 步 · 把下面这句话发给你的 OpenClaw</Text>
+        <View style={styles.card}>
+          <Text selectable style={styles.promptText}>
             {PAIRING_PROMPT}
           </Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => void handleCopyPrompt()}
-            style={tw.style(
-              "mt-3 items-center rounded-full px-4 py-2 self-start",
-              copied ? "bg-emerald-600" : "bg-slate-900 dark:bg-slate-100"
-            )}
+            style={[styles.copyButton, copied && styles.copyButtonOn]}
           >
-            <Text
-              style={tw.style(
-                "text-sm font-semibold",
-                copied ? "text-white" : "text-white dark:text-slate-900"
-              )}
-            >
+            <Text style={styles.copyButtonText}>
               {copied ? "✓ 已复制" : "📋 复制这句话"}
             </Text>
           </Pressable>
         </View>
 
-        {/* Step 2: paste setup code */}
-        <Text style={tw`mt-8 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400`}>
-          第 2 步 · 把 OpenClaw 回复的配对码粘到这里
-        </Text>
-        <View
-          style={tw`mt-2 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900`}
-        >
+        <Text style={styles.stepLabel}>第 2 步 · 把 OpenClaw 回复的配对码粘到这里</Text>
+        <View style={styles.card}>
           <TextInput
             value={input}
             onChangeText={setInput}
             placeholder="eyJ1cmwi..."
-            placeholderTextColor={tw.color("slate-400") ?? "#94a3b8"}
+            placeholderTextColor={KokoColors.inkPlaceholder}
             multiline
             numberOfLines={4}
-            style={tw`min-h-20 font-mono text-xs text-slate-950 dark:text-slate-50`}
+            style={styles.input}
           />
           <Pressable
             accessibilityRole="button"
             onPress={() => void handlePaste()}
-            style={tw`mt-2 items-center rounded-full border border-slate-300 bg-white px-3 py-1.5 dark:border-slate-700 dark:bg-slate-800 self-start`}
+            style={styles.pasteButton}
           >
-            <Text style={tw`text-xs text-slate-700 dark:text-slate-200`}>📋 从剪贴板粘贴</Text>
+            <Text style={styles.pasteButtonText}>📋 从剪贴板粘贴</Text>
           </Pressable>
         </View>
 
         {localError !== null ? (
-          <Text style={tw`mt-3 text-sm text-rose-600 dark:text-rose-400`}>错误：{localError}</Text>
+          <Text style={styles.errorText}>错误：{localError}</Text>
         ) : null}
         {lastError !== null && localError === null ? (
-          <Text style={tw`mt-3 text-sm text-rose-600 dark:text-rose-400`}>上次错误：{lastError}</Text>
+          <Text style={styles.errorText}>上次错误：{lastError}</Text>
         ) : null}
 
         <Pressable
           accessibilityRole="button"
           disabled={connectDisabled}
           onPress={() => void connectWith(input)}
-          style={tw.style(
-            "mt-6 items-center rounded-2xl px-6 py-4",
-            connectDisabled ? "bg-slate-300 dark:bg-slate-700" : "bg-cyan-600"
-          )}
+          style={[styles.connectButton, connectDisabled && styles.connectButtonDisabled]}
         >
-          <Text style={tw`text-base font-semibold text-white`}>
+          <Text style={styles.connectButtonText}>
             {busy ? `连接中 (${status})…` : "连接"}
           </Text>
         </Pressable>
 
         <Link href="/" asChild>
-          <Pressable
-            accessibilityRole="button"
-            style={tw`mt-6 items-center rounded-2xl px-6 py-3`}
-          >
-            <Text style={tw`text-sm text-slate-500 dark:text-slate-400`}>返回</Text>
+          <Pressable accessibilityRole="button" style={styles.backButton}>
+            <Text style={styles.backButtonText}>返回</Text>
           </Pressable>
         </Link>
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: KokoColors.bg
+  },
+  scroll: {
+    paddingHorizontal: 24,
+    paddingBottom: 48,
+    paddingTop: 16
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: KokoColors.ink
+  },
+  intro: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: KokoColors.inkSecondary
+  },
+  stepLabel: {
+    marginTop: 28,
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    color: KokoColors.inkSecondary
+  },
+  card: {
+    marginTop: 8,
+    backgroundColor: KokoColors.surface,
+    borderRadius: KokoRadius.lg,
+    padding: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: KokoColors.border
+  },
+  promptText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: KokoColors.ink
+  },
+  copyButton: {
+    alignSelf: "flex-start",
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: KokoRadius.pill,
+    backgroundColor: KokoColors.primary
+  },
+  copyButtonOn: {
+    backgroundColor: KokoColors.success
+  },
+  copyButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600"
+  },
+  input: {
+    minHeight: 80,
+    fontFamily: "Menlo",
+    fontSize: 12,
+    color: KokoColors.ink
+  },
+  pasteButton: {
+    alignSelf: "flex-start",
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: KokoRadius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: KokoColors.border,
+    backgroundColor: KokoColors.surfaceSoft
+  },
+  pasteButtonText: {
+    fontSize: 12,
+    color: KokoColors.inkSecondary
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 13,
+    color: KokoColors.danger
+  },
+  connectButton: {
+    marginTop: 24,
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: KokoRadius.xl,
+    backgroundColor: KokoColors.primary
+  },
+  connectButtonDisabled: {
+    backgroundColor: KokoColors.primarySoft
+  },
+  connectButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FFFFFF"
+  },
+  backButton: {
+    marginTop: 16,
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 12
+  },
+  backButtonText: {
+    fontSize: 13,
+    color: KokoColors.inkSecondary
+  }
+});

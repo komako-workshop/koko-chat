@@ -18,16 +18,16 @@
  *   - an artifact ref pointing at mini-app-owned data. The store never
  *     reads inside that ref; it only carries the pointer.
  *   - the active conversation selection
- *   - the in-memory messages cache per conversation
+ *   - the local message history per conversation
  *
  * It explicitly does NOT own:
  *   - the OpenClaw Gateway connection (see useGatewayStore)
- *   - the canonical transcript (OpenClaw Gateway owns that on disk)
  *   - any mini-app private state (see mini-app storage namespaces)
  *
- * The messages cache here is a UI cache, not the source of truth. On
- * reconnect or rehydrate we can start empty and still show new traffic;
- * later we can backfill from OpenClaw's transcript.
+ * Message history is stored locally so chats feel like a normal mobile app:
+ * reopen KokoChat and the recent conversation is still there. OpenClaw may
+ * also have its own transcript on disk, but the app should not require a
+ * Gateway round-trip just to draw a thread.
  */
 
 import { create } from "zustand";
@@ -122,7 +122,7 @@ interface ConversationState {
   list: ConversationMeta[];
   /** Currently open conversation id, or null for the thread list. */
   activeId: string | null;
-  /** Per-conversation in-memory message cache. */
+  /** Per-conversation local message history, hydrated from storage. */
   messages: Record<string, ChatMessage[]>;
 
   rehydrate(): void;
@@ -245,6 +245,25 @@ function writeMeta(meta: ConversationMeta): void {
   mmkv.set(`${CONVERSATION_PREFIX}${meta.id}`, JSON.stringify(meta));
 }
 
+function readMessages(conversationId: string): ChatMessage[] {
+  const raw = mmkv.getString(`${MESSAGES_PREFIX}${conversationId}`);
+  if (raw === undefined || raw.length === 0) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      const message = normalizeMessage(item);
+      return message === null ? [] : [message];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function writeMessages(conversationId: string, messages: ChatMessage[]): void {
+  mmkv.set(`${MESSAGES_PREFIX}${conversationId}`, JSON.stringify(messages));
+}
+
 function deleteMeta(conversationId: string): void {
   mmkv.delete(`${CONVERSATION_PREFIX}${conversationId}`);
   mmkv.delete(`${MESSAGES_PREFIX}${conversationId}`);
@@ -252,6 +271,53 @@ function deleteMeta(conversationId: string): void {
 
 function compareByUpdatedDesc(a: ConversationMeta, b: ConversationMeta): number {
   return b.updatedAt - a.updatedAt;
+}
+
+function normalizeMessage(value: unknown): ChatMessage | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.id !== "string") return null;
+  if (value.role !== "user" && value.role !== "agent") return null;
+  if (typeof value.text !== "string") return null;
+
+  const out: ChatMessage = {
+    id: value.id,
+    role: value.role,
+    text: value.text
+  };
+
+  const blocks = normalizeMessageBlocks(value.blocks);
+  if (blocks !== undefined) out.blocks = blocks;
+  if (typeof value.runId === "string") out.runId = value.runId;
+  if (typeof value.error === "string") out.error = value.error;
+
+  // A persisted "streaming" state means the app was killed mid-run. Render it
+  // as a settled partial message on next launch instead of showing a cursor
+  // forever.
+  if (value.streaming === true && value.error !== undefined) {
+    out.streaming = false;
+  }
+
+  return out;
+}
+
+function normalizeMessageBlocks(value: unknown): MessageBlock[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const blocks: MessageBlock[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    if (typeof item.type !== "string") continue;
+    if (typeof item.version !== "number") continue;
+    blocks.push({
+      type: item.type,
+      version: item.version,
+      data: item.data
+    });
+  }
+  return blocks.length > 0 ? blocks : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export const useConversationStore = create<ConversationState>((set, get) => ({
@@ -262,14 +328,16 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   rehydrate() {
     const ids = readIndex();
     const metas: ConversationMeta[] = [];
+    const messages: Record<string, ChatMessage[]> = {};
     for (const id of ids) {
       const meta = readMeta(id);
       if (meta !== null && meta.archived !== true) {
         metas.push(meta);
+        messages[id] = readMessages(id);
       }
     }
     metas.sort(compareByUpdatedDesc);
-    set({ list: metas });
+    set({ list: metas, messages });
   },
 
   create(input) {
@@ -295,6 +363,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       ...(input?.listSnapshot !== undefined ? { listSnapshot: input.listSnapshot } : {})
     };
     writeMeta(meta);
+    writeMessages(id, []);
     const ids = [id, ...readIndex().filter((existing) => existing !== id)];
     writeIndex(ids);
     set((state) => ({
@@ -356,13 +425,16 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
 
   getMessages(conversationId) {
-    return get().messages[conversationId] ?? [];
+    const cached = get().messages[conversationId];
+    if (cached !== undefined) return cached;
+    return readMessages(conversationId);
   },
 
   setMessages(conversationId, updater) {
     const prev = get().messages[conversationId] ?? [];
     const next = updater(prev);
     if (next === prev) return;
+    writeMessages(conversationId, next);
     set((state) => ({
       messages: { ...state.messages, [conversationId]: next }
     }));
@@ -391,6 +463,8 @@ export const __internal = {
   writeIndex,
   readMeta,
   writeMeta,
+  readMessages,
+  writeMessages,
   deleteMeta,
   INDEX_KEY,
   CONVERSATION_PREFIX,

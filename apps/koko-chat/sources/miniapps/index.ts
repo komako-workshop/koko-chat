@@ -1,4 +1,5 @@
 import { registerExampleMiniApp } from "./example";
+import { registerKokoMiniApp } from "./koko";
 import { registerTavernMiniApp } from "../../../../miniapps/tavern/mobile";
 import { registerTavernRoleplayMiniApp } from "../../../../miniapps/tavern-roleplay/mobile";
 
@@ -9,6 +10,7 @@ import { registerTavernRoleplayMiniApp } from "../../../../miniapps/tavern-rolep
  * surface stays a static TypeScript boundary for v1 built-in mini-apps.
  */
 export function registerMiniApps(): void {
+  registerKokoMiniApp();
   registerExampleMiniApp();
   registerTavernMiniApp();
   registerTavernRoleplayMiniApp();

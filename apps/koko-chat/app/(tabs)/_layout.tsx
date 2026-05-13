@@ -1,33 +1,28 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 
-import { useSettingsStore } from "@/state/settings";
+import { KokoColors } from "@/theme/koko";
 
 /**
- * WeChat-style bottom tab layout.
+ * Bottom tab layout.
  *
  * Two tabs only: Chats (会话列表) and Me (设置入口).
  * Stack-level screens like `/chat/[id]` and `/pair` are defined in the
  * root `app/_layout.tsx` and are pushed on top of this tab navigator.
+ *
+ * Colors come from `theme/koko` — warm off-white bar with the Koko orange
+ * as the active tint.
  */
 export default function TabsLayout(): React.ReactElement {
-  const isDark = useSettingsStore((s) => s.darkMode);
-
-  // WeChat brand green is close to #07c160 for selected, gray for unselected.
-  const activeTint = "#07c160";
-  const inactiveTint = isDark ? "#7d7d7f" : "#8e8e93";
-  const tabBarBackground = isDark ? "#1c1c1e" : "#f7f7f8";
-  const borderColor = isDark ? "#2c2c2e" : "#dcdcdd";
-
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: activeTint,
-        tabBarInactiveTintColor: inactiveTint,
+        tabBarActiveTintColor: KokoColors.primaryDeep,
+        tabBarInactiveTintColor: KokoColors.inactive,
         tabBarStyle: {
-          backgroundColor: tabBarBackground,
-          borderTopColor: borderColor,
+          backgroundColor: KokoColors.bg,
+          borderTopColor: KokoColors.hairline,
           borderTopWidth: 0.5
         },
         tabBarLabelStyle: {
