@@ -132,6 +132,18 @@ export interface AbortAgentRunResult {
   runIds?: unknown[];
 }
 
+export interface EnsureOpenClawAgentInput {
+  agentId: string;
+  name?: string;
+  workspace?: string;
+  client?: OpenClawRpcClient;
+}
+
+export interface EnsureOpenClawAgentResult {
+  agentId: string;
+  created: boolean;
+}
+
 export function buildKokoChatSessionKey({
   miniAppId,
   scope,
@@ -322,6 +334,23 @@ export async function abortAgentRun(input: AbortAgentRunInput): Promise<AbortAge
     ...(typeof payload.aborted === "boolean" ? { aborted: payload.aborted } : {}),
     ...(Array.isArray(payload.runIds) ? { runIds: payload.runIds } : {})
   };
+}
+
+export async function ensureOpenClawAgent(
+  input: EnsureOpenClawAgentInput
+): Promise<EnsureOpenClawAgentResult> {
+  const agentId = normalizeSessionPart(input.agentId, "main");
+  const client = input.client ?? getConnectedGatewayClient();
+  const listed = await client.call("agents.list", {});
+  const agents = Array.isArray(listed.agents) ? listed.agents : [];
+  const exists = agents.some((agent) => isRecord(agent) && agent.id === agentId);
+  if (exists) return { agentId, created: false };
+
+  await client.call("agents.create", {
+    name: input.name ?? agentId,
+    workspace: input.workspace ?? `~/.openclaw/agents/${agentId}/workspace`
+  });
+  return { agentId, created: true };
 }
 
 export function extractMessageText(message: OpenClawHistoryMessage): string {

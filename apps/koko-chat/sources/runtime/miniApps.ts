@@ -40,7 +40,7 @@ const warnedUnknownIds = new Set<string>();
 registerMiniApp({
   id: "koko",
   displayName: "Koko",
-  showInLauncher: true,
+  showInLauncher: false,
   listGlyph: "K",
   listImage: kokoAvatar,
   defaultTitle: () => "Koko",

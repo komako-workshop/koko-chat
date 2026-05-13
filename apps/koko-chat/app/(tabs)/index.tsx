@@ -16,12 +16,14 @@ import { router, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import tw from "twrnc";
 
+import { ensureOpenClawAgent } from "@/runtime/openclaw";
 import {
   getLauncherMiniApps,
   getMiniAppListGlyph,
   getMiniAppListImage,
   type MiniAppDescriptor
 } from "@/runtime/miniApps";
+import { useGatewayStore } from "@/state/gateway";
 import { buildSessionKey, useConversationStore, type ConversationMeta } from "@/state/conversations";
 import { useSettingsStore } from "@/state/settings";
 
@@ -41,6 +43,7 @@ export default function ChatsTabScreen(): React.ReactElement {
   const archiveConversation = useConversationStore((s) => s.archive);
   const renameConversation = useConversationStore((s) => s.rename);
   const isDark = useSettingsStore((s) => s.darkMode);
+  const gatewayStatus = useGatewayStore((s) => s.status);
 
   const navigation = useNavigation();
   useLayoutEffect(() => {
@@ -87,6 +90,26 @@ export default function ChatsTabScreen(): React.ReactElement {
       meta = createConversation({ mode: app.id });
     }
     router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
+  }
+
+  async function openKokoHome(): Promise<void> {
+    if (gatewayStatus !== "connected") {
+      Alert.alert("OpenClaw 未连接", "请先配对并连接 Gateway，然后再打开 Koko。");
+      return;
+    }
+    try {
+      await ensureOpenClawAgent({ agentId: "koko", name: "koko" });
+      const sessionKey = buildSessionKey("koko", "home");
+      const meta = conversations.find((item) => item.sessionKey === sessionKey) ?? createConversation({
+        mode: "koko",
+        sessionScope: "home",
+        title: "Koko",
+        listSnapshot: { title: "Koko", subtitle: "你的 KokoChat 主助手" }
+      });
+      router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
+    } catch (error) {
+      Alert.alert("打开 Koko 失败", error instanceof Error ? error.message : String(error));
+    }
   }
 
   function handleLongPress(conversation: ConversationMeta): void {
@@ -242,13 +265,14 @@ export default function ChatsTabScreen(): React.ReactElement {
         </Pressable>
       </View>
 
-      <FlatList
-        data={conversations}
-        keyExtractor={(item) => item.id}
-        renderItem={renderRow}
-        style={{ backgroundColor: isDark ? "#000" : "#fff" }}
-        ListEmptyComponent={
-          <View style={tw`mt-24 items-center px-6`}>
+        <FlatList
+          data={conversations}
+          keyExtractor={(item) => item.id}
+          renderItem={renderRow}
+          style={{ backgroundColor: isDark ? "#000" : "#fff" }}
+          ListHeaderComponent={<KokoPinnedRow isDark={isDark} onPress={() => void openKokoHome()} />}
+          ListEmptyComponent={
+            <View style={tw`mt-24 items-center px-6`}>
             <Text
               style={tw`text-center text-sm text-slate-400 dark:text-slate-500`}
             >
@@ -258,6 +282,49 @@ export default function ChatsTabScreen(): React.ReactElement {
         }
       />
     </SafeAreaView>
+  );
+}
+
+function KokoPinnedRow({
+  isDark,
+  onPress
+}: {
+  isDark: boolean;
+  onPress: () => void;
+}): React.ReactElement {
+  const listImage = getMiniAppListImage("koko");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      android_ripple={{ color: isDark ? "#1c1c1e" : "#e5e5ea" }}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: isDark ? "#000" : "#fff" },
+        pressed && { backgroundColor: isDark ? "#1c1c1e" : "#ececec" }
+      ]}
+    >
+      <View
+        style={[
+          styles.avatar,
+          { backgroundColor: isDark ? "#1f2937" : "#e5e7eb" }
+        ]}
+      >
+        {listImage !== undefined ? (
+          <Image source={listImage} style={styles.avatarImage} resizeMode="cover" />
+        ) : (
+          <Text style={[styles.avatarGlyph, { color: isDark ? "#9ca3af" : "#64748b" }]}>K</Text>
+        )}
+      </View>
+      <View style={styles.rowBody}>
+        <View style={styles.rowText}>
+          <Text numberOfLines={1} style={[styles.rowTitle, { color: isDark ? "#f8fafc" : "#0f172a" }]}>Koko</Text>
+          <Text numberOfLines={1} style={[styles.rowPreview, { color: isDark ? "#94a3b8" : "#8e8e93" }]}>你的 KokoChat 主助手</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={isDark ? "#64748b" : "#8e8e93"} />
+      </View>
+      <View style={[styles.separator, { backgroundColor: isDark ? "#1f2937" : "#e5e5ea" }]} />
+    </Pressable>
   );
 }
 
