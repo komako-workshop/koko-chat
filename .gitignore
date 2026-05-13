@@ -40,3 +40,17 @@ tmp/
 # Research — large intermediate datasets. Keep the .md writeups only.
 docs/research/*.json
 docs/research/roleplay-import-sample/
+
+# Brand exploration — generated assets are too heavy for git. Keep source
+# scripts, planning notes and the gallery HTML; ignore generated images,
+# reference image piles, and run logs. Final selected brand assets live under
+# `apps/koko-chat/assets/brand/` and ARE committed.
+.brand/out/
+.brand/out_v2/
+.brand/out_v3/
+.brand/refs/
+.brand/refs2/
+.brand/refs3/
+.brand/refs_user/
+.brand/run.log
+.brand/*.jsonl

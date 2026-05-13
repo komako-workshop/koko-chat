@@ -1,0 +1,1405 @@
+{
+  "target": 200,
+  "combos": [
+    {
+      "idx": 0,
+      "pose": "full-3q",
+      "mood": "friendly",
+      "palette": "sunset",
+      "style": "line"
+    },
+    {
+      "idx": 1,
+      "pose": "head-tilted",
+      "mood": "smart",
+      "palette": "coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 2,
+      "pose": "on-book",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "flat"
+    },
+    {
+      "idx": 3,
+      "pose": "silhouette",
+      "mood": "friendly",
+      "palette": "mono-black",
+      "style": "line"
+    },
+    {
+      "idx": 4,
+      "pose": "full-side",
+      "mood": "playful",
+      "palette": "dual-teal-coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 5,
+      "pose": "holding-note",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 6,
+      "pose": "head-side",
+      "mood": "friendly",
+      "palette": "mint",
+      "style": "flat"
+    },
+    {
+      "idx": 7,
+      "pose": "head-front",
+      "mood": "smart",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 8,
+      "pose": "head-tilted",
+      "mood": "playful",
+      "palette": "mono-black",
+      "style": "chibi"
+    },
+    {
+      "idx": 9,
+      "pose": "silhouette",
+      "mood": "playful",
+      "palette": "sunset",
+      "style": "line"
+    },
+    {
+      "idx": 10,
+      "pose": "holding-note",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 11,
+      "pose": "full-side",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 12,
+      "pose": "full-3q",
+      "mood": "playful",
+      "palette": "sunset",
+      "style": "line"
+    },
+    {
+      "idx": 13,
+      "pose": "head-front",
+      "mood": "smart",
+      "palette": "coral",
+      "style": "flat"
+    },
+    {
+      "idx": 14,
+      "pose": "on-book",
+      "mood": "friendly",
+      "palette": "mono-black",
+      "style": "chibi"
+    },
+    {
+      "idx": 15,
+      "pose": "head-side",
+      "mood": "playful",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 16,
+      "pose": "silhouette",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "line"
+    },
+    {
+      "idx": 17,
+      "pose": "full-3q",
+      "mood": "friendly",
+      "palette": "mint",
+      "style": "chibi"
+    },
+    {
+      "idx": 18,
+      "pose": "full-side",
+      "mood": "playful",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 19,
+      "pose": "on-book",
+      "mood": "smart",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 20,
+      "pose": "head-side",
+      "mood": "friendly",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 21,
+      "pose": "head-front",
+      "mood": "playful",
+      "palette": "sunset",
+      "style": "chibi"
+    },
+    {
+      "idx": 22,
+      "pose": "head-tilted",
+      "mood": "friendly",
+      "palette": "mono-black",
+      "style": "flat"
+    },
+    {
+      "idx": 23,
+      "pose": "holding-note",
+      "mood": "smart",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 24,
+      "pose": "full-3q",
+      "mood": "playful",
+      "palette": "mono-black",
+      "style": "line"
+    },
+    {
+      "idx": 25,
+      "pose": "silhouette",
+      "mood": "friendly",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 26,
+      "pose": "full-side",
+      "mood": "smart",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 27,
+      "pose": "head-front",
+      "mood": "playful",
+      "palette": "coral",
+      "style": "flat"
+    },
+    {
+      "idx": 28,
+      "pose": "head-side",
+      "mood": "friendly",
+      "palette": "mint",
+      "style": "chibi"
+    },
+    {
+      "idx": 29,
+      "pose": "on-book",
+      "mood": "smart",
+      "palette": "sunset",
+      "style": "line"
+    },
+    {
+      "idx": 30,
+      "pose": "holding-note",
+      "mood": "friendly",
+      "palette": "mono-black",
+      "style": "flat"
+    },
+    {
+      "idx": 31,
+      "pose": "head-tilted",
+      "mood": "playful",
+      "palette": "sunset",
+      "style": "chibi"
+    },
+    {
+      "idx": 32,
+      "pose": "head-side",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "line"
+    },
+    {
+      "idx": 33,
+      "pose": "full-3q",
+      "mood": "friendly",
+      "palette": "mint",
+      "style": "flat"
+    },
+    {
+      "idx": 34,
+      "pose": "on-book",
+      "mood": "playful",
+      "palette": "dual-teal-coral",
+      "style": "line"
+    },
+    {
+      "idx": 35,
+      "pose": "holding-note",
+      "mood": "playful",
+      "palette": "coral",
+      "style": "flat"
+    },
+    {
+      "idx": 36,
+      "pose": "head-front",
+      "mood": "friendly",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 37,
+      "pose": "silhouette",
+      "mood": "smart",
+      "palette": "sunset",
+      "style": "chibi"
+    },
+    {
+      "idx": 38,
+      "pose": "full-side",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 39,
+      "pose": "head-front",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 40,
+      "pose": "holding-note",
+      "mood": "smart",
+      "palette": "sunset",
+      "style": "chibi"
+    },
+    {
+      "idx": 41,
+      "pose": "head-side",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "line"
+    },
+    {
+      "idx": 42,
+      "pose": "on-book",
+      "mood": "playful",
+      "palette": "coral",
+      "style": "flat"
+    },
+    {
+      "idx": 43,
+      "pose": "full-side",
+      "mood": "playful",
+      "palette": "mono-black",
+      "style": "line"
+    },
+    {
+      "idx": 44,
+      "pose": "head-tilted",
+      "mood": "friendly",
+      "palette": "mint",
+      "style": "flat"
+    },
+    {
+      "idx": 45,
+      "pose": "silhouette",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 46,
+      "pose": "head-tilted",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "flat"
+    },
+    {
+      "idx": 47,
+      "pose": "full-3q",
+      "mood": "playful",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 48,
+      "pose": "head-side",
+      "mood": "smart",
+      "palette": "mono-black",
+      "style": "line"
+    },
+    {
+      "idx": 49,
+      "pose": "silhouette",
+      "mood": "friendly",
+      "palette": "sunset",
+      "style": "line"
+    },
+    {
+      "idx": 50,
+      "pose": "full-side",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "chibi"
+    },
+    {
+      "idx": 51,
+      "pose": "holding-note",
+      "mood": "smart",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 52,
+      "pose": "on-book",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 53,
+      "pose": "head-front",
+      "mood": "friendly",
+      "palette": "sunset",
+      "style": "flat"
+    },
+    {
+      "idx": 54,
+      "pose": "holding-note",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 55,
+      "pose": "head-side",
+      "mood": "smart",
+      "palette": "coral",
+      "style": "flat"
+    },
+    {
+      "idx": 56,
+      "pose": "full-side",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 57,
+      "pose": "head-front",
+      "mood": "playful",
+      "palette": "mono-black",
+      "style": "line"
+    },
+    {
+      "idx": 58,
+      "pose": "full-3q",
+      "mood": "smart",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 59,
+      "pose": "on-book",
+      "mood": "playful",
+      "palette": "sunset",
+      "style": "chibi"
+    },
+    {
+      "idx": 60,
+      "pose": "silhouette",
+      "mood": "friendly",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 61,
+      "pose": "head-tilted",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "line"
+    },
+    {
+      "idx": 62,
+      "pose": "on-book",
+      "mood": "smart",
+      "palette": "coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 63,
+      "pose": "full-3q",
+      "mood": "playful",
+      "palette": "mono-black",
+      "style": "flat"
+    },
+    {
+      "idx": 64,
+      "pose": "head-tilted",
+      "mood": "smart",
+      "palette": "mono-black",
+      "style": "chibi"
+    },
+    {
+      "idx": 65,
+      "pose": "full-side",
+      "mood": "playful",
+      "palette": "sunset",
+      "style": "line"
+    },
+    {
+      "idx": 66,
+      "pose": "holding-note",
+      "mood": "friendly",
+      "palette": "mint",
+      "style": "flat"
+    },
+    {
+      "idx": 67,
+      "pose": "silhouette",
+      "mood": "playful",
+      "palette": "rainbow-soft",
+      "style": "line"
+    },
+    {
+      "idx": 68,
+      "pose": "head-front",
+      "mood": "smart",
+      "palette": "dual-teal-coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 69,
+      "pose": "head-side",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "flat"
+    },
+    {
+      "idx": 70,
+      "pose": "head-front",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 71,
+      "pose": "head-side",
+      "mood": "smart",
+      "palette": "dual-teal-coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 72,
+      "pose": "silhouette",
+      "mood": "playful",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 73,
+      "pose": "head-tilted",
+      "mood": "smart",
+      "palette": "mint",
+      "style": "chibi"
+    },
+    {
+      "idx": 74,
+      "pose": "holding-note",
+      "mood": "friendly",
+      "palette": "sunset",
+      "style": "line"
+    },
+    {
+      "idx": 75,
+      "pose": "full-side",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 76,
+      "pose": "on-book",
+      "mood": "friendly",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 77,
+      "pose": "head-side",
+      "mood": "smart",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 78,
+      "pose": "head-tilted",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 79,
+      "pose": "full-3q",
+      "mood": "smart",
+      "palette": "sunset",
+      "style": "flat"
+    },
+    {
+      "idx": 80,
+      "pose": "holding-note",
+      "mood": "playful",
+      "palette": "mono-black",
+      "style": "flat"
+    },
+    {
+      "idx": 81,
+      "pose": "silhouette",
+      "mood": "smart",
+      "palette": "dual-teal-coral",
+      "style": "line"
+    },
+    {
+      "idx": 82,
+      "pose": "on-book",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 83,
+      "pose": "head-front",
+      "mood": "friendly",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 84,
+      "pose": "full-3q",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "flat"
+    },
+    {
+      "idx": 85,
+      "pose": "head-front",
+      "mood": "smart",
+      "palette": "sunset",
+      "style": "line"
+    },
+    {
+      "idx": 86,
+      "pose": "full-side",
+      "mood": "friendly",
+      "palette": "rainbow-soft",
+      "style": "line"
+    },
+    {
+      "idx": 87,
+      "pose": "silhouette",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "chibi"
+    },
+    {
+      "idx": 88,
+      "pose": "on-book",
+      "mood": "smart",
+      "palette": "mono-black",
+      "style": "flat"
+    },
+    {
+      "idx": 89,
+      "pose": "holding-note",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 90,
+      "pose": "head-tilted",
+      "mood": "smart",
+      "palette": "sunset",
+      "style": "flat"
+    },
+    {
+      "idx": 91,
+      "pose": "head-side",
+      "mood": "playful",
+      "palette": "dual-teal-coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 92,
+      "pose": "full-3q",
+      "mood": "playful",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 93,
+      "pose": "full-side",
+      "mood": "friendly",
+      "palette": "mono-black",
+      "style": "line"
+    },
+    {
+      "idx": 94,
+      "pose": "silhouette",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 95,
+      "pose": "head-front",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 96,
+      "pose": "head-tilted",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 97,
+      "pose": "full-3q",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 98,
+      "pose": "holding-note",
+      "mood": "smart",
+      "palette": "mono-black",
+      "style": "line"
+    },
+    {
+      "idx": 99,
+      "pose": "head-tilted",
+      "mood": "playful",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 100,
+      "pose": "on-book",
+      "mood": "friendly",
+      "palette": "sunset",
+      "style": "chibi"
+    },
+    {
+      "idx": 101,
+      "pose": "head-front",
+      "mood": "smart",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 102,
+      "pose": "head-side",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 103,
+      "pose": "silhouette",
+      "mood": "playful",
+      "palette": "sunset",
+      "style": "flat"
+    },
+    {
+      "idx": 104,
+      "pose": "full-side",
+      "mood": "smart",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 105,
+      "pose": "head-tilted",
+      "mood": "playful",
+      "palette": "mono-black",
+      "style": "flat"
+    },
+    {
+      "idx": 106,
+      "pose": "on-book",
+      "mood": "playful",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 107,
+      "pose": "full-side",
+      "mood": "smart",
+      "palette": "coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 108,
+      "pose": "silhouette",
+      "mood": "playful",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 109,
+      "pose": "head-front",
+      "mood": "friendly",
+      "palette": "mono-black",
+      "style": "line"
+    },
+    {
+      "idx": 110,
+      "pose": "holding-note",
+      "mood": "smart",
+      "palette": "mint",
+      "style": "chibi"
+    },
+    {
+      "idx": 111,
+      "pose": "full-3q",
+      "mood": "smart",
+      "palette": "coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 112,
+      "pose": "head-tilted",
+      "mood": "friendly",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 113,
+      "pose": "holding-note",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 114,
+      "pose": "head-front",
+      "mood": "smart",
+      "palette": "mint",
+      "style": "chibi"
+    },
+    {
+      "idx": 115,
+      "pose": "on-book",
+      "mood": "playful",
+      "palette": "mono-black",
+      "style": "line"
+    },
+    {
+      "idx": 116,
+      "pose": "silhouette",
+      "mood": "friendly",
+      "palette": "mint",
+      "style": "chibi"
+    },
+    {
+      "idx": 117,
+      "pose": "head-tilted",
+      "mood": "playful",
+      "palette": "sunset",
+      "style": "flat"
+    },
+    {
+      "idx": 118,
+      "pose": "full-3q",
+      "mood": "playful",
+      "palette": "dual-teal-coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 119,
+      "pose": "head-side",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 120,
+      "pose": "full-side",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 121,
+      "pose": "head-front",
+      "mood": "playful",
+      "palette": "sunset",
+      "style": "line"
+    },
+    {
+      "idx": 122,
+      "pose": "silhouette",
+      "mood": "smart",
+      "palette": "mono-black",
+      "style": "chibi"
+    },
+    {
+      "idx": 123,
+      "pose": "head-side",
+      "mood": "playful",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 124,
+      "pose": "on-book",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 125,
+      "pose": "full-side",
+      "mood": "playful",
+      "palette": "coral",
+      "style": "flat"
+    },
+    {
+      "idx": 126,
+      "pose": "head-tilted",
+      "mood": "friendly",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 127,
+      "pose": "full-3q",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 128,
+      "pose": "holding-note",
+      "mood": "playful",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 129,
+      "pose": "head-side",
+      "mood": "friendly",
+      "palette": "mono-black",
+      "style": "flat"
+    },
+    {
+      "idx": 130,
+      "pose": "full-side",
+      "mood": "smart",
+      "palette": "sunset",
+      "style": "line"
+    },
+    {
+      "idx": 131,
+      "pose": "head-front",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "chibi"
+    },
+    {
+      "idx": 132,
+      "pose": "head-tilted",
+      "mood": "smart",
+      "palette": "mono-black",
+      "style": "line"
+    },
+    {
+      "idx": 133,
+      "pose": "head-side",
+      "mood": "playful",
+      "palette": "coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 134,
+      "pose": "head-tilted",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "flat"
+    },
+    {
+      "idx": 135,
+      "pose": "full-side",
+      "mood": "smart",
+      "palette": "sunset",
+      "style": "chibi"
+    },
+    {
+      "idx": 136,
+      "pose": "head-front",
+      "mood": "friendly",
+      "palette": "rainbow-soft",
+      "style": "line"
+    },
+    {
+      "idx": 137,
+      "pose": "on-book",
+      "mood": "playful",
+      "palette": "mono-black",
+      "style": "chibi"
+    },
+    {
+      "idx": 138,
+      "pose": "holding-note",
+      "mood": "friendly",
+      "palette": "sunset",
+      "style": "flat"
+    },
+    {
+      "idx": 139,
+      "pose": "silhouette",
+      "mood": "smart",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 140,
+      "pose": "head-side",
+      "mood": "smart",
+      "palette": "sunset",
+      "style": "chibi"
+    },
+    {
+      "idx": 141,
+      "pose": "on-book",
+      "mood": "friendly",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 142,
+      "pose": "head-tilted",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "flat"
+    },
+    {
+      "idx": 143,
+      "pose": "full-side",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 144,
+      "pose": "head-front",
+      "mood": "playful",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 145,
+      "pose": "full-side",
+      "mood": "friendly",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 146,
+      "pose": "head-front",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 147,
+      "pose": "head-tilted",
+      "mood": "playful",
+      "palette": "coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 148,
+      "pose": "holding-note",
+      "mood": "smart",
+      "palette": "mono-black",
+      "style": "chibi"
+    },
+    {
+      "idx": 149,
+      "pose": "full-3q",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 150,
+      "pose": "holding-note",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "flat"
+    },
+    {
+      "idx": 151,
+      "pose": "head-side",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 152,
+      "pose": "head-tilted",
+      "mood": "playful",
+      "palette": "dual-teal-coral",
+      "style": "line"
+    },
+    {
+      "idx": 153,
+      "pose": "full-3q",
+      "mood": "friendly",
+      "palette": "sunset",
+      "style": "flat"
+    },
+    {
+      "idx": 154,
+      "pose": "on-book",
+      "mood": "playful",
+      "palette": "coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 155,
+      "pose": "head-front",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "line"
+    },
+    {
+      "idx": 156,
+      "pose": "full-side",
+      "mood": "smart",
+      "palette": "sunset",
+      "style": "flat"
+    },
+    {
+      "idx": 157,
+      "pose": "head-tilted",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 158,
+      "pose": "head-side",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "chibi"
+    },
+    {
+      "idx": 159,
+      "pose": "silhouette",
+      "mood": "playful",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 160,
+      "pose": "holding-note",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "flat"
+    },
+    {
+      "idx": 161,
+      "pose": "full-side",
+      "mood": "smart",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 162,
+      "pose": "head-front",
+      "mood": "friendly",
+      "palette": "sunset",
+      "style": "line"
+    },
+    {
+      "idx": 163,
+      "pose": "head-tilted",
+      "mood": "smart",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 164,
+      "pose": "head-side",
+      "mood": "playful",
+      "palette": "mono-black",
+      "style": "flat"
+    },
+    {
+      "idx": 165,
+      "pose": "head-front",
+      "mood": "friendly",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 166,
+      "pose": "silhouette",
+      "mood": "playful",
+      "palette": "dual-teal-coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 167,
+      "pose": "head-side",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 168,
+      "pose": "head-front",
+      "mood": "smart",
+      "palette": "mono-black",
+      "style": "flat"
+    },
+    {
+      "idx": 169,
+      "pose": "silhouette",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 170,
+      "pose": "on-book",
+      "mood": "playful",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 171,
+      "pose": "full-3q",
+      "mood": "smart",
+      "palette": "mint",
+      "style": "chibi"
+    },
+    {
+      "idx": 172,
+      "pose": "full-side",
+      "mood": "friendly",
+      "palette": "sunset",
+      "style": "flat"
+    },
+    {
+      "idx": 173,
+      "pose": "holding-note",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "line"
+    },
+    {
+      "idx": 174,
+      "pose": "on-book",
+      "mood": "smart",
+      "palette": "mono-black",
+      "style": "chibi"
+    },
+    {
+      "idx": 175,
+      "pose": "full-side",
+      "mood": "playful",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 176,
+      "pose": "full-3q",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 177,
+      "pose": "head-front",
+      "mood": "smart",
+      "palette": "coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 178,
+      "pose": "head-tilted",
+      "mood": "friendly",
+      "palette": "sunset",
+      "style": "flat"
+    },
+    {
+      "idx": 179,
+      "pose": "head-side",
+      "mood": "smart",
+      "palette": "mono-black",
+      "style": "chibi"
+    },
+    {
+      "idx": 180,
+      "pose": "holding-note",
+      "mood": "playful",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 181,
+      "pose": "silhouette",
+      "mood": "friendly",
+      "palette": "dual-teal-coral",
+      "style": "line"
+    },
+    {
+      "idx": 182,
+      "pose": "full-3q",
+      "mood": "friendly",
+      "palette": "rainbow-soft",
+      "style": "flat"
+    },
+    {
+      "idx": 183,
+      "pose": "on-book",
+      "mood": "smart",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 184,
+      "pose": "full-side",
+      "mood": "playful",
+      "palette": "sunset",
+      "style": "chibi"
+    },
+    {
+      "idx": 185,
+      "pose": "full-side",
+      "mood": "playful",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 186,
+      "pose": "silhouette",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 187,
+      "pose": "head-tilted",
+      "mood": "playful",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 188,
+      "pose": "head-side",
+      "mood": "smart",
+      "palette": "sunset",
+      "style": "flat"
+    },
+    {
+      "idx": 189,
+      "pose": "holding-note",
+      "mood": "smart",
+      "palette": "rainbow-soft",
+      "style": "line"
+    },
+    {
+      "idx": 190,
+      "pose": "on-book",
+      "mood": "smart",
+      "palette": "sunset",
+      "style": "chibi"
+    },
+    {
+      "idx": 191,
+      "pose": "full-side",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "flat"
+    },
+    {
+      "idx": 192,
+      "pose": "head-tilted",
+      "mood": "playful",
+      "palette": "mono-black",
+      "style": "line"
+    },
+    {
+      "idx": 193,
+      "pose": "head-side",
+      "mood": "smart",
+      "palette": "mono-black",
+      "style": "flat"
+    },
+    {
+      "idx": 194,
+      "pose": "on-book",
+      "mood": "playful",
+      "palette": "rainbow-soft",
+      "style": "chibi"
+    },
+    {
+      "idx": 195,
+      "pose": "head-tilted",
+      "mood": "friendly",
+      "palette": "coral",
+      "style": "line"
+    },
+    {
+      "idx": 196,
+      "pose": "holding-note",
+      "mood": "playful",
+      "palette": "mint",
+      "style": "line"
+    },
+    {
+      "idx": 197,
+      "pose": "full-3q",
+      "mood": "smart",
+      "palette": "dual-teal-coral",
+      "style": "chibi"
+    },
+    {
+      "idx": 198,
+      "pose": "silhouette",
+      "mood": "friendly",
+      "palette": "sunset",
+      "style": "flat"
+    },
+    {
+      "idx": 199,
+      "pose": "full-side",
+      "mood": "playful",
+      "palette": "sunset",
+      "style": "flat"
+    }
+  ]
+}

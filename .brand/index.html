@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>KokoChat — 鹦鹉 logo 草稿挑图</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", sans-serif;
+    background: #f5f3ee;
+    color: #1f1f1f;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(245,243,238,0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #e0ddd5;
+    padding: 14px 20px;
+  }
+  h1 { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+  .subtitle { font-size: 12px; color: #777; margin-bottom: 12px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+  .filter-group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .filter-group .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px; }
+  .chip {
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid #d4d0c4;
+    border-radius: 999px;
+    background: white;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.15s;
+  }
+  .chip:hover { border-color: #888; }
+  .chip.active { background: #1f1f1f; color: white; border-color: #1f1f1f; }
+  .toolbar { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+  button.btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    border: 1px solid #d4d0c4;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button.btn:hover { background: #faf8f3; }
+  .stats { font-size: 12px; color: #555; }
+  main {
+    padding: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: white;
+    border: 1px solid #e0ddd5;
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.15s;
+    position: relative;
+  }
+  .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); transform: translateY(-2px); }
+  .card.fav { box-shadow: 0 0 0 3px #ff7a6b; }
+  .card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block; background: #fafafa; }
+  .meta {
+    padding: 8px 10px;
+    font-size: 10px;
+    color: #666;
+    display: flex; flex-wrap: wrap; gap: 4px;
+    border-top: 1px solid #f0ede5;
+  }
+  .meta .tag { background: #f5f3ee; padding: 2px 6px; border-radius: 4px; }
+  .meta .tag.pose { color: #5b6cb0; }
+  .meta .tag.mood { color: #c8784a; }
+  .meta .tag.palette { color: #5e8c5b; }
+  .meta .tag.style { color: #888; }
+  .idx { position: absolute; top: 6px; left: 8px; font-size: 10px; color: rgba(0,0,0,0.4); font-family: ui-monospace, monospace; }
+  .fav-btn {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid #e0ddd5;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; line-height: 1;
+    cursor: pointer;
+  }
+  .fav-btn.on { background: #ff7a6b; color: white; border-color: #ff7a6b; }
+
+  /* lightbox */
+  .lightbox {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 100;
+    padding: 40px;
+  }
+  .lightbox.show { display: flex; }
+  .lightbox img { max-width: 90%; max-height: 90%; }
+  .lightbox .close { position: absolute; top: 20px; right: 24px; color: white; font-size: 32px; cursor: pointer; }
+  .lightbox .info { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); color: white; font-family: ui-monospace, monospace; font-size: 12px; }
+
+  .empty { padding: 40px; text-align: center; color: #888; grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>KokoChat — 鹦鹉 logo / mascot 草稿</h1>
+  <div class="subtitle">点缩略图放大；点右上角心形收藏；用上方筛选过滤维度。</div>
+  <div class="filters">
+    <div class="filter-group" data-dim="pose">
+      <span class="label">姿态</span>
+    </div>
+    <div class="filter-group" data-dim="mood">
+      <span class="label">气质</span>
+    </div>
+    <div class="filter-group" data-dim="palette">
+      <span class="label">配色</span>
+    </div>
+    <div class="filter-group" data-dim="style">
+      <span class="label">风格</span>
+    </div>
+    <div class="filter-group">
+      <span class="label">收藏</span>
+      <span class="chip" data-fav="all">全部</span>
+      <span class="chip" data-fav="only">仅看收藏</span>
+    </div>
+    <div class="toolbar">
+      <span class="stats" id="stats"></span>
+      <button class="btn" id="exportBtn">导出收藏</button>
+      <button class="btn" id="clearBtn">清空收藏</button>
+    </div>
+  </div>
+</header>
+
+<main id="grid"></main>
+
+<div class="lightbox" id="lightbox">
+  <span class="close" id="lbClose">&times;</span>
+  <img id="lbImg">
+  <div class="info" id="lbInfo"></div>
+</div>
+
+<script>
+const ITEMS = [{"idx": 0, "pose": "full-3q", "mood": "friendly", "palette": "sunset", "style": "line", "file": "000_full-3q_friendly_sunset_line.png"}, {"idx": 1, "pose": "head-tilted", "mood": "smart", "palette": "coral", "style": "chibi", "file": "001_head-tilted_smart_coral_chibi.png"}, {"idx": 2, "pose": "on-book", "mood": "playful", "palette": "mint", "style": "flat", "file": "002_on-book_playful_mint_flat.png"}, {"idx": 3, "pose": "silhouette", "mood": "friendly", "palette": "mono-black", "style": "line", "file": "003_silhouette_friendly_mono-black_line.png"}, {"idx": 4, "pose": "full-side", "mood": "playful", "palette": "dual-teal-coral", "style": "chibi", "file": "004_full-side_playful_dual-teal-coral_chibi.png"}, {"idx": 5, "pose": "holding-note", "mood": "smart", "palette": "rainbow-soft", "style": "flat", "file": "005_holding-note_smart_rainbow-soft_flat.png"}, {"idx": 6, "pose": "head-side", "mood": "friendly", "palette": "mint", "style": "flat", "file": "006_head-side_friendly_mint_flat.png"}, {"idx": 7, "pose": "head-front", "mood": "smart", "palette": "coral", "style": "line", "file": "007_head-front_smart_coral_line.png"}, {"idx": 8, "pose": "head-tilted", "mood": "playful", "palette": "mono-black", "style": "chibi", "file": "008_head-tilted_playful_mono-black_chibi.png"}, {"idx": 9, "pose": "silhouette", "mood": "playful", "palette": "sunset", "style": "line", "file": "009_silhouette_playful_sunset_line.png"}, {"idx": 10, "pose": "holding-note", "mood": "friendly", "palette": "dual-teal-coral", "style": "chibi", "file": "010_holding-note_friendly_dual-teal-coral_chibi.png"}, {"idx": 11, "pose": "full-side", "mood": "smart", "palette": "rainbow-soft", "style": "flat", "file": "011_full-side_smart_rainbow-soft_flat.png"}, {"idx": 12, "pose": "full-3q", "mood": "playful", "palette": "sunset", "style": "line", "file": "012_full-3q_playful_sunset_line.png"}, {"idx": 13, "pose": "head-front", "mood": "smart", "palette": "coral", "style": "flat", "file": "013_head-front_smart_coral_flat.png"}, {"idx": 14, "pose": "on-book", "mood": "friendly", "palette": "mono-black", "style": "chibi", "file": "014_on-book_friendly_mono-black_chibi.png"}, {"idx": 15, "pose": "head-side", "mood": "playful", "palette": "dual-teal-coral", "style": "flat", "file": "015_head-side_playful_dual-teal-coral_flat.png"}, {"idx": 16, "pose": "silhouette", "mood": "smart", "palette": "rainbow-soft", "style": "line", "file": "016_silhouette_smart_rainbow-soft_line.png"}, {"idx": 17, "pose": "full-3q", "mood": "friendly", "palette": "mint", "style": "chibi", "file": "017_full-3q_friendly_mint_chibi.png"}, {"idx": 18, "pose": "full-side", "mood": "playful", "palette": "dual-teal-coral", "style": "flat", "file": "018_full-side_playful_dual-teal-coral_flat.png"}, {"idx": 19, "pose": "on-book", "mood": "smart", "palette": "mint", "style": "line", "file": "019_on-book_smart_mint_line.png"}, {"idx": 20, "pose": "head-side", "mood": "friendly", "palette": "rainbow-soft", "style": "chibi", "file": "020_head-side_friendly_rainbow-soft_chibi.png"}, {"idx": 21, "pose": "head-front", "mood": "playful", "palette": "sunset", "style": "chibi", "file": "021_head-front_playful_sunset_chibi.png"}, {"idx": 22, "pose": "head-tilted", "mood": "friendly", "palette": "mono-black", "style": "flat", "file": "022_head-tilted_friendly_mono-black_flat.png"}, {"idx": 23, "pose": "holding-note", "mood": "smart", "palette": "coral", "style": "line", "file": "023_holding-note_smart_coral_line.png"}, {"idx": 24, "pose": "full-3q", "mood": "playful", "palette": "mono-black", "style": "line", "file": "024_full-3q_playful_mono-black_line.png"}, {"idx": 25, "pose": "silhouette", "mood": "friendly", "palette": "rainbow-soft", "style": "chibi", "file": "025_silhouette_friendly_rainbow-soft_chibi.png"}, {"idx": 26, "pose": "full-side", "mood": "smart", "palette": "dual-teal-coral", "style": "flat", "file": "026_full-side_smart_dual-teal-coral_flat.png"}, {"idx": 27, "pose": "head-front", "mood": "playful", "palette": "coral", "style": "flat", "file": "027_head-front_playful_coral_flat.png"}, {"idx": 28, "pose": "head-side", "mood": "friendly", "palette": "mint", "style": "chibi", "file": "028_head-side_friendly_mint_chibi.png"}, {"idx": 29, "pose": "on-book", "mood": "smart", "palette": "sunset", "style": "line", "file": "029_on-book_smart_sunset_line.png"}, {"idx": 30, "pose": "holding-note", "mood": "friendly", "palette": "mono-black", "style": "flat", "file": "030_holding-note_friendly_mono-black_flat.png"}, {"idx": 31, "pose": "head-tilted", "mood": "playful", "palette": "sunset", "style": "chibi", "file": "031_head-tilted_playful_sunset_chibi.png"}, {"idx": 32, "pose": "head-side", "mood": "smart", "palette": "rainbow-soft", "style": "line", "file": "032_head-side_smart_rainbow-soft_line.png"}, {"idx": 33, "pose": "full-3q", "mood": "friendly", "palette": "mint", "style": "flat", "file": "033_full-3q_friendly_mint_flat.png"}, {"idx": 34, "pose": "on-book", "mood": "playful", "palette": "dual-teal-coral", "style": "line", "file": "034_on-book_playful_dual-teal-coral_line.png"}, {"idx": 35, "pose": "holding-note", "mood": "playful", "palette": "coral", "style": "flat", "file": "035_holding-note_playful_coral_flat.png"}, {"idx": 36, "pose": "head-front", "mood": "friendly", "palette": "mint", "style": "line", "file": "036_head-front_friendly_mint_line.png"}, {"idx": 37, "pose": "silhouette", "mood": "smart", "palette": "sunset", "style": "chibi", "file": "037_silhouette_smart_sunset_chibi.png"}, {"idx": 38, "pose": "full-side", "mood": "friendly", "palette": "dual-teal-coral", "style": "flat", "file": "038_full-side_friendly_dual-teal-coral_flat.png"}, {"idx": 39, "pose": "head-front", "mood": "smart", "palette": "rainbow-soft", "style": "chibi", "file": "039_head-front_smart_rainbow-soft_chibi.png"}, {"idx": 40, "pose": "holding-note", "mood": "smart", "palette": "sunset", "style": "chibi", "file": "040_holding-note_smart_sunset_chibi.png"}, {"idx": 41, "pose": "head-side", "mood": "friendly", "palette": "dual-teal-coral", "style": "line", "file": "041_head-side_friendly_dual-teal-coral_line.png"}, {"idx": 42, "pose": "on-book", "mood": "playful", "palette": "coral", "style": "flat", "file": "042_on-book_playful_coral_flat.png"}, {"idx": 43, "pose": "full-side", "mood": "playful", "palette": "mono-black", "style": "line", "file": "043_full-side_playful_mono-black_line.png"}, {"idx": 44, "pose": "head-tilted", "mood": "friendly", "palette": "mint", "style": "flat", "file": "044_head-tilted_friendly_mint_flat.png"}, {"idx": 45, "pose": "silhouette", "mood": "smart", "palette": "rainbow-soft", "style": "chibi", "file": "045_silhouette_smart_rainbow-soft_chibi.png"}, {"idx": 46, "pose": "head-tilted", "mood": "friendly", "palette": "coral", "style": "flat", "file": "046_head-tilted_friendly_coral_flat.png"}, {"idx": 47, "pose": "full-3q", "mood": "playful", "palette": "rainbow-soft", "style": "chibi", "file": "047_full-3q_playful_rainbow-soft_chibi.png"}, {"idx": 48, "pose": "head-side", "mood": "smart", "palette": "mono-black", "style": "line", "file": "048_head-side_smart_mono-black_line.png"}, {"idx": 49, "pose": "silhouette", "mood": "friendly", "palette": "sunset", "style": "line", "file": "049_silhouette_friendly_sunset_line.png"}, {"idx": 50, "pose": "full-side", "mood": "playful", "palette": "mint", "style": "chibi", "file": "050_full-side_playful_mint_chibi.png"}, {"idx": 51, "pose": "holding-note", "mood": "smart", "palette": "dual-teal-coral", "style": "flat", "file": "051_holding-note_smart_dual-teal-coral_flat.png"}, {"idx": 52, "pose": "on-book", "mood": "playful", "palette": "mint", "style": "line", "file": "052_on-book_playful_mint_line.png"}, {"idx": 53, "pose": "head-front", "mood": "friendly", "palette": "sunset", "style": "flat", "file": "053_head-front_friendly_sunset_flat.png"}, {"idx": 54, "pose": "holding-note", "mood": "smart", "palette": "rainbow-soft", "style": "chibi", "file": "054_holding-note_smart_rainbow-soft_chibi.png"}, {"idx": 55, "pose": "head-side", "mood": "smart", "palette": "coral", "style": "flat", "file": "055_head-side_smart_coral_flat.png"}, {"idx": 56, "pose": "full-side", "mood": "friendly", "palette": "dual-teal-coral", "style": "chibi", "file": "056_full-side_friendly_dual-teal-coral_chibi.png"}, {"idx": 57, "pose": "head-front", "mood": "playful", "palette": "mono-black", "style": "line", "file": "057_head-front_playful_mono-black_line.png"}, {"idx": 58, "pose": "full-3q", "mood": "smart", "palette": "mint", "style": "line", "file": "058_full-3q_smart_mint_line.png"}, {"idx": 59, "pose": "on-book", "mood": "playful", "palette": "sunset", "style": "chibi", "file": "059_on-book_playful_sunset_chibi.png"}, {"idx": 60, "pose": "silhouette", "mood": "friendly", "palette": "rainbow-soft", "style": "flat", "file": "060_silhouette_friendly_rainbow-soft_flat.png"}, {"idx": 61, "pose": "head-tilted", "mood": "friendly", "palette": "dual-teal-coral", "style": "line", "file": "061_head-tilted_friendly_dual-teal-coral_line.png"}, {"idx": 62, "pose": "on-book", "mood": "smart", "palette": "coral", "style": "chibi", "file": "062_on-book_smart_coral_chibi.png"}, {"idx": 63, "pose": "full-3q", "mood": "playful", "palette": "mono-black", "style": "flat", "file": "063_full-3q_playful_mono-black_flat.png"}, {"idx": 64, "pose": "head-tilted", "mood": "smart", "palette": "mono-black", "style": "chibi", "file": "064_head-tilted_smart_mono-black_chibi.png"}, {"idx": 65, "pose": "full-side", "mood": "playful", "palette": "sunset", "style": "line", "file": "065_full-side_playful_sunset_line.png"}, {"idx": 66, "pose": "holding-note", "mood": "friendly", "palette": "mint", "style": "flat", "file": "066_holding-note_friendly_mint_flat.png"}, {"idx": 67, "pose": "silhouette", "mood": "playful", "palette": "rainbow-soft", "style": "line", "file": "067_silhouette_playful_rainbow-soft_line.png"}, {"idx": 68, "pose": "head-front", "mood": "smart", "palette": "dual-teal-coral", "style": "chibi", "file": "068_head-front_smart_dual-teal-coral_chibi.png"}, {"idx": 69, "pose": "head-side", "mood": "friendly", "palette": "coral", "style": "flat", "file": "069_head-side_friendly_coral_flat.png"}, {"idx": 70, "pose": "head-front", "mood": "friendly", "palette": "coral", "style": "line", "file": "070_head-front_friendly_coral_line.png"}, {"idx": 71, "pose": "head-side", "mood": "smart", "palette": "dual-teal-coral", "style": "chibi", "file": "071_head-side_smart_dual-teal-coral_chibi.png"}, {"idx": 72, "pose": "silhouette", "mood": "playful", "palette": "rainbow-soft", "style": "flat", "file": "072_silhouette_playful_rainbow-soft_flat.png"}, {"idx": 73, "pose": "head-tilted", "mood": "smart", "palette": "mint", "style": "chibi", "file": "073_head-tilted_smart_mint_chibi.png"}, {"idx": 74, "pose": "holding-note", "mood": "friendly", "palette": "sunset", "style": "line", "file": "074_holding-note_friendly_sunset_line.png"}, {"idx": 75, "pose": "full-side", "mood": "playful", "palette": "mint", "style": "line", "file": "075_full-side_playful_mint_line.png"}, {"idx": 76, "pose": "on-book", "mood": "friendly", "palette": "rainbow-soft", "style": "chibi", "file": "076_on-book_friendly_rainbow-soft_chibi.png"}, {"idx": 77, "pose": "head-side", "mood": "smart", "palette": "dual-teal-coral", "style": "flat", "file": "077_head-side_smart_dual-teal-coral_flat.png"}, {"idx": 78, "pose": "head-tilted", "mood": "friendly", "palette": "coral", "style": "chibi", "file": "078_head-tilted_friendly_coral_chibi.png"}, {"idx": 79, "pose": "full-3q", "mood": "smart", "palette": "sunset", "style": "flat", "file": "079_full-3q_smart_sunset_flat.png"}, {"idx": 80, "pose": "holding-note", "mood": "playful", "palette": "mono-black", "style": "flat", "file": "080_holding-note_playful_mono-black_flat.png"}, {"idx": 81, "pose": "silhouette", "mood": "smart", "palette": "dual-teal-coral", "style": "line", "file": "081_silhouette_smart_dual-teal-coral_line.png"}, {"idx": 82, "pose": "on-book", "mood": "friendly", "palette": "coral", "style": "chibi", "file": "082_on-book_friendly_coral_chibi.png"}, {"idx": 83, "pose": "head-front", "mood": "friendly", "palette": "rainbow-soft", "style": "chibi", "file": "083_head-front_friendly_rainbow-soft_chibi.png"}, {"idx": 84, "pose": "full-3q", "mood": "playful", "palette": "mint", "style": "flat", "file": "084_full-3q_playful_mint_flat.png"}, {"idx": 85, "pose": "head-front", "mood": "smart", "palette": "sunset", "style": "line", "file": "085_head-front_smart_sunset_line.png"}, {"idx": 86, "pose": "full-side", "mood": "friendly", "palette": "rainbow-soft", "style": "line", "file": "086_full-side_friendly_rainbow-soft_line.png"}, {"idx": 87, "pose": "silhouette", "mood": "playful", "palette": "mint", "style": "chibi", "file": "087_silhouette_playful_mint_chibi.png"}, {"idx": 88, "pose": "on-book", "mood": "smart", "palette": "mono-black", "style": "flat", "file": "088_on-book_smart_mono-black_flat.png"}, {"idx": 89, "pose": "holding-note", "mood": "friendly", "palette": "coral", "style": "line", "file": "089_holding-note_friendly_coral_line.png"}, {"idx": 90, "pose": "head-tilted", "mood": "smart", "palette": "sunset", "style": "flat", "file": "090_head-tilted_smart_sunset_flat.png"}, {"idx": 91, "pose": "head-side", "mood": "playful", "palette": "dual-teal-coral", "style": "chibi", "file": "091_head-side_playful_dual-teal-coral_chibi.png"}, {"idx": 92, "pose": "full-3q", "mood": "playful", "palette": "dual-teal-coral", "style": "flat", "file": "092_full-3q_playful_dual-teal-coral_flat.png"}, {"idx": 93, "pose": "full-side", "mood": "friendly", "palette": "mono-black", "style": "line", "file": "093_full-side_friendly_mono-black_line.png"}, {"idx": 94, "pose": "silhouette", "mood": "smart", "palette": "rainbow-soft", "style": "flat", "file": "094_silhouette_smart_rainbow-soft_flat.png"}, {"idx": 95, "pose": "head-front", "mood": "friendly", "palette": "coral", "style": "chibi", "file": "095_head-front_friendly_coral_chibi.png"}, {"idx": 96, "pose": "head-tilted", "mood": "playful", "palette": "mint", "style": "line", "file": "096_head-tilted_playful_mint_line.png"}, {"idx": 97, "pose": "full-3q", "mood": "smart", "palette": "rainbow-soft", "style": "chibi", "file": "097_full-3q_smart_rainbow-soft_chibi.png"}, {"idx": 98, "pose": "holding-note", "mood": "smart", "palette": "mono-black", "style": "line", "file": "098_holding-note_smart_mono-black_line.png"}, {"idx": 99, "pose": "head-tilted", "mood": "playful", "palette": "dual-teal-coral", "style": "flat", "file": "099_head-tilted_playful_dual-teal-coral_flat.png"}, {"idx": 100, "pose": "on-book", "mood": "friendly", "palette": "sunset", "style": "chibi", "file": "100_on-book_friendly_sunset_chibi.png"}, {"idx": 101, "pose": "head-front", "mood": "smart", "palette": "mint", "style": "line", "file": "101_head-front_smart_mint_line.png"}, {"idx": 102, "pose": "head-side", "mood": "friendly", "palette": "dual-teal-coral", "style": "chibi", "file": "102_head-side_friendly_dual-teal-coral_chibi.png"}, {"idx": 103, "pose": "silhouette", "mood": "playful", "palette": "sunset", "style": "flat", "file": "103_silhouette_playful_sunset_flat.png"}, {"idx": 104, "pose": "full-side", "mood": "smart", "palette": "coral", "style": "line", "file": "104_full-side_smart_coral_line.png"}, {"idx": 105, "pose": "head-tilted", "mood": "playful", "palette": "mono-black", "style": "flat", "file": "105_head-tilted_playful_mono-black_flat.png"}, {"idx": 106, "pose": "on-book", "mood": "playful", "palette": "rainbow-soft", "style": "flat", "file": "106_on-book_playful_rainbow-soft_flat.png"}, {"idx": 107, "pose": "full-side", "mood": "smart", "palette": "coral", "style": "chibi", "file": "107_full-side_smart_coral_chibi.png"}, {"idx": 108, "pose": "silhouette", "mood": "playful", "palette": "dual-teal-coral", "style": "flat", "file": "108_silhouette_playful_dual-teal-coral_flat.png"}, {"idx": 109, "pose": "head-front", "mood": "friendly", "palette": "mono-black", "style": "line", "file": "109_head-front_friendly_mono-black_line.png"}, {"idx": 110, "pose": "holding-note", "mood": "smart", "palette": "mint", "style": "chibi", "file": "110_holding-note_smart_mint_chibi.png"}, {"idx": 111, "pose": "full-3q", "mood": "smart", "palette": "coral", "style": "chibi", "file": "111_full-3q_smart_coral_chibi.png"}, {"idx": 112, "pose": "head-tilted", "mood": "friendly", "palette": "rainbow-soft", "style": "flat", "file": "112_head-tilted_friendly_rainbow-soft_flat.png"}, {"idx": 113, "pose": "holding-note", "mood": "friendly", "palette": "dual-teal-coral", "style": "flat", "file": "113_holding-note_friendly_dual-teal-coral_flat.png"}, {"idx": 114, "pose": "head-front", "mood": "smart", "palette": "mint", "style": "chibi", "file": "114_head-front_smart_mint_chibi.png"}, {"idx": 115, "pose": "on-book", "mood": "playful", "palette": "mono-black", "style": "line", "file": "115_on-book_playful_mono-black_line.png"}, {"idx": 116, "pose": "silhouette", "mood": "friendly", "palette": "mint", "style": "chibi", "file": "116_silhouette_friendly_mint_chibi.png"}, {"idx": 117, "pose": "head-tilted", "mood": "playful", "palette": "sunset", "style": "flat", "file": "117_head-tilted_playful_sunset_flat.png"}, {"idx": 118, "pose": "full-3q", "mood": "playful", "palette": "dual-teal-coral", "style": "chibi", "file": "118_full-3q_playful_dual-teal-coral_chibi.png"}, {"idx": 119, "pose": "head-side", "mood": "smart", "palette": "rainbow-soft", "style": "flat", "file": "119_head-side_smart_rainbow-soft_flat.png"}, {"idx": 120, "pose": "full-side", "mood": "friendly", "palette": "coral", "style": "line", "file": "120_full-side_friendly_coral_line.png"}, {"idx": 121, "pose": "head-front", "mood": "playful", "palette": "sunset", "style": "line", "file": "121_head-front_playful_sunset_line.png"}, {"idx": 122, "pose": "silhouette", "mood": "smart", "palette": "mono-black", "style": "chibi", "file": "122_silhouette_smart_mono-black_chibi.png"}, {"idx": 123, "pose": "head-side", "mood": "playful", "palette": "rainbow-soft", "style": "flat", "file": "123_head-side_playful_rainbow-soft_flat.png"}, {"idx": 124, "pose": "on-book", "mood": "friendly", "palette": "dual-teal-coral", "style": "flat", "file": "124_on-book_friendly_dual-teal-coral_flat.png"}, {"idx": 125, "pose": "full-side", "mood": "playful", "palette": "coral", "style": "flat", "file": "125_full-side_playful_coral_flat.png"}, {"idx": 126, "pose": "head-tilted", "mood": "friendly", "palette": "mint", "style": "line", "file": "126_head-tilted_friendly_mint_line.png"}, {"idx": 127, "pose": "full-3q", "mood": "friendly", "palette": "dual-teal-coral", "style": "flat", "file": "127_full-3q_friendly_dual-teal-coral_flat.png"}, {"idx": 128, "pose": "holding-note", "mood": "playful", "palette": "coral", "style": "line", "file": "128_holding-note_playful_coral_line.png"}, {"idx": 129, "pose": "head-side", "mood": "friendly", "palette": "mono-black", "style": "flat", "file": "129_head-side_friendly_mono-black_flat.png"}, {"idx": 130, "pose": "full-side", "mood": "smart", "palette": "sunset", "style": "line", "file": "130_full-side_smart_sunset_line.png"}, {"idx": 131, "pose": "head-front", "mood": "playful", "palette": "mint", "style": "chibi", "file": "131_head-front_playful_mint_chibi.png"}, {"idx": 132, "pose": "head-tilted", "mood": "smart", "palette": "mono-black", "style": "line", "file": "132_head-tilted_smart_mono-black_line.png"}, {"idx": 133, "pose": "head-side", "mood": "playful", "palette": "coral", "style": "chibi", "file": "133_head-side_playful_coral_chibi.png"}, {"idx": 134, "pose": "head-tilted", "mood": "playful", "palette": "mint", "style": "flat", "file": "134_head-tilted_playful_mint_flat.png"}, {"idx": 135, "pose": "full-side", "mood": "smart", "palette": "sunset", "style": "chibi", "file": "135_full-side_smart_sunset_chibi.png"}, {"idx": 136, "pose": "head-front", "mood": "friendly", "palette": "rainbow-soft", "style": "line", "file": "136_head-front_friendly_rainbow-soft_line.png"}, {"idx": 137, "pose": "on-book", "mood": "playful", "palette": "mono-black", "style": "chibi", "file": "137_on-book_playful_mono-black_chibi.png"}, {"idx": 138, "pose": "holding-note", "mood": "friendly", "palette": "sunset", "style": "flat", "file": "138_holding-note_friendly_sunset_flat.png"}, {"idx": 139, "pose": "silhouette", "mood": "smart", "palette": "coral", "style": "line", "file": "139_silhouette_smart_coral_line.png"}, {"idx": 140, "pose": "head-side", "mood": "smart", "palette": "sunset", "style": "chibi", "file": "140_head-side_smart_sunset_chibi.png"}, {"idx": 141, "pose": "on-book", "mood": "friendly", "palette": "mint", "style": "line", "file": "141_on-book_friendly_mint_line.png"}, {"idx": 142, "pose": "head-tilted", "mood": "friendly", "palette": "dual-teal-coral", "style": "flat", "file": "142_head-tilted_friendly_dual-teal-coral_flat.png"}, {"idx": 143, "pose": "full-side", "mood": "smart", "palette": "rainbow-soft", "style": "chibi", "file": "143_full-side_smart_rainbow-soft_chibi.png"}, {"idx": 144, "pose": "head-front", "mood": "playful", "palette": "coral", "style": "line", "file": "144_head-front_playful_coral_line.png"}, {"idx": 145, "pose": "full-side", "mood": "friendly", "palette": "mint", "style": "line", "file": "145_full-side_friendly_mint_line.png"}, {"idx": 146, "pose": "head-front", "mood": "smart", "palette": "rainbow-soft", "style": "flat", "file": "146_head-front_smart_rainbow-soft_flat.png"}, {"idx": 147, "pose": "head-tilted", "mood": "playful", "palette": "coral", "style": "chibi", "file": "147_head-tilted_playful_coral_chibi.png"}, {"idx": 148, "pose": "holding-note", "mood": "smart", "palette": "mono-black", "style": "chibi", "file": "148_holding-note_smart_mono-black_chibi.png"}, {"idx": 149, "pose": "full-3q", "mood": "friendly", "palette": "coral", "style": "line", "file": "149_full-3q_friendly_coral_line.png"}, {"idx": 150, "pose": "holding-note", "mood": "playful", "palette": "mint", "style": "flat", "file": "150_holding-note_playful_mint_flat.png"}, {"idx": 151, "pose": "head-side", "mood": "smart", "palette": "rainbow-soft", "style": "chibi", "file": "151_head-side_smart_rainbow-soft_chibi.png"}, {"idx": 152, "pose": "head-tilted", "mood": "playful", "palette": "dual-teal-coral", "style": "line", "file": "152_head-tilted_playful_dual-teal-coral_line.png"}, {"idx": 153, "pose": "full-3q", "mood": "friendly", "palette": "sunset", "style": "flat", "file": "153_full-3q_friendly_sunset_flat.png"}, {"idx": 154, "pose": "on-book", "mood": "playful", "palette": "coral", "style": "chibi", "file": "154_on-book_playful_coral_chibi.png"}, {"idx": 155, "pose": "head-front", "mood": "friendly", "palette": "dual-teal-coral", "style": "line", "file": "155_head-front_friendly_dual-teal-coral_line.png"}, {"idx": 156, "pose": "full-side", "mood": "smart", "palette": "sunset", "style": "flat", "file": "156_full-side_smart_sunset_flat.png"}, {"idx": 157, "pose": "head-tilted", "mood": "smart", "palette": "rainbow-soft", "style": "flat", "file": "157_head-tilted_smart_rainbow-soft_flat.png"}, {"idx": 158, "pose": "head-side", "mood": "playful", "palette": "mint", "style": "chibi", "file": "158_head-side_playful_mint_chibi.png"}, {"idx": 159, "pose": "silhouette", "mood": "playful", "palette": "rainbow-soft", "style": "chibi", "file": "159_silhouette_playful_rainbow-soft_chibi.png"}, {"idx": 160, "pose": "holding-note", "mood": "friendly", "palette": "coral", "style": "flat", "file": "160_holding-note_friendly_coral_flat.png"}, {"idx": 161, "pose": "full-side", "mood": "smart", "palette": "mint", "style": "line", "file": "161_full-side_smart_mint_line.png"}, {"idx": 162, "pose": "head-front", "mood": "friendly", "palette": "sunset", "style": "line", "file": "162_head-front_friendly_sunset_line.png"}, {"idx": 163, "pose": "head-tilted", "mood": "smart", "palette": "mint", "style": "line", "file": "163_head-tilted_smart_mint_line.png"}, {"idx": 164, "pose": "head-side", "mood": "playful", "palette": "mono-black", "style": "flat", "file": "164_head-side_playful_mono-black_flat.png"}, {"idx": 165, "pose": "head-front", "mood": "friendly", "palette": "rainbow-soft", "style": "flat", "file": "165_head-front_friendly_rainbow-soft_flat.png"}, {"idx": 166, "pose": "silhouette", "mood": "playful", "palette": "dual-teal-coral", "style": "chibi", "file": "166_silhouette_playful_dual-teal-coral_chibi.png"}, {"idx": 167, "pose": "head-side", "mood": "playful", "palette": "mint", "style": "line", "file": "167_head-side_playful_mint_line.png"}, {"idx": 168, "pose": "head-front", "mood": "smart", "palette": "mono-black", "style": "flat", "file": "168_head-front_smart_mono-black_flat.png"}, {"idx": 169, "pose": "silhouette", "mood": "friendly", "palette": "coral", "style": "chibi", "file": "169_silhouette_friendly_coral_chibi.png"}, {"idx": 170, "pose": "on-book", "mood": "playful", "palette": "coral", "style": "line", "file": "170_on-book_playful_coral_line.png"}, {"idx": 171, "pose": "full-3q", "mood": "smart", "palette": "mint", "style": "chibi", "file": "171_full-3q_smart_mint_chibi.png"}, {"idx": 172, "pose": "full-side", "mood": "friendly", "palette": "sunset", "style": "flat", "file": "172_full-side_friendly_sunset_flat.png"}, {"idx": 173, "pose": "holding-note", "mood": "friendly", "palette": "dual-teal-coral", "style": "line", "file": "173_holding-note_friendly_dual-teal-coral_line.png"}, {"idx": 174, "pose": "on-book", "mood": "smart", "palette": "mono-black", "style": "chibi", "file": "174_on-book_smart_mono-black_chibi.png"}, {"idx": 175, "pose": "full-side", "mood": "playful", "palette": "rainbow-soft", "style": "flat", "file": "175_full-side_playful_rainbow-soft_flat.png"}, {"idx": 176, "pose": "full-3q", "mood": "playful", "palette": "mint", "style": "line", "file": "176_full-3q_playful_mint_line.png"}, {"idx": 177, "pose": "head-front", "mood": "smart", "palette": "coral", "style": "chibi", "file": "177_head-front_smart_coral_chibi.png"}, {"idx": 178, "pose": "head-tilted", "mood": "friendly", "palette": "sunset", "style": "flat", "file": "178_head-tilted_friendly_sunset_flat.png"}, {"idx": 179, "pose": "head-side", "mood": "smart", "palette": "mono-black", "style": "chibi", "file": "179_head-side_smart_mono-black_chibi.png"}, {"idx": 180, "pose": "holding-note", "mood": "playful", "palette": "rainbow-soft", "style": "flat", "file": "180_holding-note_playful_rainbow-soft_flat.png"}, {"idx": 181, "pose": "silhouette", "mood": "friendly", "palette": "dual-teal-coral", "style": "line", "file": "181_silhouette_friendly_dual-teal-coral_line.png"}, {"idx": 182, "pose": "full-3q", "mood": "friendly", "palette": "rainbow-soft", "style": "flat", "file": "182_full-3q_friendly_rainbow-soft_flat.png"}, {"idx": 183, "pose": "on-book", "mood": "smart", "palette": "coral", "style": "line", "file": "183_on-book_smart_coral_line.png"}, {"idx": 184, "pose": "full-side", "mood": "playful", "palette": "sunset", "style": "chibi", "file": "184_full-side_playful_sunset_chibi.png"}, {"idx": 185, "pose": "full-side", "mood": "playful", "palette": "rainbow-soft", "style": "chibi", "file": "185_full-side_playful_rainbow-soft_chibi.png"}, {"idx": 186, "pose": "silhouette", "mood": "friendly", "palette": "coral", "style": "line", "file": "186_silhouette_friendly_coral_line.png"}, {"idx": 187, "pose": "head-tilted", "mood": "playful", "palette": "rainbow-soft", "style": "chibi", "file": "187_head-tilted_playful_rainbow-soft_chibi.png"}, {"idx": 188, "pose": "head-side", "mood": "smart", "palette": "sunset", "style": "flat", "file": "188_head-side_smart_sunset_flat.png"}, {"idx": 189, "pose": "holding-note", "mood": "smart", "palette": "rainbow-soft", "style": "line", "file": "189_holding-note_smart_rainbow-soft_line.png"}, {"idx": 190, "pose": "on-book", "mood": "smart", "palette": "sunset", "style": "chibi", "file": "190_on-book_smart_sunset_chibi.png"}, {"idx": 191, "pose": "full-side", "mood": "friendly", "palette": "coral", "style": "flat", "file": "191_full-side_friendly_coral_flat.png"}, {"idx": 192, "pose": "head-tilted", "mood": "playful", "palette": "mono-black", "style": "line", "file": "192_head-tilted_playful_mono-black_line.png"}, {"idx": 193, "pose": "head-side", "mood": "smart", "palette": "mono-black", "style": "flat", "file": "193_head-side_smart_mono-black_flat.png"}, {"idx": 194, "pose": "on-book", "mood": "playful", "palette": "rainbow-soft", "style": "chibi", "file": "194_on-book_playful_rainbow-soft_chibi.png"}, {"idx": 195, "pose": "head-tilted", "mood": "friendly", "palette": "coral", "style": "line", "file": "195_head-tilted_friendly_coral_line.png"}, {"idx": 196, "pose": "holding-note", "mood": "playful", "palette": "mint", "style": "line", "file": "196_holding-note_playful_mint_line.png"}, {"idx": 197, "pose": "full-3q", "mood": "smart", "palette": "dual-teal-coral", "style": "chibi", "file": "197_full-3q_smart_dual-teal-coral_chibi.png"}, {"idx": 198, "pose": "silhouette", "mood": "friendly", "palette": "sunset", "style": "flat", "file": "198_silhouette_friendly_sunset_flat.png"}, {"idx": 199, "pose": "full-side", "mood": "playful", "palette": "sunset", "style": "flat", "file": "199_full-side_playful_sunset_flat.png"}];
+const POSES = ["head-side", "head-front", "full-side", "full-3q", "head-tilted", "holding-note", "on-book", "silhouette"];
+const MOODS = ["smart", "friendly", "playful"];
+const PALETTES = ["mono-black", "coral", "mint", "sunset", "dual-teal-coral", "rainbow-soft"];
+const STYLES = ["flat", "line", "chibi"];
+
+const FAV_KEY = 'kokochat_brand_favs_v1';
+let favs = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]'));
+
+const filters = { pose: null, mood: null, palette: null, style: null, fav: 'all' };
+
+function buildChips() {
+  const dims = { pose: POSES, mood: MOODS, palette: PALETTES, style: STYLES };
+  for (const [dim, vals] of Object.entries(dims)) {
+    const grp = document.querySelector(`.filter-group[data-dim="${dim}"]`);
+    const all = mkChip('全部', () => { filters[dim] = null; refresh(); });
+    all.dataset.value = '';
+    grp.appendChild(all);
+    for (const v of vals) {
+      const c = mkChip(v, () => { filters[dim] = v; refresh(); });
+      c.dataset.value = v;
+      grp.appendChild(c);
+    }
+  }
+  document.querySelectorAll('[data-fav]').forEach(el => {
+    el.addEventListener('click', () => { filters.fav = el.dataset.fav; refresh(); });
+  });
+}
+function mkChip(label, onClick) {
+  const c = document.createElement('span');
+  c.className = 'chip';
+  c.textContent = label;
+  c.addEventListener('click', onClick);
+  return c;
+}
+
+function syncChipStates() {
+  document.querySelectorAll('.filter-group').forEach(grp => {
+    const dim = grp.dataset.dim;
+    if (!dim) return;
+    grp.querySelectorAll('.chip').forEach(c => {
+      const v = c.dataset.value;
+      const active = (v === '' && !filters[dim]) || (v && v === filters[dim]);
+      c.classList.toggle('active', !!active);
+    });
+  });
+  document.querySelectorAll('[data-fav]').forEach(el => {
+    el.classList.toggle('active', el.dataset.fav === filters.fav);
+  });
+}
+
+function refresh() {
+  syncChipStates();
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  let n = 0;
+  for (const it of ITEMS) {
+    if (filters.pose && it.pose !== filters.pose) continue;
+    if (filters.mood && it.mood !== filters.mood) continue;
+    if (filters.palette && it.palette !== filters.palette) continue;
+    if (filters.style && it.style !== filters.style) continue;
+    if (filters.fav === 'only' && !favs.has(it.idx)) continue;
+    grid.appendChild(makeCard(it));
+    n++;
+  }
+  if (n === 0) {
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = '没有匹配的图片。';
+    grid.appendChild(e);
+  }
+  document.getElementById('stats').textContent = `${n} / ${ITEMS.length} 张  ·  收藏 ${favs.size}`;
+}
+
+function makeCard(it) {
+  const card = document.createElement('div');
+  card.className = 'card' + (favs.has(it.idx) ? ' fav' : '');
+  card.innerHTML = `
+    <span class="idx">#${String(it.idx).padStart(3,'0')}</span>
+    <span class="fav-btn ${favs.has(it.idx) ? 'on' : ''}" title="收藏">${favs.has(it.idx) ? '♥' : '♡'}</span>
+    <img loading="lazy" src="out/${it.file}" alt="">
+    <div class="meta">
+      <span class="tag pose">${it.pose}</span>
+      <span class="tag mood">${it.mood}</span>
+      <span class="tag palette">${it.palette}</span>
+      <span class="tag style">${it.style}</span>
+    </div>`;
+  card.addEventListener('click', e => {
+    if (e.target.classList.contains('fav-btn')) {
+      e.stopPropagation();
+      toggleFav(it.idx);
+      return;
+    }
+    openLightbox(it);
+  });
+  return card;
+}
+
+function toggleFav(idx) {
+  if (favs.has(idx)) favs.delete(idx); else favs.add(idx);
+  localStorage.setItem(FAV_KEY, JSON.stringify([...favs]));
+  refresh();
+}
+
+function openLightbox(it) {
+  document.getElementById('lbImg').src = `out/${it.file}`;
+  document.getElementById('lbInfo').textContent =
+    `#${String(it.idx).padStart(3,'0')} · ${it.pose} · ${it.mood} · ${it.palette} · ${it.style}`;
+  document.getElementById('lightbox').classList.add('show');
+}
+document.getElementById('lbClose').addEventListener('click', () => {
+  document.getElementById('lightbox').classList.remove('show');
+});
+document.getElementById('lightbox').addEventListener('click', e => {
+  if (e.target.id === 'lightbox') e.currentTarget.classList.remove('show');
+});
+
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const picked = ITEMS.filter(it => favs.has(it.idx));
+  const text = JSON.stringify(picked, null, 2);
+  navigator.clipboard.writeText(text).then(() => alert(`已复制 ${picked.length} 张收藏的元数据到剪贴板`));
+});
+document.getElementById('clearBtn').addEventListener('click', () => {
+  if (confirm('清空所有收藏？')) {
+    favs.clear();
+    localStorage.removeItem(FAV_KEY);
+    refresh();
+  }
+});
+
+buildChips();
+refresh();
+</script>
+</body>
+</html>

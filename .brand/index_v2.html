@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>KokoChat v2 — 带参考图生成</title>
+<style>
+  body { margin: 0; background: #1a1a1a; color: #eee; font-family: -apple-system, "PingFang SC", sans-serif; }
+  header { padding: 18px 22px; position: sticky; top: 0; background: rgba(26,26,26,0.95); backdrop-filter: blur(8px); border-bottom: 1px solid #333; z-index: 10; }
+  h1 { margin: 0 0 8px; font-size: 18px; }
+  .subtitle { color: #888; font-size: 13px; line-height: 1.5; }
+
+  .refs { display: flex; gap: 12px; padding: 12px 22px; background: #161616; border-bottom: 1px solid #333; align-items: center; }
+  .refs span { font-size: 12px; color: #999; margin-right: 6px; }
+  .refs img { height: 80px; border-radius: 6px; border: 1px solid #444; background: white; }
+
+  main { padding: 22px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  .card { background: #222; border: 2px solid #333; border-radius: 10px; overflow: hidden; }
+  .card img { width: 100%; aspect-ratio: 1/1; object-fit: contain; background: white; display: block; cursor: zoom-in; }
+  .card .meta { padding: 10px 12px; }
+  .card .name { font-family: ui-monospace, monospace; font-size: 11px; color: #aaa; margin-bottom: 4px; }
+  .card .config { font-size: 14px; color: #fff; font-weight: 500; margin-bottom: 4px; }
+  .card .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { font-size: 10px; padding: 2px 8px; border-radius: 4px; background: #333; color: #ccc; }
+  .tag.ref { background: #ff7a6b22; color: #ff7a6b; }
+
+  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: none; align-items: center; justify-content: center; padding: 40px; z-index: 100; }
+  .lightbox.show { display: flex; }
+  .lightbox img { max-width: 90%; max-height: 90%; }
+  .lightbox .close { position: absolute; top: 20px; right: 28px; color: white; font-size: 36px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>KokoChat v2 — 用你提供的参考图生成的 5 张草稿</h1>
+  <div class="subtitle">每张都用了不同的 prompt 配方。先看效果，决定下一步是放大跑还是调 prompt。</div>
+</header>
+
+<div class="refs">
+  <span>参考图：</span>
+  <img src="refs_user/parrot.jpg" alt="parrot ref" title="牡丹鹦鹉风格">
+  <img src="refs_user/stylized.jpg" alt="stylized ref" title="风格化剪影">
+</div>
+
+<main>
+  <div class="grid" id="grid"></div>
+</main>
+
+<div class="lightbox" id="lb"><span class="close" onclick="document.getElementById('lb').classList.remove('show')">&times;</span><img id="lbImg"></div>
+
+<script>
+const CARDS = [
+  { file:'v2_000_A_chibi_friendly_yellow_var0.png', config:'A · 水彩牡丹鹦鹉风格', refs:['parrot'], note:'保留水彩柔和过渡，黄身红头蓝绿尾' },
+  { file:'v2_001_A_logo_minimal_coral_var0.png', config:'A · 极简扁平 logo', refs:['parrot'], note:'保留比例和颜色，但改成 flat vector' },
+  { file:'v2_002_A_lineart_simple_var0.png', config:'A · 单线条 line art', refs:['parrot'], note:'用线条表达，最克制' },
+  { file:'v2_003_B_silhouette_meets_chibi_var0.png', config:'B · 萌+剪影融合', refs:['parrot','stylized'], note:'用大色块 + 大眼睛融合两种参考' },
+  { file:'v2_004_B_modern_mascot_var0.png', config:'B · 现代吉祥物', refs:['parrot','stylized'], note:'整只鸟带姿态，可爱+智能' },
+];
+const grid = document.getElementById('grid');
+for (const c of CARDS) {
+  const div = document.createElement('div');
+  div.className = 'card';
+  const refTags = c.refs.map(r => `<span class="tag ref">${r}</span>`).join('');
+  div.innerHTML = `
+    <img src="out_v2/${c.file}" data-zoom>
+    <div class="meta">
+      <div class="config">${c.config}</div>
+      <div class="name">${c.file}</div>
+      <div style="font-size:12px;color:#999;margin:6px 0;">${c.note}</div>
+      <div class="tags">${refTags}</div>
+    </div>`;
+  div.querySelector('img').addEventListener('click', e => {
+    document.getElementById('lbImg').src = e.target.src;
+    document.getElementById('lb').classList.add('show');
+  });
+  grid.appendChild(div);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>KokoChat v3 — Party Parrot 灵魂版</title>
+<style>
+  body { margin: 0; background: #1a1a1a; color: #eee; font-family: -apple-system, "PingFang SC", sans-serif; }
+  header { padding: 18px 22px; position: sticky; top: 0; background: rgba(26,26,26,0.95); backdrop-filter: blur(8px); border-bottom: 1px solid #333; z-index: 10; }
+  h1 { margin: 0 0 6px; font-size: 18px; }
+  .subtitle { color: #888; font-size: 13px; line-height: 1.5; max-width: 800px; }
+
+  .refs { display: flex; gap: 12px; padding: 12px 22px; background: #161616; border-bottom: 1px solid #333; align-items: center; }
+  .refs span { font-size: 12px; color: #999; margin-right: 6px; }
+  .refs img { height: 70px; border-radius: 6px; border: 1px solid #444; background: white; }
+
+  .toolbar { display: flex; gap: 10px; align-items: center; padding: 12px 22px; background: #161616; border-bottom: 1px solid #333; }
+  .toolbar button { font-size: 13px; padding: 7px 14px; border: 1px solid #555; background: #222; color: #eee; border-radius: 6px; cursor: pointer; }
+  .toolbar button.primary { background: #ff7a6b; border-color: #ff7a6b; color: white; }
+  .toolbar .stats { color: #aaa; font-size: 12px; margin-left: auto; }
+
+  main { padding: 22px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .card { background: #222; border: 2px solid #333; border-radius: 10px; overflow: hidden; transition: all 0.15s; cursor: pointer; position: relative; }
+  .card:hover { border-color: #777; }
+  .card.fav { border-color: #ff7a6b; box-shadow: 0 0 0 3px rgba(255,122,107,0.3); }
+  .card img { width: 100%; aspect-ratio: 1/1; object-fit: contain; background: white; display: block; }
+  .card .meta { padding: 10px 12px; border-top: 1px solid #2a2a2a; }
+  .card .name { font-family: ui-monospace, monospace; font-size: 11px; color: #888; }
+  .card .config { font-size: 14px; color: #fff; margin-top: 4px; font-weight: 500; }
+  .card .note { font-size: 12px; color: #aaa; margin-top: 4px; line-height: 1.4; }
+  .fav-btn { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,0.6); color: #aaa; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; }
+  .card.fav .fav-btn { background: #ff7a6b; color: white; }
+
+  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: none; align-items: center; justify-content: center; padding: 40px; z-index: 100; }
+  .lightbox.show { display: flex; }
+  .lightbox img { max-width: 92%; max-height: 92%; }
+  .lightbox .close { position: absolute; top: 20px; right: 28px; color: white; font-size: 36px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>KokoChat v3 — 借 Party Parrot 神韵 + 你的牡丹鹦鹉配色</h1>
+  <div class="subtitle">
+    20 张不同方向的 logo / mascot 草稿。所有 prompt 都明确点名了 Party Parrot（派对鹦鹉）作为风格灵魂，
+    并附上你的牡丹鹦鹉作为配色锚点。每张方向不同：极简 logo / 萌系 mascot / 表情贴 / 像素风 / line art 等。<br>
+    点 ♥ 收藏，点图放大，告诉我你喜欢哪几张。
+  </div>
+</header>
+
+<div class="refs">
+  <span>参考图：</span>
+  <img src="refs_user/parrot.jpg" title="牡丹鹦鹉（已传给模型）">
+  <span style="margin-left:20px;color:#666;font-size:11px;">+ "Party Parrot meme" 文字提示</span>
+</div>
+
+<div class="toolbar">
+  <button class="primary" onclick="exportFavs()">导出收藏</button>
+  <button onclick="clearFavs()">清空</button>
+  <span class="stats" id="stats">已收藏 0 / 20</span>
+</div>
+
+<main>
+  <div class="grid" id="grid"></div>
+</main>
+
+<div class="lightbox" id="lb"><span class="close" onclick="document.getElementById('lb').classList.remove('show')">&times;</span><img id="lbImg"></div>
+
+<script>
+const CARDS = [
+  { file:'v3_01_flat_logo_coral.png',       name:'01 极简扁平 logo',         note:'侧面头部 + 钩喙，珊瑚橘+米白单色' },
+  { file:'v3_02_chibi_3q_warm.png',         name:'02 萌系 3/4 视角',          note:'整只圆鸟，3/4 蹲坐姿' },
+  { file:'v3_03_emoji_round_face.png',      name:'03 emoji 圆脸',             note:'像 Slack 自定义 emoji' },
+  { file:'v3_04_lineart_minimal.png',       name:'04 单线 line art',          note:'纯线条最克制' },
+  { file:'v3_05_app_icon_squircle.png',     name:'05 iOS app icon',           note:'放在 squircle 里' },
+  { file:'v3_06_geometric_shapes.png',      name:'06 几何拼接',               note:'圆+三角的最简构成' },
+  { file:'v3_07_sticker_smug.png',          name:'07 笔电贴纸',               note:'die-cut sticker, 略傲娇表情' },
+  { file:'v3_08_thinking_pose.png',         name:'08 思考姿态',               note:'歪头 + 翼托腮' },
+  { file:'v3_09_silhouette_iconic.png',     name:'09 单色剪影',               note:'最抽象 brand mark' },
+  { file:'v3_10_pixel_8bit.png',            name:'10 像素风',                 note:'8-bit 复古游戏感' },
+  { file:'v3_11_blob_friendly.png',         name:'11 软糯 blob',              note:'无脖一体团子' },
+  { file:'v3_12_dual_tone_modern.png',      name:'12 双色 modern',            note:'两块色块界限分明' },
+  { file:'v3_13_face_only_zoom.png',        name:'13 脸部特写',               note:'极致放大眼睛喙' },
+  { file:'v3_14_holding_letter.png',        name:'14 叼着信纸',               note:'隐喻消息/对话' },
+  { file:'v3_15_perched_on_chat_bubble.png',name:'15 蹲在对话气泡上',         note:'最直白的 chat 隐喻' },
+  { file:'v3_16_low_poly.png',              name:'16 low poly',               note:'三角面拼接' },
+  { file:'v3_17_japanese_kawaii.png',       name:'17 日系 kawaii',            note:'治愈系软萌' },
+  { file:'v3_18_brutalist_thick.png',       name:'18 厚线 brutalist',         note:'New Yorker 编辑插画感' },
+  { file:'v3_19_zoomed_eye_focus.png',      name:'19 大眼睛主角',             note:'眼睛是主角' },
+  { file:'v3_20_pure_vector_app.png',       name:'20 纯 vector app icon',     note:'最完整的 logo 形态' },
+];
+
+const KEY = 'koko_v3_favs';
+let favs = JSON.parse(localStorage.getItem(KEY) || '[]');
+
+function refresh() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  for (const c of CARDS) grid.appendChild(makeCard(c));
+  document.getElementById('stats').textContent = `已收藏 ${favs.length} / ${CARDS.length}`;
+}
+function makeCard(c) {
+  const div = document.createElement('div');
+  div.className = 'card' + (favs.includes(c.file) ? ' fav' : '');
+  div.innerHTML = `
+    <div class="fav-btn">${favs.includes(c.file) ? '♥' : '♡'}</div>
+    <img src="out_v3/${c.file}">
+    <div class="meta">
+      <div class="name">${c.file}</div>
+      <div class="config">${c.name}</div>
+      <div class="note">${c.note}</div>
+    </div>`;
+  div.querySelector('.fav-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    const i = favs.indexOf(c.file);
+    if (i >= 0) favs.splice(i, 1); else favs.push(c.file);
+    localStorage.setItem(KEY, JSON.stringify(favs));
+    refresh();
+  });
+  div.querySelector('img').addEventListener('click', () => {
+    document.getElementById('lbImg').src = `out_v3/${c.file}`;
+    document.getElementById('lb').classList.add('show');
+  });
+  return div;
+}
+function exportFavs() {
+  if (favs.length === 0) return alert('请先收藏几张');
+  navigator.clipboard.writeText(favs.join('\\n')).then(() =>
+    alert(`已复制 ${favs.length} 个收藏：\\n\\n${favs.join('\\n')}`));
+}
+function clearFavs() {
+  if (favs.length === 0 || confirm('清空？')) { favs = []; localStorage.setItem(KEY, '[]'); refresh(); }
+}
+refresh();
+</script>
+</body>
+</html>
