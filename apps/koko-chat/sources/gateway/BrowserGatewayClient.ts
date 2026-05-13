@@ -51,7 +51,17 @@ export interface BrowserGatewayClientOptions {
   onStatusChange?: (status: ConnectionStatus) => void;
   /** Called when hello-ok returns a new deviceToken. */
   onDeviceToken?: (deviceToken: string) => void;
-  /** Connect / call timeout in ms. Default 30000. */
+  /**
+   * Connect / call timeout in ms. Default 600000 (10 minutes).
+   *
+   * Long-form Gateway methods such as `agent.wait` may legitimately keep a
+   * single RPC open for the duration of an agent run that includes tool calls,
+   * planning steps, or external API hops. Setting this below the longest
+   * legitimate agent turn produces spurious "request <method> timed out"
+   * errors at the client even though the server is still working. 10 minutes
+   * comfortably covers normal mini-app turns and matches the upper bound
+   * mini-app authors should pass to `inferOnce` / `waitForAgentRun`.
+   */
   requestTimeoutMs?: number;
 }
 
@@ -214,9 +224,12 @@ export class BrowserGatewayClient {
 
   private waitForChallenge(): Promise<{ nonce: string }> {
     return new Promise((resolve, reject) => {
+      // Connection handshake is short by nature (a single nonce round-trip),
+      // so it deliberately keeps the original 30s ceiling instead of
+      // following the long requestTimeoutMs used for agent runs.
       const timer = setTimeout(() => {
         reject(new Error("timed out waiting for connect.challenge"));
-      }, this.options.requestTimeoutMs ?? 30_000);
+      }, 30_000);
 
       const listener = (payload: JsonRecord): void => {
         if (typeof payload.nonce !== "string") {
@@ -246,7 +259,7 @@ export class BrowserGatewayClient {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
         reject(new Error(`request ${method} timed out`));
-      }, this.options.requestTimeoutMs ?? 30_000);
+      }, this.options.requestTimeoutMs ?? 600_000);
       this.pendingRequests.set(id, { resolve, reject, timer });
       this.ws!.send(JSON.stringify(frame));
     });
