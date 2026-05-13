@@ -1,4 +1,6 @@
 import { registerExampleMiniApp } from "./example";
+import { registerTavernMiniApp } from "../../../../miniapps/tavern/mobile";
+import { registerTavernRoleplayMiniApp } from "../../../../miniapps/tavern-roleplay/mobile";
 
 /**
  * Aggregate mini-app registration. `app/_layout.tsx` imports this module once
@@ -8,4 +10,6 @@ import { registerExampleMiniApp } from "./example";
  */
 export function registerMiniApps(): void {
   registerExampleMiniApp();
+  registerTavernMiniApp();
+  registerTavernRoleplayMiniApp();
 }

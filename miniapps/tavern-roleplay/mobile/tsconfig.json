@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-native",
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "lib": ["es2022", "dom"],
+    "types": [],
+    // The Tavern Roleplay mini-app currently runs inside the KokoChat host
+    // package. Declaring the host's path alias here so this folder can
+    // typecheck on its own. When this mini-app moves to its own repository,
+    // these paths become a thin published interface and the alias goes away.
+    "paths": {
+      "@/*": ["../../../apps/koko-chat/sources/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"]
+}

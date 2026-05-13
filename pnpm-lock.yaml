@@ -93,6 +93,45 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  miniapps/tavern-roleplay/mobile:
+    devDependencies:
+      '@types/react':
+        specifier: ~19.1.17
+        version: 19.1.17
+      expo-router:
+        specifier: ~6.0.23
+        version: 6.0.23(8b8edca78f33d7508a9b877b4aef6701)
+      react:
+        specifier: 19.1.0
+        version: 19.1.0
+      react-native:
+        specifier: 0.81.5
+        version: 0.81.5(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.1.0)
+      twrnc:
+        specifier: ^4.9.0
+        version: 4.16.0(react-native@0.81.5(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.1.0))(yaml@2.8.3)
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
+  miniapps/tavern/mobile:
+    devDependencies:
+      '@types/react':
+        specifier: ~19.1.17
+        version: 19.1.17
+      react:
+        specifier: 19.1.0
+        version: 19.1.0
+      react-native:
+        specifier: 0.81.5
+        version: 0.81.5(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.1.0)
+      twrnc:
+        specifier: ^4.9.0
+        version: 4.16.0(react-native@0.81.5(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.1.0))(yaml@2.8.3)
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+
   packages/koko-openclaw-client:
     dependencies:
       '@koko/protocol':

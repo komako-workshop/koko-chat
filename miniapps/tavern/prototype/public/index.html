@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KokoChat Tavern Prototype</title>
+    <link rel="stylesheet" href="/public/style.css" />
+  </head>
+  <body>
+    <main>
+      <section class="panel setup">
+        <h1>酒馆角色对话 Prototype</h1>
+        <p>输入 Character Tavern path 或 URL，加载角色卡后开启 OpenClaw session。</p>
+        <div class="row">
+          <input id="path" value="turs/kessoku_band__bocchi_the_rock" />
+          <button id="load">加载角色</button>
+          <button id="start" disabled>开始聊天</button>
+        </div>
+        <div id="card" class="card hidden"></div>
+      </section>
+
+      <section class="panel chat">
+        <div id="messages" class="messages"></div>
+        <form id="form" class="row">
+          <input id="message" placeholder="对角色说点什么…" disabled />
+          <button id="send" disabled>发送</button>
+        </form>
+      </section>
+    </main>
+    <script type="module" src="/public/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "@koko/miniapp-tavern-mobile",
+  "version": "0.0.1",
+  "private": true,
+  "description": "KokoChat Tavern mini-app · React Native surface (酒馆助手).",
+  "main": "index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*",
+    "twrnc": "*"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.17",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "twrnc": "^4.9.0",
+    "typescript": "^5.9.0"
+  }
+}
