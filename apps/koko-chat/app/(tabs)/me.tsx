@@ -60,7 +60,7 @@ export default function MeTabScreen(): React.ReactElement {
   async function handleForgetIdentity(): Promise<void> {
     Alert.alert(
       "忘记此设备",
-      "将清除本机保存的设备密钥与 Gateway Token。下次需要重新扫码配对。",
+      "这只会清除 OpenClaw 连接凭证，不会删除聊天记录、小程序数据或 Koko 的本地会话。下次需要重新粘贴连接码。",
       [
         { text: "取消", style: "cancel" },
         {

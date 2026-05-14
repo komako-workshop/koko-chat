@@ -1,38 +1,71 @@
 ---
 name: kokochat-pairing
 version: 0.1.0
-description: "Generate a fresh pairing code so the user can connect KokoChat (the mobile mini-app runtime) to this OpenClaw instance. Use when the user asks to 'pair KokoChat', '生成 KokoChat 配对码', '把手机连上 KokoChat', or similar. KokoChat is a mobile client like WeChat but for OpenClaw, and it needs a setup code to trust this gateway."
+description: "Generate a connection code so the user can connect KokoChat (the mobile mini-app runtime) to this OpenClaw instance. Use when the user asks to 'pair KokoChat', '生成 KokoChat 配对码/连接码', '把手机连上 KokoChat', or similar. KokoChat is a mobile client like WeChat but for OpenClaw, and it needs a setup code to reach this gateway."
 metadata: { "openclaw": { "emoji": "📱", "requires": { "bins": ["openclaw"] } } }
 ---
 
 # kokochat-pairing
 
 KokoChat is a mobile mini-app runtime that talks to this OpenClaw instance over
-the Gateway WebSocket. To add a new phone (or re-add one whose identity was
-cleared), KokoChat needs a **setup code** — a short-lived, one-time-use token
-issued by `openclaw qr`.
+the Gateway WebSocket. To add a phone (or reconnect one whose local connection
+identity was cleared), KokoChat needs a **connection code** containing:
 
-Your job: when the user asks for a KokoChat pairing code, run `openclaw qr`
-and return the setup code as plain text. KokoChat pairing is intentionally
-single-step for this private setup: once the phone submits the fresh setup code,
-the gateway auto-approves the device token handoff.
+- the Gateway WebSocket URL, usually `ws://<mac-lan-ip>:18789`
+- the Gateway token from `~/.openclaw/openclaw.json`
+
+KokoChat intentionally does **not** use `openclaw devices approve`. The phone
+connects with the Gateway token directly, so the mobile flow is one step:
+paste the connection code and connect.
 
 ## The one command
 
 ```bash
-openclaw qr --setup-code-only
+python3 - <<'PY'
+import base64
+import json
+import os
+import subprocess
+
+config_path = os.path.expanduser("~/.openclaw/openclaw.json")
+with open(config_path, "r", encoding="utf-8") as f:
+    config = json.load(f)
+
+token = config["gateway"]["auth"]["token"]
+port = config.get("gateway", {}).get("port", 18789)
+
+def lan_ip():
+    for iface in ("en0", "en1"):
+        try:
+            out = subprocess.check_output(["ipconfig", "getifaddr", iface], text=True).strip()
+            if out:
+                return out
+        except Exception:
+            pass
+    return "127.0.0.1"
+
+payload = {
+    "url": f"ws://{lan_ip()}:{port}",
+    "token": token,
+}
+raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+print(base64.b64encode(raw).decode("ascii").rstrip("="))
+PY
 ```
 
-- **Setup code lifetime:** ~10 minutes. Generate on demand; never cache or reuse.
-- **Remote gateway:** if the user says the phone is outside their home network,
-  add `--remote`.
+- **Connection code lifetime:** this token-based code does not expire on the
+  10-minute bootstrap timer, but generate it on demand and do not post it
+  publicly.
+- **Remote gateway:** this command is for same-Wi-Fi local testing. For remote
+  use, the user needs a secure `wss://` / Tailscale / tunnel URL and the code's
+  `url` field should be changed accordingly.
 
 ## What to hand back
 
 Return **exactly** this shape, nothing more:
 
 ````markdown
-这是新的 KokoChat 配对码，有效期约 10 分钟：
+这是新的 KokoChat 连接码：
 
 ```
 <paste the raw setup code from the command output>
@@ -43,32 +76,28 @@ Return **exactly** this shape, nothing more:
 
 ## Why no QR code
 
-KokoChat pairing deliberately goes through **plain text**, not QR. Do not run
-`openclaw qr` without `--setup-code-only`, and do not generate ASCII QR codes,
-PNG QR codes, or any other visual pairing payload — even if the user asks.
-If the user explicitly requests a QR code, explain that KokoChat expects the
-raw setup code and ask them to paste it as text.
+KokoChat pairing deliberately goes through **plain text**, not QR. Do not
+generate ASCII QR codes, PNG QR codes, or any other visual pairing payload —
+even if the user asks. If the user explicitly requests a QR code, explain that
+KokoChat expects the raw connection code and ask them to paste it as text.
 
 ## Don't do these
 
-- Don't cache or reuse an old setup code. If the user says "the last one didn't
-  work", just generate a new one.
-- Don't invent flags. Only `--url`, `--remote`, `--password`, `--token`,
-  `--setup-code-only`, `--no-ascii`, `--public-url`, `--json` exist. Run
-  `openclaw qr --help` if unsure.
-- Don't echo the raw gateway token anywhere; the setup code is a different,
-  scoped, one-time bootstrap token and is safe to surface. The gateway token
-  itself lives in `openclaw.json` and should never be quoted back to the user.
+- Don't cache or reuse an old connection code in public channels. If the user
+  says "the last one didn't work", just generate a new one.
+- Don't run `openclaw qr` for KokoChat unless explicitly debugging legacy
+  bootstrap-token behavior. `openclaw qr` creates a bootstrap token and may
+  require device approval; KokoChat's default flow is token-based.
+- Don't print the raw gateway token by itself. It is only surfaced inside the
+  base64 connection code that KokoChat can parse.
 - Don't ask the user to run `openclaw devices approve <requestId>` for KokoChat.
-  This local setup auto-approves bootstrap-token device handoff.
+  KokoChat should not create pending device approval requests in the default
+  token-based flow.
 
 ## Troubleshooting
 
 If the user reports `pairing required: device is not approved yet`:
 
-1. Confirm the gateway is running: `openclaw status` (look for `gateway: running`).
-2. If a pending approval is sitting in `openclaw devices list`, the gateway
-   process probably has not picked up the local KokoChat auto-approve patch.
-   Restart the gateway and generate a fresh setup code.
-3. If the setup code has expired (>10 minutes since generation), generate a
-   new one.
+1. Confirm they did not paste an `openclaw qr` / bootstrap-token setup code.
+2. Generate a fresh token-based connection code using the Python command above.
+3. Ask them to clear the old pairing input and paste only the new code.

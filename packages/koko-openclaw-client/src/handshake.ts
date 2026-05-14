@@ -6,8 +6,19 @@ import { HandshakeFailedError } from "./errors";
 /** Default OpenClaw operator role. */
 export const DEFAULT_ROLE = "operator";
 
-/** Default OpenClaw operator scopes used by the CLI. */
-export const DEFAULT_SCOPES = ["operator.read", "operator.write", "operator.approvals", "operator.pairing"] as const;
+/**
+ * Default OpenClaw operator scopes requested by KokoChat.
+ *
+ * These must match the profile emitted by `openclaw qr`; otherwise the
+ * signature payload includes a different scope list from the bootstrap token's
+ * profile and Gateway rejects the handshake as `bootstrap_token_invalid`.
+ */
+export const DEFAULT_SCOPES = [
+  "operator.read",
+  "operator.write",
+  "operator.approvals",
+  "operator.talk.secrets"
+] as const;
 
 /** Protocol version requested by this client. */
 export const GATEWAY_PROTOCOL_VERSION = 3;

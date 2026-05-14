@@ -20,13 +20,14 @@ import {
   DEFAULT_ROLE,
   DEFAULT_SCOPES,
   assertHelloOkPayload,
-  buildConnectParams,
   deviceTokenFromHelloOk,
+  GATEWAY_PROTOCOL_VERSION,
   maxPayloadFromHelloOk,
   type EventFrame,
   type JsonRecord,
   type ResponseFrame,
-  parseFrameText
+  parseFrameText,
+  buildConnectParams
 } from "@koko/openclaw-client/protocol";
 
 /** Options accepted by {@link BrowserGatewayClient}. */
@@ -52,15 +53,15 @@ export interface BrowserGatewayClientOptions {
   /** Called when hello-ok returns a new deviceToken. */
   onDeviceToken?: (deviceToken: string) => void;
   /**
-   * Connect / call timeout in ms. Default 600000 (10 minutes).
+   * Connect / call timeout in ms. Default 3600000 (1 hour).
    *
    * Long-form Gateway methods such as `agent.wait` may legitimately keep a
    * single RPC open for the duration of an agent run that includes tool calls,
    * planning steps, or external API hops. Setting this below the longest
    * legitimate agent turn produces spurious "request <method> timed out"
-   * errors at the client even though the server is still working. 10 minutes
-   * comfortably covers normal mini-app turns and matches the upper bound
-   * mini-app authors should pass to `inferOnce` / `waitForAgentRun`.
+   * errors at the client even though the server is still working. One hour is
+   * intentionally generous for mobile use: long OpenClaw runs should finish
+   * naturally instead of being killed by the host app first.
    */
   requestTimeoutMs?: number;
 }
@@ -195,15 +196,9 @@ export class BrowserGatewayClient {
       ...this.options.client
     };
 
-    const { params } = await buildConnectParams({
-      ...(this.options.token !== undefined ? { token: this.options.token } : {}),
-      ...(this.options.bootstrapToken !== undefined ? { bootstrapToken: this.options.bootstrapToken } : {}),
-      ...(this.options.deviceToken !== undefined ? { deviceToken: this.options.deviceToken } : {}),
-      deviceSeed: this.options.deviceSeed,
+    const params = await this.buildConnectRequestParams({
       nonce: challenge.nonce,
-      client: clientMeta,
-      role: DEFAULT_ROLE,
-      scopes: [...(this.options.scopes ?? DEFAULT_SCOPES)]
+      client: clientMeta
     });
 
     const response = await this.sendRequest("connect", params);
@@ -220,6 +215,53 @@ export class BrowserGatewayClient {
     }
 
     this.logger.info("gateway handshake complete");
+  }
+
+  private async buildConnectRequestParams({
+    nonce,
+    client
+  }: {
+    nonce: string;
+    client: GatewayClientMetadata;
+  }): Promise<JsonRecord> {
+    const role = DEFAULT_ROLE;
+    const scopes = [...(this.options.scopes ?? DEFAULT_SCOPES)];
+
+    // KokoChat's token-based setup code intentionally means "this phone may
+    // connect as this OpenClaw operator client" and should not create a
+    // pending device approval request. Gateway supports shared-token auth
+    // without a device identity; using that path removes the extra
+    // `openclaw devices approve` step for the mobile app.
+    //
+    // Bootstrap-token and cached-device-token flows still need a signed device
+    // identity, so they keep using the protocol helper below.
+    if (
+      this.options.token !== undefined &&
+      this.options.bootstrapToken === undefined &&
+      this.options.deviceToken === undefined
+    ) {
+      return {
+        role,
+        scopes,
+        auth: { token: this.options.token },
+        client,
+        minProtocol: GATEWAY_PROTOCOL_VERSION,
+        protocolVersion: GATEWAY_PROTOCOL_VERSION,
+        nonce
+      };
+    }
+
+    const { params } = await buildConnectParams({
+      ...(this.options.token !== undefined ? { token: this.options.token } : {}),
+      ...(this.options.bootstrapToken !== undefined ? { bootstrapToken: this.options.bootstrapToken } : {}),
+      ...(this.options.deviceToken !== undefined ? { deviceToken: this.options.deviceToken } : {}),
+      deviceSeed: this.options.deviceSeed,
+      nonce,
+      client,
+      role,
+      scopes
+    });
+    return params;
   }
 
   private waitForChallenge(): Promise<{ nonce: string }> {
@@ -259,7 +301,7 @@ export class BrowserGatewayClient {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
         reject(new Error(`request ${method} timed out`));
-      }, this.options.requestTimeoutMs ?? 600_000);
+      }, this.options.requestTimeoutMs ?? 3_600_000);
       this.pendingRequests.set(id, { resolve, reject, timer });
       this.ws!.send(JSON.stringify(frame));
     });

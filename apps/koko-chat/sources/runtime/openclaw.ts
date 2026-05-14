@@ -5,7 +5,7 @@ import { useGatewayStore } from "@/state/gateway";
 import type { MiniAppId } from "@/state/conversations";
 import { resolveMiniAppAgentId } from "@/runtime/miniApps";
 
-const DEFAULT_INFER_TIMEOUT_MS = 60_000;
+const DEFAULT_INFER_TIMEOUT_MS = 3_600_000;
 const DEFAULT_HISTORY_LIMIT = 8;
 const DEFAULT_HISTORY_MAX_CHARS = 8_000;
 

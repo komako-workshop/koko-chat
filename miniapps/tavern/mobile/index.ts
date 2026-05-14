@@ -39,12 +39,12 @@ import { TavernRecommendationsBlock } from "./RecommendationsBlock";
 
 const MINI_APP_ID = "tavern";
 const RECOMMENDATIONS_BLOCK_TYPE = "koko.tavern.recommendations";
-// 10 minutes. A normal Tavern turn (search-cards tool call + 3-5 card
+// 1 hour. A normal Tavern turn (search-cards tool call + 3-5 card
 // translation + reason writing) usually completes within 30-90s, but agent
 // runs that involve a retry, a slow upstream, or longer prompt windows can
 // occasionally push past several minutes. The host's per-request RPC timeout
-// is also 10 minutes, so this matches the cap rather than under-cutting it.
-const INFER_TIMEOUT_MS = 600_000;
+// is also 1 hour, so this matches the cap rather than under-cutting it.
+const INFER_TIMEOUT_MS = 3_600_000;
 
 let registered = false;
 

@@ -25,8 +25,8 @@ import { KokoColors, KokoRadius } from "@/theme/koko";
  * KokoChat assumes every user already has a working OpenClaw they can chat with
  * (Web UI, Desktop, another paired phone, etc.). To add a new device, we don't
  * make them open a terminal — we give them a ready-made prompt to send to their
- * existing Claw. The `kokochat-pairing` workspace skill makes Claw run
- * `openclaw qr --setup-code-only` and return the raw setup code as plain text.
+ * existing Claw. The `kokochat-pairing` workspace skill returns a token-based
+ * connection code as plain text.
  * The user copies that string back into the paste box below.
  *
  * We deliberately do not use QR codes (ASCII or image). Plain text keeps the
@@ -34,7 +34,7 @@ import { KokoColors, KokoRadius } from "@/theme/koko";
  * needing to solve QR rendering / scanning in each.
  */
 
-const PAIRING_PROMPT = "请帮我生成一个新的 KokoChat 配对码。";
+const PAIRING_PROMPT = "请帮我生成一个新的 KokoChat 连接码。";
 
 async function readClipboardText(): Promise<string | null> {
   try {
@@ -115,7 +115,7 @@ export default function PairScreen() {
       >
         <Text style={styles.intro}>
           KokoChat 是 OpenClaw 的手机版伴侣 App。聊天和 AI 能力来自你 Mac 上运行的
-          OpenClaw（claw.ai），所以第一步需要把这台手机绑定到你已有的 OpenClaw。
+          OpenClaw（claw.ai），所以第一步需要把这台手机连接到你已有的 OpenClaw。
         </Text>
 
         <View style={[styles.card, styles.preFlightCard]}>
@@ -147,7 +147,7 @@ export default function PairScreen() {
           </Pressable>
         </View>
 
-        <Text style={styles.stepLabel}>第 2 步 · 把 OpenClaw 回复的配对码粘到这里</Text>
+        <Text style={styles.stepLabel}>第 2 步 · 把 OpenClaw 回复的连接码粘到这里</Text>
         <View style={styles.card}>
           <TextInput
             value={input}
