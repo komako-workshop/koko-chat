@@ -30,6 +30,14 @@ export interface MiniAppDescriptor {
   };
   /** Optional custom create behavior for the + menu. */
   onCreate?: () => ConversationMeta | Promise<ConversationMeta>;
+  /**
+   * If true, agent replies for this mini-app are split into multiple chat
+   * bubbles by `<msg>...</msg>` tags emitted by the model. Untagged text
+   * falls back to a single bubble. See runtime/messageBoundary.ts.
+   *
+   * Defaults to false (single-bubble, ChatGPT-style).
+   */
+  splitAgentMessages?: boolean;
 }
 
 const miniApps = new Map<string, MiniAppDescriptor>();

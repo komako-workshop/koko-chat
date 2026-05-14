@@ -15,7 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { openKokoHome } from "@/miniapps/koko";
+import { KOKO_HOME_SESSION_KEY, openKokoHome } from "@/miniapps/koko";
 import {
   getLauncherMiniApps,
   getMiniAppListGlyph,
@@ -35,7 +35,12 @@ import { KokoColors, KokoRadius } from "@/theme/koko";
  * cards. No dark mode.
  */
 export default function ChatsTabScreen(): React.ReactElement {
-  const conversations = useConversationStore((s) => s.list);
+  const allConversations = useConversationStore((s) => s.list);
+  // The Koko home conversation is reachable only through the pinned row;
+  // hide it from the main list so it isn't rendered twice.
+  const conversations = allConversations.filter(
+    (item) => item.sessionKey !== KOKO_HOME_SESSION_KEY
+  );
   const createConversation = useConversationStore((s) => s.create);
   const archiveConversation = useConversationStore((s) => s.archive);
   const renameConversation = useConversationStore((s) => s.rename);
@@ -88,10 +93,9 @@ export default function ChatsTabScreen(): React.ReactElement {
   }
 
   async function handleOpenKokoHome(): Promise<void> {
-    if (gatewayStatus !== "connected") {
-      Alert.alert("OpenClaw 未连接", "请先配对并连接 Gateway，然后再打开 Koko。");
-      return;
-    }
+    // openKokoHome works whether or not the Gateway is connected: in offline
+    // mode it skips the OpenClaw agent bootstrap and still seeds local
+    // welcome messages, so first-launch reviewers can see Koko in character.
     try {
       await openKokoHome((conversationId) => {
         router.push({ pathname: "/chat/[id]", params: { id: conversationId } });

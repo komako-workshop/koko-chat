@@ -21,6 +21,8 @@ import {
 } from "@/gateway/identityStorage";
 import type { OpenClawSetup } from "@/gateway/setupCode";
 import { buildOutboundMessage, isFirstUserTurn } from "@/runtime/outboundMessages";
+import { getMiniAppDescriptor } from "@/runtime/miniApps";
+import { parseMessageBoundaries } from "@/runtime/messageBoundary";
 import { useConversationStore, type ChatMessage } from "@/state/conversations";
 
 /** Minimal shape of an OpenClaw chat event payload as observed on the wire. */
@@ -35,6 +37,8 @@ export interface ChatEventPayload extends JsonRecord {
 }
 
 export type { ChatMessage };
+
+const KOKO_STICKER_BLOCK_TYPE = "koko.sticker";
 
 interface GatewayState {
   client: BrowserGatewayClient | null;
@@ -85,12 +89,33 @@ function conversationIdForSessionKey(sessionKey: string | undefined): string | n
   return match?.id ?? null;
 }
 
+function shouldSplitAgentMessages(conversationId: string): boolean {
+  const conv = useConversationStore.getState().list.find((m) => m.id === conversationId);
+  if (conv === undefined) return false;
+  return getMiniAppDescriptor(conv.mode)?.splitAgentMessages === true;
+}
+
 function applyDelta(
   conversationId: string,
   event: ChatEventPayload,
   done: boolean
 ): void {
-  const text = extractText(event);
+  const fullText = extractText(event);
+  const runId = typeof event.runId === "string" ? event.runId : null;
+
+  if (runId !== null && shouldSplitAgentMessages(conversationId)) {
+    applyMultiBubbleDelta(conversationId, runId, fullText, done);
+  } else {
+    applySingleBubbleDelta(conversationId, event, done, fullText);
+  }
+}
+
+function applySingleBubbleDelta(
+  conversationId: string,
+  event: ChatEventPayload,
+  done: boolean,
+  fullText: string
+): void {
   useConversationStore.getState().setMessages(conversationId, (prev) => {
     const idx = prev.findIndex((m) => m.runId === event.runId && m.role === "agent");
     if (idx < 0) {
@@ -99,7 +124,7 @@ function applyDelta(
         {
           id: newMessageId(),
           role: "agent",
-          text,
+          text: fullText,
           ...(typeof event.runId === "string" ? { runId: event.runId } : {}),
           streaming: !done
         }
@@ -108,21 +133,107 @@ function applyDelta(
     const existing = prev[idx];
     if (existing === undefined) return prev;
     const next = [...prev];
-    next[idx] = { ...existing, text, streaming: !done };
+    next[idx] = { ...existing, text: fullText, streaming: !done };
     return next;
   });
   if (done) {
     useConversationStore
       .getState()
-      .touch(conversationId, text.length > 0 ? text.slice(0, 120) : undefined);
+      .touch(conversationId, previewFromText(fullText));
   }
+}
+
+function applyMultiBubbleDelta(
+  conversationId: string,
+  runId: string,
+  fullText: string,
+  done: boolean
+): void {
+  const segments = parseMessageBoundaries(fullText, done);
+
+  useConversationStore.getState().setMessages(conversationId, (prev) => {
+    // Replace every message previously emitted under this runId. The parser
+    // is deterministic on the full accumulated text, so re-deriving the
+    // segments each delta keeps the view in lockstep with the model output
+    // without needing diffing.
+    const others = prev.filter((m) => m.runId !== runId);
+
+    if (segments.length === 0) {
+      // Nothing to render yet (empty initial delta). Insert nothing rather
+      // than an empty placeholder bubble.
+      return others;
+    }
+
+    const newMessages: ChatMessage[] = segments.map((seg) => {
+      if (seg.kind === "sticker" && seg.stickerId !== undefined) {
+        return {
+          id: `${runId}-msg-${seg.index}`,
+          role: "agent",
+          text: "",
+          runId,
+          streaming: false,
+          blocks: [
+            {
+              type: KOKO_STICKER_BLOCK_TYPE,
+              version: 1,
+              data: { id: seg.stickerId }
+            }
+          ]
+        };
+      }
+      return {
+        id: `${runId}-msg-${seg.index}`,
+        role: "agent",
+        text: seg.text,
+        runId,
+        streaming: !seg.complete
+      };
+    });
+
+    return [...others, ...newMessages];
+  });
+  if (done) {
+    // Use the last visible bubble for the list preview rather than the raw
+    // accumulated text, so `<msg>` markup never leaks into the chat list.
+    const lastSegment = segments[segments.length - 1];
+    useConversationStore
+      .getState()
+      .touch(conversationId, previewFromSegment(lastSegment));
+  }
+}
+
+function previewFromSegment(
+  segment: ReturnType<typeof parseMessageBoundaries>[number] | undefined
+): string | undefined {
+  if (segment === undefined) return undefined;
+  if (segment.kind === "sticker") return "Koko 表情";
+  return previewFromText(segment.text);
+}
+
+function previewFromText(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return undefined;
+  return trimmed.slice(0, 120);
 }
 
 function applyError(conversationId: string, event: ChatEventPayload): void {
   useConversationStore.getState().setMessages(conversationId, (prev) => {
-    const idx = prev.findIndex((m) => m.runId === event.runId && m.role === "agent");
     const errorText = typeof event.errorMessage === "string" ? event.errorMessage : "unknown error";
-    if (idx < 0) {
+
+    // Find the last agent message in this run, if any. Errors attach there
+    // (works for both single-bubble and multi-bubble runs).
+    let lastIdx = -1;
+    for (let i = prev.length - 1; i >= 0; i -= 1) {
+      const message = prev[i];
+      if (message === undefined) continue;
+      if (message.runId === event.runId && message.role === "agent") {
+        lastIdx = i;
+        break;
+      }
+    }
+
+    if (lastIdx < 0) {
       return [
         ...prev,
         {
@@ -135,10 +246,10 @@ function applyError(conversationId: string, event: ChatEventPayload): void {
         }
       ];
     }
-    const existing = prev[idx];
+    const existing = prev[lastIdx];
     if (existing === undefined) return prev;
     const next = [...prev];
-    next[idx] = { ...existing, streaming: false, error: errorText };
+    next[lastIdx] = { ...existing, streaming: false, error: errorText };
     return next;
   });
   useConversationStore.getState().touch(conversationId);

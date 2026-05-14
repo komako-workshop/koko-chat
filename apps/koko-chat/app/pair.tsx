@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,6 +11,7 @@ import {
   View
 } from "react-native";
 import { Link, router } from "expo-router";
+import { useHeaderHeight } from "@react-navigation/elements";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 
@@ -59,6 +62,7 @@ export default function PairScreen() {
   const status = useGatewayStore((s) => s.status);
   const connect = useGatewayStore((s) => s.connect);
   const lastError = useGatewayStore((s) => s.lastError);
+  const headerHeight = useHeaderHeight();
 
   async function connectWith(raw: string): Promise<void> {
     setLocalError(null);
@@ -98,12 +102,34 @@ export default function PairScreen() {
   const connectDisabled = busy || input.trim().length === 0;
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>添加到 OpenClaw</Text>
+    <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={headerHeight}
+      >
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         <Text style={styles.intro}>
-          KokoChat 需要通过你已有的 OpenClaw 拿到一个配对码。
+          KokoChat 是 OpenClaw 的手机版伴侣 App。聊天和 AI 能力来自你 Mac 上运行的
+          OpenClaw（claw.ai），所以第一步需要把这台手机绑定到你已有的 OpenClaw。
         </Text>
+
+        <View style={[styles.card, styles.preFlightCard]}>
+          <Text style={styles.preFlightTitle}>开始之前</Text>
+          <Text style={styles.preFlightItem}>
+            · Mac 上已经装好 OpenClaw，并能正常和它聊天。
+          </Text>
+          <Text style={styles.preFlightItem}>
+            · 手机和 Mac 在同一 Wi-Fi 下；首次连接时 iOS 会弹"允许访问本地网络"，请选「允许」。
+          </Text>
+          <Text style={styles.preFlightItem}>
+            · 还没装 OpenClaw？可以先回到 Koko 看预览版的对话；正式聊天需要先装 OpenClaw。
+          </Text>
+        </View>
 
         <Text style={styles.stepLabel}>第 1 步 · 把下面这句话发给你的 OpenClaw</Text>
         <View style={styles.card}>
@@ -165,6 +191,7 @@ export default function PairScreen() {
           </Pressable>
         </Link>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -174,18 +201,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: KokoColors.bg
   },
+  flex: {
+    flex: 1
+  },
   scroll: {
     paddingHorizontal: 24,
     paddingBottom: 48,
-    paddingTop: 16
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: KokoColors.ink
+    paddingTop: 8
   },
   intro: {
-    marginTop: 8,
     fontSize: 14,
     lineHeight: 20,
     color: KokoColors.inkSecondary
@@ -205,6 +229,22 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: KokoColors.border
+  },
+  preFlightCard: {
+    marginTop: 20,
+    backgroundColor: KokoColors.primarySoft,
+    borderColor: KokoColors.border
+  },
+  preFlightTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: KokoColors.ink,
+    marginBottom: 6
+  },
+  preFlightItem: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: KokoColors.inkSecondary
   },
   promptText: {
     fontSize: 16,

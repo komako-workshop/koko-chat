@@ -17,27 +17,91 @@ import { Link, useLocalSearchParams, useNavigation, router } from "expo-router";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { MarkdownText } from "@/components/MarkdownText";
 import { useGatewayStore } from "@/state/gateway";
 import { useConversationStore, type ChatMessage, type ConversationMeta } from "@/state/conversations";
 import { MessageBlockView } from "@/runtime/messageBlocks";
 import { KokoColors, KokoRadius } from "@/theme/koko";
 
 const KOKO_CHAT_AVATAR = require("../../assets/brand/chat-avatar.png");
+const KOKO_STICKER_BLOCK_TYPE = "koko.sticker";
 
 function messageKey(message: ChatMessage): string {
   return `${message.role}:${message.runId ?? "local"}:${message.id}`;
 }
 
-function renderMessageText(message: ChatMessage, isAgent: boolean): React.ReactElement | null {
-  if (message.text.length === 0 && message.streaming !== true) return null;
+/**
+ * True when `current` is from the same agent "turn" as `previous`. We use it
+ * to collapse the avatar on follow-up bubbles, IM-style.
+ */
+function isAgentContinuation(previous: ChatMessage | undefined, current: ChatMessage): boolean {
+  if (current.role !== "agent") return false;
+  if (previous === undefined) return false;
+  if (previous.role !== "agent") return false;
+  // Same logical turn: same OpenClaw run, or both are local-only welcome /
+  // bootstrap messages without a runId.
+  return previous.runId === current.runId;
+}
+
+/**
+ * Per-mini-app empty-state hint shown before any messages exist. Keeping
+ * the strings here (rather than in each mini-app descriptor) avoids a
+ * descriptor field churn just for one piece of copy; we can promote this
+ * into the descriptor later if more mini-apps need their own onboarding.
+ */
+function getEmptyStateHint(mode: string, isConnected: boolean): string {
+  const offlineHint = "连接 OpenClaw 之后，这里就能开始对话。";
+  if (!isConnected) {
+    if (mode === "tavern") {
+      return [
+        "酒馆助手：告诉我想找什么样的角色扮演伙伴，",
+        "连上 OpenClaw 之后我会从角色卡库里推荐几张给你。"
+      ].join("\n");
+    }
+    if (mode === "tavern-roleplay") {
+      return "从酒馆的推荐卡进入这里开始角色扮演。" + "\n" + offlineHint;
+    }
+    return offlineHint;
+  }
+  if (mode === "tavern") {
+    return "告诉我想找什么样的角色扮演伙伴吧～";
+  }
+  if (mode === "tavern-roleplay") {
+    return "请从酒馆里选一张角色卡进入这里。";
+  }
+  return "跟 Koko 说点什么吧～";
+}
+
+function isStickerOnlyMessage(message: ChatMessage): boolean {
   return (
-    <Text style={[styles.messageText, isAgent ? styles.agentText : styles.userText]}>
-      {message.text}
-      {message.streaming === true ? (
-        <Text style={styles.streamingCursor}> ▋</Text>
-      ) : null}
-    </Text>
+    message.role === "agent" &&
+    message.text.length === 0 &&
+    message.error === undefined &&
+    message.blocks?.length === 1 &&
+    message.blocks[0]?.type === KOKO_STICKER_BLOCK_TYPE
   );
+}
+
+function renderAgentBody(message: ChatMessage): React.ReactElement | null {
+  const hasText = message.text.length > 0;
+  if (!hasText && message.streaming !== true) return null;
+  const trailing = message.streaming === true ? <StreamingCursor /> : undefined;
+  return (
+    <MarkdownText
+      text={message.text}
+      color={KokoColors.ink}
+      trailing={trailing}
+    />
+  );
+}
+
+function renderUserBody(message: ChatMessage): React.ReactElement | null {
+  if (message.text.length === 0) return null;
+  return <Text style={[styles.messageText, styles.userText]}>{message.text}</Text>;
+}
+
+function StreamingCursor(): React.ReactElement {
+  return <Text style={styles.streamingCursor}> ·</Text>;
 }
 
 function renderMessageBlocks(
@@ -58,31 +122,47 @@ function renderMessageBlocks(
   );
 }
 
-function renderMessage(
-  { item }: ListRenderItemInfo<ChatMessage>,
-  conversation: ConversationMeta
-): React.ReactElement {
+interface MessageRowProps {
+  item: ChatMessage;
+  conversation: ConversationMeta;
+  isContinuation: boolean;
+}
+
+function MessageRow({ item, conversation, isContinuation }: MessageRowProps): React.ReactElement {
   const isAgent = item.role === "agent";
   const hasBlocks = item.blocks !== undefined && item.blocks.length > 0;
+  const stickerOnly = isStickerOnlyMessage(item);
+  const body = isAgent ? renderAgentBody(item) : renderUserBody(item);
+
   const bubble = (
-    <View style={[styles.bubble, isAgent ? styles.agentBubble : styles.userBubble]}>
+    <View
+      style={[
+        styles.bubble,
+        isAgent ? styles.agentBubble : styles.userBubble,
+        stickerOnly && styles.stickerBubble
+      ]}
+    >
       {item.error !== undefined ? (
         <Text style={styles.errorText}>⚠️ {item.error}</Text>
       ) : hasBlocks ? (
         <View style={styles.blocksColumn}>
           {renderMessageBlocks(item, conversation)}
-          {item.text.length > 0 ? renderMessageText(item, isAgent) : null}
+          {body}
         </View>
       ) : (
-        renderMessageText(item, isAgent)
+        body
       )}
     </View>
   );
 
   if (isAgent) {
     return (
-      <View style={styles.agentRow}>
-        <Image source={KOKO_CHAT_AVATAR} style={styles.avatar} />
+      <View style={[styles.agentRow, isContinuation && styles.agentRowContinuation]}>
+        {isContinuation ? (
+          <View style={styles.avatarSpacer} />
+        ) : (
+          <Image source={KOKO_CHAT_AVATAR} style={styles.avatar} />
+        )}
         {bubble}
       </View>
     );
@@ -183,23 +263,8 @@ export default function ChatScreen() {
     );
   }
 
-  if (status !== "connected" && status !== "handshaking") {
-    return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.fallback}>
-          <Text style={styles.fallbackTitle}>未连接到 OpenClaw Gateway</Text>
-          <Text style={styles.fallbackSubtitle}>当前状态：{status}</Text>
-          <Link href="/pair" asChild>
-            <Pressable style={styles.fallbackButton}>
-              <Text style={styles.fallbackButtonText}>去配对</Text>
-            </Pressable>
-          </Link>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const sendDisabled = sending || draft.trim().length === 0;
+  const isConnected = status === "connected" || status === "handshaking";
+  const sendDisabled = sending || draft.trim().length === 0 || !isConnected;
 
   return (
     <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
@@ -208,11 +273,27 @@ export default function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={headerHeight}
       >
+        {!isConnected ? (
+          <Link href="/pair" asChild>
+            <Pressable accessibilityRole="button" style={styles.banner}>
+              <Text style={styles.bannerTitle}>未连接 OpenClaw</Text>
+              <Text style={styles.bannerHint}>
+                配对成功后，Koko 才能为你生成新回答 · 点这里去配对
+              </Text>
+            </Pressable>
+          </Link>
+        ) : null}
         <FlatList
           ref={listRef}
           data={messages}
           keyExtractor={messageKey}
-          renderItem={(item) => renderMessage(item, conversation)}
+          renderItem={({ item, index }: ListRenderItemInfo<ChatMessage>) => (
+            <MessageRow
+              item={item}
+              conversation={conversation}
+              isContinuation={isAgentContinuation(messages[index - 1], item)}
+            />
+          )}
           contentContainerStyle={styles.listContent}
           onContentSizeChange={() => {
             if (messages.length > 0) {
@@ -222,29 +303,32 @@ export default function ChatScreen() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>
-                跟 Koko 说点什么吧～
+                {getEmptyStateHint(conversation.mode, isConnected)}
               </Text>
             </View>
           }
         />
 
-        <View style={styles.inputBar}>
-          <TextInput
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="说点什么…"
-            placeholderTextColor={KokoColors.inkPlaceholder}
-            multiline
-            style={styles.input}
-          />
-          <Pressable
-            accessibilityRole="button"
-            disabled={sendDisabled}
-            onPress={() => void handleSend()}
-            style={[styles.sendButton, sendDisabled && styles.sendButtonDisabled]}
-          >
-            <Text style={styles.sendButtonText}>发送</Text>
-          </Pressable>
+        <View style={styles.inputDock}>
+          <View style={styles.inputBar}>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder={isConnected ? "说点什么…" : "连接 OpenClaw 后可以聊天"}
+              placeholderTextColor={KokoColors.inkPlaceholder}
+              editable={isConnected}
+              multiline
+              style={styles.input}
+            />
+            <Pressable
+              accessibilityRole="button"
+              disabled={sendDisabled}
+              onPress={() => void handleSend()}
+              style={[styles.sendButton, sendDisabled && styles.sendButtonDisabled]}
+            >
+              <Text style={styles.sendButtonText}>发送</Text>
+            </Pressable>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -267,25 +351,34 @@ const styles = StyleSheet.create({
   },
   agentRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "flex-start",
     alignSelf: "flex-start",
     maxWidth: "88%",
-    marginBottom: 4
+    marginTop: 12,
+    marginBottom: 2
+  },
+  agentRowContinuation: {
+    marginTop: 2
   },
   userRow: {
     alignSelf: "flex-end",
     maxWidth: "88%",
-    marginBottom: 4
+    marginTop: 12,
+    marginBottom: 2
   },
   avatar: {
     width: 36,
     height: 36,
     borderRadius: KokoRadius.pill,
     marginRight: 8,
+    marginTop: 2,
     backgroundColor: KokoColors.primarySoft
   },
+  avatarSpacer: {
+    width: 36,
+    marginRight: 8
+  },
   bubble: {
-    marginVertical: 4,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: KokoRadius.xl,
@@ -293,7 +386,15 @@ const styles = StyleSheet.create({
   },
   agentBubble: {
     backgroundColor: KokoColors.surface,
-    borderTopLeftRadius: 8
+    borderTopLeftRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: KokoColors.border
+  },
+  stickerBubble: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    backgroundColor: "transparent",
+    borderWidth: 0
   },
   userBubble: {
     backgroundColor: KokoColors.primary,
@@ -319,38 +420,48 @@ const styles = StyleSheet.create({
   blocksColumn: {
     gap: 8
   },
+  inputDock: {
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 6,
+    backgroundColor: KokoColors.bg
+  },
   inputBar: {
     flexDirection: "row",
     alignItems: "flex-end",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: KokoColors.surfaceMuted,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: KokoColors.hairline
+    backgroundColor: KokoColors.surface,
+    borderRadius: KokoRadius.pill,
+    paddingLeft: 6,
+    paddingRight: 6,
+    paddingVertical: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: KokoColors.hairline
   },
   input: {
     flex: 1,
     maxHeight: 120,
-    marginRight: 8,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 10,
-    borderRadius: KokoRadius.xl,
-    backgroundColor: KokoColors.surface,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
     fontSize: 16,
     color: KokoColors.ink
   },
   sendButton: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    minWidth: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: KokoRadius.pill,
-    backgroundColor: KokoColors.primary
+    backgroundColor: KokoColors.primary,
+    marginLeft: 4
   },
   sendButtonDisabled: {
     backgroundColor: KokoColors.primarySoft
   },
   sendButtonText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
     color: "#FFFFFF"
   },
@@ -362,6 +473,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: KokoColors.inkMuted
   },
+  banner: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: KokoRadius.lg,
+    backgroundColor: KokoColors.primarySoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: KokoColors.border
+  },
+  bannerTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: KokoColors.ink
+  },
+  bannerHint: {
+    marginTop: 2,
+    fontSize: 12,
+    color: KokoColors.inkSecondary
+  },
   fallback: {
     flex: 1,
     alignItems: "center",
@@ -372,11 +503,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: KokoColors.ink,
     textAlign: "center"
-  },
-  fallbackSubtitle: {
-    marginTop: 6,
-    fontSize: 13,
-    color: KokoColors.inkSecondary
   },
   fallbackButton: {
     marginTop: 20,

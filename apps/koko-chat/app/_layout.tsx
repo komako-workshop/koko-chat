@@ -49,7 +49,10 @@ export default function RootLayout() {
                   headerShown: true,
                   headerStyle: { backgroundColor: KokoColors.bg },
                   headerTitleStyle: { color: KokoColors.ink, fontWeight: "600" },
+                  headerTitleAlign: "center",
                   headerTintColor: KokoColors.primaryDeep,
+                  headerBackTitle: "",
+                  headerBackButtonDisplayMode: "minimal",
                   headerShadowVisible: false,
                   contentStyle: { backgroundColor: KokoColors.bg }
                 }}
