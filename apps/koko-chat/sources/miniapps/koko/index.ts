@@ -10,6 +10,11 @@ import {
   buildSessionKey,
   useConversationStore
 } from "@/state/conversations";
+import {
+  KOKO_FIRST_TURN_INSTRUCTION,
+  KOKO_PERSONA_DOC,
+  KOKO_TURN_REMINDER
+} from "./persona";
 
 /**
  * Koko — KokoChat's built-in home assistant mini-app.
@@ -23,8 +28,8 @@ import {
  * Key contracts:
  * - Singleton session: one `koko/home` conversation per user, opened by
  *   `openKokoHome()` (pinned row tap in the chat list).
- * - First user turn injects a hidden system prompt via the outbound
- *   builder. Subsequent turns are passthrough so OpenClaw owns context.
+ * - First user turn loads Koko's persona document. Later turns include a
+ *   short reminder so long conversations do not drift out of character.
  * - A welcome agent message is seeded into the local message cache on
  *   first creation so the conversation never looks empty.
  */
@@ -33,31 +38,6 @@ const kokoAvatar = require("../../../assets/brand/chat-avatar.png") as ImageSour
 
 const MINI_APP_ID = "koko";
 const HOME_SCOPE = "home";
-
-/**
- * Hidden role setup sent to OpenClaw on the first user message of a
- * session. OpenClaw stores it as part of the session transcript, so
- * subsequent turns rely on the model's context window rather than
- * re-sending the prompt every time.
- */
-const KOKO_SYSTEM_PROMPT = `你是 Koko，一只圆滚滚的暖橙小鸟 AI 助手 🐤，住在用户的手机里。
-
-调性：
-- 聪明、可靠、会做事；同时温暖、轻松、会撒娇
-- 软糯但不傻，精准但不冰冷
-- 像用户的小搭子，不像装出来的客服
-
-回答规则：
-- 中文为主（用户用其他语言时跟着切）
-- 句子短、清楚、有节奏感。能两句说完别说三句
-- 适度使用 emoji 或符号（平均一段最多 1–2 个，别堆）
-- 用户拜托做事时：先一句简短确认（"好嘞～""收到～"），再开始做
-- 不知道就直说不知道，别瞎编、别糊弄
-- 不要每次都自报"我是 Koko"——只有用户问起或第一次见面时才说
-
-边界：
-- 当用户问"你能做什么"，用一句话总结即可，不要列长清单
-- 不主动推销，不要写企宣口吻`;
 
 /** Local-only welcome message shown when the home conversation is first created. */
 const KOKO_WELCOME_TEXT = `嘿，你好呀～ ✨
@@ -75,11 +55,35 @@ const kokoOutboundBuilder: OutboundMessageBuilder = async ({
   if (isFirstUserTurn) {
     return {
       visibleText,
-      gatewayText: `${KOKO_SYSTEM_PROMPT}\n\n${visibleText}`
+      gatewayText: buildFirstTurnGatewayText(visibleText)
     };
   }
-  return { visibleText, gatewayText: visibleText };
+  return { visibleText, gatewayText: buildReminderGatewayText(visibleText) };
 };
+
+function buildFirstTurnGatewayText(userText: string): string {
+  return [
+    "<koko_persona>",
+    KOKO_PERSONA_DOC,
+    "</koko_persona>",
+    "",
+    "[系统注入]",
+    KOKO_FIRST_TURN_INSTRUCTION,
+    "",
+    "[用户消息]",
+    userText
+  ].join("\n");
+}
+
+function buildReminderGatewayText(userText: string): string {
+  return [
+    "[系统提醒]",
+    KOKO_TURN_REMINDER,
+    "",
+    "[用户消息]",
+    userText
+  ].join("\n");
+}
 
 export function registerKokoMiniApp(): void {
   if (registered) return;
