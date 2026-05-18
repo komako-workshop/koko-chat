@@ -8,6 +8,10 @@ import {
 import { inferOnce } from "@/runtime/openclaw";
 import { useConversationStore } from "@/state/conversations";
 
+import { resolvePersonaName } from "@/state/tavernPersona";
+
+import { applyTavernMacros } from "../../tavern/mobile/macros";
+
 /**
  * Tavern Roleplay mini-app: 用一张 Character Tavern 角色卡开启一场长会话。
  *
@@ -220,20 +224,41 @@ async function bootstrapInBackground(
   const store = useConversationStore.getState();
   try {
     const card = await fetchFullCard(summary.path);
-    STORAGE.setJson(`card.${summary.path}`, card);
 
     const characterName = card.inChatName || card.name || summary.nameZh || summary.name;
-    const localizedFirstMes = await translateFirstMes(card, characterName);
+    // SillyTavern macros (`{{user}}` / `{{char}}`) live throughout the card
+    // body. Substitute them once here using the persona name the user set
+    // in Tavern settings, so neither the agent nor the localised opening
+    // line ever sees raw placeholders. We use the "prompt" form of the
+    // persona name ("用户") for the card payload the agent will read, and
+    // the user-facing form ("你") for the message rendered in chat.
+    const promptCtx = { user: resolvePersonaName(true), char: characterName };
+    const uiCtx = { user: resolvePersonaName(false), char: characterName };
+    const expandedCard: typeof card = {
+      ...card,
+      data: {
+        ...card.data,
+        description: applyTavernMacros(card.data.description, promptCtx),
+        personality: applyTavernMacros(card.data.personality, promptCtx),
+        scenario: applyTavernMacros(card.data.scenario, promptCtx),
+        first_mes: applyTavernMacros(card.data.first_mes, promptCtx),
+        mes_example: applyTavernMacros(card.data.mes_example, promptCtx)
+      }
+    };
+    STORAGE.setJson(`card.${summary.path}`, expandedCard);
 
-    if (localizedFirstMes.trim().length > 0) {
+    const localizedFirstMes = await translateFirstMes(expandedCard, characterName);
+    const renderedFirstMes = applyTavernMacros(localizedFirstMes, uiCtx);
+
+    if (renderedFirstMes.trim().length > 0) {
       store.setMessages(conversationId, () => [
         {
           id: `tavern-roleplay-firstmes-${conversationId}`,
           role: "agent",
-          text: localizedFirstMes
+          text: renderedFirstMes
         }
       ]);
-      store.touch(conversationId, localizedFirstMes.slice(0, 120));
+      store.touch(conversationId, renderedFirstMes.slice(0, 120));
     }
 
     store.setBootstrap(conversationId, { status: "ready" });

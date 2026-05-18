@@ -151,7 +151,11 @@ interface BlockViewProps {
 }
 
 function BlockView({ block, color, trailing, isFirst, isLast }: BlockViewProps): React.ReactElement {
-  const topGap = isFirst ? 0 : 6;
+  // Spacing between paragraphs. Set generously because the chat surface
+  // also renders long-form roleplay first_mes blocks where 5+ paragraphs
+  // run back to back; tighter spacing leaves the text feeling like one
+  // dense slab with no place for the eye to rest.
+  const topGap = isFirst ? 0 : 14;
 
   if (block.type === "paragraph") {
     return (
@@ -338,13 +342,22 @@ const styles = StyleSheet.create({
   },
   body: {
     fontSize: 16,
-    lineHeight: 24
+    // 26 instead of 24 — the extra 2px breathing room is the difference
+    // between "comfortable" and "wall of text" once a paragraph runs
+    // past 4-5 lines in Chinese.
+    lineHeight: 26
   },
   bold: {
     fontWeight: "700"
   },
   italic: {
-    fontStyle: "italic"
+    fontStyle: "italic",
+    // SillyTavern roleplay convention: `*...*` wraps scene description /
+    // action beats (the prose connective tissue around dialogue). True
+    // italic typography is invisible in most Chinese fonts, so we lean
+    // on a softer color instead — action lines step back, the actual
+    // dialogue lines stay at full ink color and read forward.
+    color: KokoColors.inkSecondary
   },
   inlineCode: {
     fontFamily: "Menlo",

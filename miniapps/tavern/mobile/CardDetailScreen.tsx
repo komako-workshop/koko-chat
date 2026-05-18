@@ -8,21 +8,32 @@
  * as the URL-encoded `path`). We look it up from `browse-data.json`
  * synchronously — no network calls at all.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View
 } from "react-native";
 
 import { CachedImage } from "@/components/CachedImage";
+import { openTavernSettings } from "@/runtime/navigation";
+import {
+  resolvePersonaName,
+  useTavernPersonaStore
+} from "@/state/tavernPersona";
 import { KokoColors, KokoRadius } from "@/theme/koko";
 
 import { startTavernRoleplaySession } from "../../tavern-roleplay/mobile";
 import browseData from "./assets/browse-data.json";
+import { applyTavernMacros } from "./macros";
 
 interface BrowseCard {
   path: string;
@@ -83,33 +94,93 @@ export function TavernCardDetailScreen({ path }: { path: string }): React.ReactE
   const tagline =
     (card.taglineZh && card.taglineZh.length > 0 && card.taglineZh) || card.tagline;
   const tags = card.tagsZh && card.tagsZh.length > 0 ? card.tagsZh : card.tags;
-  const description = (card.descriptionZh && card.descriptionZh.length > 0
-    ? card.descriptionZh
-    : card.description) ?? "";
-  const firstMessagePreview = (card.firstMessageZh && card.firstMessageZh.length > 0
-    ? card.firstMessageZh
-    : card.firstMessage) ?? "";
+
+  // Subscribe to the persona name so the preview re-renders when the user
+  // edits it in /tavern/settings without leaving this card detail page.
+  const personaName = useTavernPersonaStore((s) => s.name);
+  const personaSetName = useTavernPersonaStore((s) => s.setName);
+  const hasPersonaName = personaName.trim().length > 0;
+  // For UI previews we want a friendly fallback ("你" if persona is unset);
+  // for the agent prompt we'd rather use "用户" so the model handles it as
+  // a definite noun. The resolver knows the difference.
+  const macroCtx = useMemo(
+    () => ({ user: resolvePersonaName(false), char: displayName }),
+    [personaName, displayName]
+  );
+
+  const description = useMemo(() => {
+    const raw = (card.descriptionZh && card.descriptionZh.length > 0
+      ? card.descriptionZh
+      : card.description) ?? "";
+    return applyTavernMacros(raw, macroCtx);
+  }, [card.description, card.descriptionZh, macroCtx]);
+  const firstMessagePreview = useMemo(() => {
+    const raw = (card.firstMessageZh && card.firstMessageZh.length > 0
+      ? card.firstMessageZh
+      : card.firstMessage) ?? "";
+    return applyTavernMacros(raw, macroCtx);
+  }, [card.firstMessage, card.firstMessageZh, macroCtx]);
+
+  // First-time prompt: if the user hasn't named their persona yet, we
+  // surface a small modal before creating the conversation. They can
+  // either name themselves on the spot or skip (defaults to "你").
+  const [namePromptOpen, setNamePromptOpen] = useState(false);
+  const [draftName, setDraftName] = useState("");
+
+  const launchSession = useCallback(() => {
+    // Snapshot the persona at session-start time. The roleplay screen
+    // doesn't re-apply macros once the conversation is live, so a later
+    // rename only affects future sessions — matches SillyTavern behaviour.
+    const ctx = { user: resolvePersonaName(false), char: displayName };
+    const promptCtx = { user: resolvePersonaName(true), char: displayName };
+    startTavernRoleplaySession({
+      path: card!.path,
+      pageUrl: card!.pageUrl,
+      imageUrl: card!.imageUrl,
+      name: card!.name,
+      nameZh: displayName,
+      tagline: card!.tagline,
+      taglineZh: tagline,
+      prefetched: {
+        description: applyTavernMacros(card!.description ?? "", promptCtx),
+        personality: applyTavernMacros(card!.personality ?? "", promptCtx),
+        scenario: applyTavernMacros(card!.scenario ?? "", promptCtx),
+        firstMessage: applyTavernMacros(card!.firstMessage ?? "", promptCtx),
+        firstMessageZh: applyTavernMacros(firstMessagePreview, ctx)
+      }
+    });
+  }, [card, displayName, firstMessagePreview, tagline]);
 
   function handleStart(): void {
     if (busy) return;
+    if (!hasPersonaName) {
+      setDraftName("");
+      setNamePromptOpen(true);
+      return;
+    }
     setBusy(true);
     try {
-      startTavernRoleplaySession({
-        path: card!.path,
-        pageUrl: card!.pageUrl,
-        imageUrl: card!.imageUrl,
-        name: card!.name,
-        nameZh: displayName,
-        tagline: card!.tagline,
-        taglineZh: tagline,
-        prefetched: {
-          description: card!.description ?? "",
-          personality: card!.personality ?? "",
-          scenario: card!.scenario ?? "",
-          firstMessage: card!.firstMessage ?? "",
-          firstMessageZh: firstMessagePreview
-        }
-      });
+      launchSession();
+    } catch (error) {
+      Alert.alert("无法打开角色", error instanceof Error ? error.message : String(error));
+    } finally {
+      setTimeout(() => setBusy(false), 0);
+    }
+  }
+
+  function handleNamePromptConfirm(skip: boolean): void {
+    Keyboard.dismiss();
+    const trimmed = draftName.trim();
+    if (!skip && trimmed.length === 0) {
+      // Empty + confirm = treat as skip.
+      setNamePromptOpen(false);
+      return;
+    }
+    if (!skip) personaSetName(trimmed);
+    setNamePromptOpen(false);
+    setBusy(true);
+    try {
+      launchSession();
     } catch (error) {
       Alert.alert("无法打开角色", error instanceof Error ? error.message : String(error));
     } finally {
@@ -188,6 +259,76 @@ export function TavernCardDetailScreen({ path }: { path: string }): React.ReactE
           <Text style={styles.ctaButtonText}>开始聊天</Text>
         </Pressable>
       </View>
+
+      <Modal
+        visible={namePromptOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setNamePromptOpen(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setNamePromptOpen(false)}
+            accessibilityLabel="关闭"
+          />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>给自己起个名字吧</Text>
+            <Text style={styles.modalHint}>
+              角色会用这个名字称呼你。也可以跳过，默认叫「你」。
+            </Text>
+            <TextInput
+              value={draftName}
+              onChangeText={setDraftName}
+              placeholder="例如：阿仁"
+              placeholderTextColor={KokoColors.inkPlaceholder}
+              maxLength={32}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={() => handleNamePromptConfirm(false)}
+              style={styles.modalInput}
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => handleNamePromptConfirm(true)}
+                style={({ pressed }) => [
+                  styles.modalSecondary,
+                  pressed && styles.modalSecondaryPressed
+                ]}
+              >
+                <Text style={styles.modalSecondaryText}>跳过</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => handleNamePromptConfirm(false)}
+                disabled={draftName.trim().length === 0}
+                style={({ pressed }) => [
+                  styles.modalPrimary,
+                  draftName.trim().length === 0 && styles.modalPrimaryDisabled,
+                  pressed && draftName.trim().length > 0 && styles.modalPrimaryPressed
+                ]}
+              >
+                <Text style={styles.modalPrimaryText}>开始聊天</Text>
+              </Pressable>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setNamePromptOpen(false);
+                openTavernSettings();
+              }}
+              hitSlop={8}
+              style={({ pressed }) => [styles.modalLink, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={styles.modalLinkText}>去设置页详细配置 →</Text>
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -327,5 +468,85 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
     letterSpacing: 1
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    paddingHorizontal: 24
+  },
+  modalCard: {
+    backgroundColor: KokoColors.bg,
+    borderRadius: KokoRadius.xl,
+    padding: 20,
+    gap: 12
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: KokoColors.ink
+  },
+  modalHint: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: KokoColors.inkSecondary
+  },
+  modalInput: {
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: KokoRadius.lg,
+    backgroundColor: KokoColors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: KokoColors.border,
+    fontSize: 16,
+    color: KokoColors.ink
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 4
+  },
+  modalSecondary: {
+    flex: 1,
+    height: 44,
+    borderRadius: KokoRadius.pill,
+    backgroundColor: KokoColors.surfaceSoft,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  modalSecondaryPressed: {
+    opacity: 0.7
+  },
+  modalSecondaryText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: KokoColors.inkSecondary
+  },
+  modalPrimary: {
+    flex: 1,
+    height: 44,
+    borderRadius: KokoRadius.pill,
+    backgroundColor: KokoColors.primary,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  modalPrimaryDisabled: {
+    backgroundColor: KokoColors.primaryWash
+  },
+  modalPrimaryPressed: {
+    backgroundColor: KokoColors.primaryDeep
+  },
+  modalPrimaryText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF"
+  },
+  modalLink: {
+    alignSelf: "center",
+    paddingVertical: 6
+  },
+  modalLinkText: {
+    fontSize: 12,
+    color: KokoColors.primaryDeep
   }
 });

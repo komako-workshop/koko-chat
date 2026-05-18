@@ -11,6 +11,7 @@ import tw from "twrnc";
 
 import { CachedImage } from "@/components/CachedImage";
 import type { BlockRenderer } from "@/runtime/messageBlocks";
+
 import { type TavernRecommendationCard } from "./parseRecommendations";
 import { startTavernRoleplaySession } from "../../tavern-roleplay/mobile";
 
@@ -54,12 +55,13 @@ function RecommendationRow({ card }: { card: TavernRecommendationCard }): React.
 
   function handlePress(): void {
     if (busy) return;
-    // The press is a fire-and-forget: startTavernRoleplaySession creates the
-    // conversation + navigates synchronously, then kicks off the real fetch
-    // in the background. The chat page itself shows a loading banner until
-    // the card + first message are ready.
+    // The press is a fire-and-forget: startTavernRoleplaySession creates
+    // the conversation + navigates synchronously, then kicks off the
+    // remote fetch + LLM translate in the background. The chat page
+    // itself shows a loading banner until the card + first_mes are
+    // ready.
     //
-    // We still gate with `busy` for one frame so a double-tap can't trigger
+    // We gate with `busy` for one frame so a double-tap can't trigger
     // two duplicate conversations.
     setBusy(true);
     try {

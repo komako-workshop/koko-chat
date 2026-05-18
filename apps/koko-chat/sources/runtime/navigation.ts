@@ -41,3 +41,11 @@ export function openTavernCardDetail(path: string): void {
   if (segments.length === 0) return;
   router.push({ pathname: "/tavern/card/[...path]", params: { path: segments } });
 }
+
+/**
+ * Push the Tavern settings screen. Used by both the browse-page header
+ * gear and the first-time persona prompt in CardDetailScreen.
+ */
+export function openTavernSettings(): void {
+  router.push("/tavern/settings");
+}

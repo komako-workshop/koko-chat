@@ -15,6 +15,7 @@ import { seedInitialKokoConversation } from "@/miniapps/koko";
 import { useConversationStore } from "@/state/conversations";
 import { useGatewayStore } from "@/state/gateway";
 import { KokoColors } from "@/theme/koko";
+import { useTavernPersonaStore } from "@/state/tavernPersona";
 
 // Register mini-app block renderers and outbound builders once at module load,
 // before any conversation can render. Idempotent.
@@ -31,6 +32,10 @@ export default function RootLayout() {
       // then drop a pinned Koko conversation in for brand-new installs so
       // the chat list isn't empty on first launch.
       useConversationStore.getState().rehydrate();
+      // Tavern persona (user's roleplay name) is read by detail page +
+      // first_mes substitution + agent bootstrap prompt; load it before
+      // any Tavern screen can mount.
+      useTavernPersonaStore.getState().rehydrate();
       seedInitialKokoConversation();
       setHydrated(true);
     });
@@ -67,6 +72,7 @@ export default function RootLayout() {
                 <Stack.Screen name="settings" options={{ title: "设置" }} />
                 <Stack.Screen name="tavern/browse" options={{ title: "角色广场" }} />
                 <Stack.Screen name="tavern/card/[...path]" options={{ title: "角色详情" }} />
+                <Stack.Screen name="tavern/settings" options={{ title: "酒馆设置" }} />
                 <Stack.Screen
                   name="dev/runtime-selftest"
                   options={{ title: "Runtime 自检" }}

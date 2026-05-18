@@ -468,11 +468,16 @@ export default function ChatScreen() {
         keyboardVerticalOffset={headerHeight}
       >
         {isBootstrapping ? (
-          <View style={styles.banner}>
-            <Text style={styles.bannerTitle}>正在加载角色卡</Text>
-            <Text style={styles.bannerHint}>
-              {bootstrap?.hint ?? "正在拉取角色信息，准备好就可以开始聊天。"}
-            </Text>
+          <View style={[styles.banner, styles.bannerRow]}>
+            <View style={styles.bannerPulseSlot}>
+              <StreamingPulse />
+            </View>
+            <View style={styles.bannerTextColumn}>
+              <Text style={styles.bannerTitle}>正在加载角色卡</Text>
+              <Text style={styles.bannerHint}>
+                {bootstrap?.hint ?? "正在拉取角色信息，准备好就可以开始聊天。"}
+              </Text>
+            </View>
           </View>
         ) : bootstrapError !== null ? (
           <View style={styles.banner}>
@@ -515,11 +520,20 @@ export default function ChatScreen() {
             handleContentSizeChange(height);
           }}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>
-                {getEmptyStateHint(conversation.mode, isConnected)}
-              </Text>
-            </View>
+            // While the conversation is still bootstrapping the top banner
+            // already explains what's happening. The "请从酒馆里选一张角色卡
+            // 进入这里" prompt is only meaningful when the user has somehow
+            // landed on an empty tavern-roleplay session that's *not* loading
+            // (a true edge case) — hide it during loading so the screen
+            // doesn't tell the user to "pick a card" from inside a card they
+            // already picked.
+            isBootstrapping || bootstrapError !== null ? null : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>
+                  {getEmptyStateHint(conversation.mode, isConnected)}
+                </Text>
+              </View>
+            )
           }
         />
 
@@ -745,6 +759,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: KokoColors.inkSecondary
+  },
+  bannerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10
+  },
+  bannerPulseSlot: {
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  bannerTextColumn: {
+    flex: 1
   },
   fallback: {
     flex: 1,
