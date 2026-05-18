@@ -117,6 +117,11 @@ export default function MeTabScreen(): React.ReactElement {
             icon="information-circle-outline"
             label="关于 KokoChat"
             value={`v${appVersion}`}
+            // In production "关于" is the only row in this group, so it
+            // owns the `last` flag (no trailing separator below it). In
+            // dev the runtime self-test row sits below it and takes
+            // `last` instead.
+            last={!__DEV__}
             onPress={() => {
               Alert.alert(
                 "KokoChat",
@@ -131,9 +136,16 @@ export default function MeTabScreen(): React.ReactElement {
               );
             }}
           />
-          <Link href="/dev/runtime-selftest" asChild>
-            <Row icon="hammer-outline" label="OpenClaw Runtime 自检" chevron last />
-          </Link>
+          {/* Dev-only entry into the runtime self-test page. Hidden from
+              production builds (TestFlight / App Store) so users never see
+              the developer instrumentation surface. The route file itself
+              still ships in the bundle but, without an entry point, is
+              effectively unreachable. */}
+          {__DEV__ ? (
+            <Link href="/dev/runtime-selftest" asChild>
+              <Row icon="hammer-outline" label="OpenClaw Runtime 自检" chevron last />
+            </Link>
+          ) : null}
         </Group>
 
         {/* Danger zone */}
