@@ -77,6 +77,23 @@ export interface ConversationListSnapshot {
   avatarUri?: string;
 }
 
+export type ConversationBootstrapStatus = "loading" | "ready" | "error";
+
+/**
+ * Lightweight per-conversation bootstrap state. Mini-apps set this when a
+ * conversation needs background work to finish before the user can chat
+ * (e.g. tavern-roleplay fetching a Character Tavern card + translating
+ * the opening line). The chat surface reads it to show a status banner
+ * and disable input while the work is in flight.
+ */
+export interface ConversationBootstrap {
+  status: ConversationBootstrapStatus;
+  /** Friendly Chinese hint shown while loading. */
+  hint?: string;
+  /** Human-readable error string when status === "error". */
+  error?: string;
+}
+
 export interface ConversationMeta {
   id: string;
   mode: MiniAppId;
@@ -86,6 +103,13 @@ export interface ConversationMeta {
   updatedAt: number;
   lastPreview?: string;
   archived?: boolean;
+  /** Sticky-to-top flag. Pinned rows sort above all unpinned rows. */
+  pinned?: boolean;
+  /**
+   * Timestamp the user pinned this conversation. Used to order multiple
+   * pinned rows (most recently pinned shows first).
+   */
+  pinnedAt?: number;
   /**
    * Conversation this one was spawned from, when applicable. Parallel
    * siblings, not parent-child UI.
@@ -95,6 +119,8 @@ export interface ConversationMeta {
   artifactRef?: ArtifactRef;
   /** Denormalized data for fast list rendering. */
   listSnapshot?: ConversationListSnapshot;
+  /** Bootstrapping state, when a mini-app needs to finish async setup. */
+  bootstrap?: ConversationBootstrap;
 }
 
 export interface ChatMessage {
@@ -131,12 +157,22 @@ interface ConversationState {
   clearActive(): void;
   rename(conversationId: string, title: string): void;
   archive(conversationId: string): void;
+  togglePin(conversationId: string, pinned?: boolean): void;
   getMessages(conversationId: string): ChatMessage[];
   setMessages(
     conversationId: string,
     updater: (prev: ChatMessage[]) => ChatMessage[]
   ): void;
   touch(conversationId: string, preview?: string): void;
+  /**
+   * Set or clear the bootstrap state for a conversation. Pass `null` to
+   * remove the field entirely (treats the conversation as "no bootstrap
+   * needed"). Updates persist to MMKV so a reload can see the state.
+   */
+  setBootstrap(
+    conversationId: string,
+    bootstrap: ConversationBootstrap | null
+  ): void;
 }
 
 /**
@@ -157,6 +193,7 @@ export interface CreateConversationInput {
   parentConversationId?: string;
   artifactRef?: ArtifactRef;
   listSnapshot?: ConversationListSnapshot;
+  bootstrap?: ConversationBootstrap;
 }
 
 const INDEX_KEY = "koko.conversations.index.v1";
@@ -269,7 +306,20 @@ function deleteMeta(conversationId: string): void {
   mmkv.delete(`${MESSAGES_PREFIX}${conversationId}`);
 }
 
-function compareByUpdatedDesc(a: ConversationMeta, b: ConversationMeta): number {
+/**
+ * Sort order for the chat list:
+ *   1. Pinned conversations first (most recently pinned on top).
+ *   2. Then unpinned conversations by most recent activity.
+ */
+function compareConversationsForList(a: ConversationMeta, b: ConversationMeta): number {
+  const aPinned = a.pinned === true;
+  const bPinned = b.pinned === true;
+  if (aPinned !== bPinned) return aPinned ? -1 : 1;
+  if (aPinned && bPinned) {
+    const aPinnedAt = a.pinnedAt ?? 0;
+    const bPinnedAt = b.pinnedAt ?? 0;
+    if (aPinnedAt !== bPinnedAt) return bPinnedAt - aPinnedAt;
+  }
   return b.updatedAt - a.updatedAt;
 }
 
@@ -332,11 +382,27 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     for (const id of ids) {
       const meta = readMeta(id);
       if (meta !== null && meta.archived !== true) {
-        metas.push(meta);
+        // Any conversation that was mid-bootstrap when the app died last
+        // session can't finish on its own — flip it to "error" so the chat
+        // UI shows a recoverable banner instead of an infinite spinner.
+        if (meta.bootstrap?.status === "loading") {
+          const swept: ConversationMeta = {
+            ...meta,
+            bootstrap: {
+              status: "error",
+              error: "加载未完成，请重新打开角色卡。"
+            },
+            updatedAt: now()
+          };
+          writeMeta(swept);
+          metas.push(swept);
+        } else {
+          metas.push(meta);
+        }
         messages[id] = readMessages(id);
       }
     }
-    metas.sort(compareByUpdatedDesc);
+    metas.sort(compareConversationsForList);
     set({ list: metas, messages });
   },
 
@@ -360,14 +426,15 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         ? { parentConversationId: input.parentConversationId }
         : {}),
       ...(input?.artifactRef !== undefined ? { artifactRef: input.artifactRef } : {}),
-      ...(input?.listSnapshot !== undefined ? { listSnapshot: input.listSnapshot } : {})
+      ...(input?.listSnapshot !== undefined ? { listSnapshot: input.listSnapshot } : {}),
+      ...(input?.bootstrap !== undefined ? { bootstrap: input.bootstrap } : {})
     };
     writeMeta(meta);
     writeMessages(id, []);
     const ids = [id, ...readIndex().filter((existing) => existing !== id)];
     writeIndex(ids);
     set((state) => ({
-      list: [meta, ...state.list.filter((m) => m.id !== id)],
+      list: [meta, ...state.list.filter((m) => m.id !== id)].sort(compareConversationsForList),
       activeId: id,
       messages: { ...state.messages, [id]: [] }
     }));
@@ -401,7 +468,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     };
     writeMeta(updated);
     set((state) => ({
-      list: [updated, ...state.list.filter((m) => m.id !== conversationId)].sort(compareByUpdatedDesc)
+      list: [updated, ...state.list.filter((m) => m.id !== conversationId)].sort(compareConversationsForList)
     }));
   },
 
@@ -422,6 +489,29 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     // Intentionally do not call deleteMeta here — archived meta stays on disk
     // so a future "restore archived" feature can bring it back. Physical
     // deletion would be a separate explicit action.
+  },
+
+  togglePin(conversationId, pinned) {
+    const existing = get().list.find((m) => m.id === conversationId);
+    if (existing === undefined) return;
+    const nextPinned = pinned ?? existing.pinned !== true;
+    if (nextPinned === (existing.pinned === true)) return;
+    const updated: ConversationMeta = nextPinned
+      ? { ...existing, pinned: true, pinnedAt: now() }
+      : (() => {
+          // Drop the timestamp when unpinning so re-pinning later starts a
+          // fresh "recently pinned" entry.
+          const { pinned: _pinned, pinnedAt: _pinnedAt, ...rest } = existing;
+          void _pinned;
+          void _pinnedAt;
+          return { ...rest };
+        })();
+    writeMeta(updated);
+    set((state) => ({
+      list: state.list
+        .map((m) => (m.id === conversationId ? updated : m))
+        .sort(compareConversationsForList)
+    }));
   },
 
   getMessages(conversationId) {
@@ -450,7 +540,22 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     };
     writeMeta(updated);
     set((state) => ({
-      list: [updated, ...state.list.filter((m) => m.id !== conversationId)].sort(compareByUpdatedDesc)
+      list: [updated, ...state.list.filter((m) => m.id !== conversationId)].sort(compareConversationsForList)
+    }));
+  },
+
+  setBootstrap(conversationId, bootstrap) {
+    const existing = get().list.find((m) => m.id === conversationId);
+    if (existing === undefined) return;
+    // Strip the existing bootstrap field; either add the new one or drop it.
+    const { bootstrap: _omit, ...rest } = existing;
+    const updated: ConversationMeta =
+      bootstrap === null
+        ? { ...rest, updatedAt: now() }
+        : { ...rest, bootstrap, updatedAt: now() };
+    writeMeta(updated);
+    set((state) => ({
+      list: state.list.map((m) => (m.id === conversationId ? updated : m))
     }));
   }
 }));

@@ -79,7 +79,7 @@ Required:
 - `query`: short English keywords distilled from the user's request. Always
   English; the upstream search index does not understand Chinese well. If the
   user wrote Chinese, translate intent into English keywords for `query`. Keep
-  Chinese only for the `reason` you write back.
+  Chinese only for the prose you write back to the user.
 
 Optional:
 
@@ -140,51 +140,97 @@ searches per turn.
 
 ## Output Contract
 
-After your selection, write a short Chinese natural-language opener (1–2
-sentences, friendly), then **exactly one** fenced block whose tag is
-`koko.tavern.recommendations`.
+Your reply this turn is **exactly one** fenced block whose tag is
+`koko.tavern.recommendations`. KokoChat reads the JSON inside that block and
+renders it as a stream of IM-style chat bubbles — short prose bubbles
+interleaved with character-card bubbles. There must be no prose outside the
+fenced block; the KokoChat client only renders content found inside it.
 
-The block body is a single JSON object:
+The block body is a single JSON object with an ordered `items` array:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "query": "the user's original request, verbatim",
-  "cards": [
+  "items": [
+    { "kind": "text", "text": "短短的开场白" },
+    { "kind": "text", "text": "对这张卡的口语化介绍，一两句话" },
     {
-      "pageUrl": "https://character-tavern.com/character/<author>/<slug>",
-      "imageUrl": "https://cards.character-tavern.com/<author>/<slug>.png",
-      "name": "Original English Name",
-      "nameZh": "中文译名",
-      "tagline": "Original English Tagline",
-      "taglineZh": "一句话中文场景",
-      "tags": ["original", "english", "tags"],
-      "matchTags": ["最多 4 个中文 chip"],
-      "reason": "一两句中文，说清楚为什么把这张卡推给这个用户",
-      "safety": "sfw"
-    }
+      "kind": "card",
+      "card": {
+        "pageUrl": "https://character-tavern.com/character/<author>/<slug>",
+        "imageUrl": "https://cards.character-tavern.com/<author>/<slug>.png",
+        "name": "Original English Name",
+        "nameZh": "中文译名",
+        "tagline": "Original English Tagline",
+        "taglineZh": "一句话中文场景",
+        "tags": ["original", "english", "tags"],
+        "matchTags": ["最多 4 个中文 chip"],
+        "safety": "sfw"
+      }
+    },
+    { "kind": "text", "text": "对第二张卡的口语化介绍" },
+    { "kind": "card", "card": { "...": "..." } },
+    { "kind": "text", "text": "可选的收尾，比如反问用户喜欢哪个" }
   ]
 }
 ```
 
-Rules:
+### `items` rules
 
-- `cards` length is 3–5.
-- Every card field above is required.
-- `pageUrl` and `imageUrl` are copied **verbatim** from tool output. Do not
-  edit them, do not invent slugs.
+- Every recommendation turn contains 3–5 cards. So `items` has between 3 and 5
+  entries of `kind: "card"`, in the order you'd recommend them.
+- Each `kind: "card"` entry **must** be preceded by at least one `kind: "text"`
+  entry whose prose introduces that specific card (one or two short sentences,
+  口语化中文, like you're DM-ing a friend recommending a character).
+- The very first entry should be a brief `kind: "text"` opener (a sentence
+  or two summarizing the batch). You may add a final `kind: "text"` after the
+  last card to invite a follow-up. Both are optional but recommended.
+- Each `kind: "text"` entry is a *separate chat bubble*. Do not stuff multiple
+  paragraphs into one text. Keep them tight — 1–2 sentences each, ideally
+  under 50 Chinese characters.
+- No `kind` other than `"text"` and `"card"` is allowed in v2.
+
+### `card` field rules (inside each `kind: "card"` entry)
+
+- `pageUrl` and `imageUrl` are copied **verbatim** from the tool output. Do
+  not edit them, do not invent slugs.
 - `name`, `tagline`, `tags` are copied from tool output.
 - `nameZh` and `taglineZh` are your translations. Keep them short.
 - `matchTags` are 中文 chips. Up to 4. They describe why this card matches the
   user's intent — e.g. `侦探`, `冷静`, `现代都市`, `推理`. They are **your**
   labels, not the upstream tags.
-- `reason` is 1–2 sentences in Chinese explaining the pick. Specific beats
-  generic ("案件氛围克制，适合慢节奏推理对话" beats "这是一个侦探角色").
 - `safety` is `"sfw"` if the candidate's `isNSFW` is false and tags do not
   scream NSFW; `"nsfw"` if `isNSFW` is true; `"unknown"` only when the data is
   ambiguous.
-- Output exactly one fenced block. No JSON outside the block. No prose after
-  the block.
+- Do **not** add a `reason` field. The "why" lives entirely in the preceding
+  `kind: "text"` bubble, in your own voice.
+
+### Prose style for the `kind: "text"` bubbles
+
+You are writing IM messages to a friend, not catalog blurbs. Each text bubble
+should feel like a single beat of conversation.
+
+Do:
+
+- Use specific, vivid, concrete imagery — name the trope, the vibe, the
+  reason it's interesting.
+- Vary sentence shape between cards. Some can be a single image ("吸血鬼+病娇，
+  压迫感拉满。"), some a short anecdote-style sentence, some a setup-and-twist.
+- It's OK (and good) to be a little casual — colloquial words like 那种、感觉、
+  挺、就 are welcome.
+
+Don't:
+
+- Don't use the phrasing "适合……的人" / "适合想要 X 的玩家" / "适合 …… 用户".
+  That template is what flattens every recommendation into the same shape.
+- Don't repeat the same opening structure across bubbles. If the first card's
+  intro starts with "这是一个 …… 的角色", the next two must not start the same
+  way.
+- Don't restate `nameZh`, `tagline`, or `tags` — those are already shown on
+  the card itself. The text bubble adds *something the card can't show*: tone,
+  twist, fit to the user's ask.
+- Don't write the card's own dialogue or pretend to be the character.
 
 ## Worked Example
 
@@ -201,32 +247,37 @@ node ~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/searc
   '{"query":"detective female mystery noir","tags":["detective"],"limit":20}'
 ```
 
-Then you reply something like:
+Then you reply exactly one fenced block (no prose around it):
 
-```markdown
-我从 Character Tavern 里挑了几个推理向的女性侦探，节奏都偏冷一点，看看哪个对味。
-
+````markdown
 ```koko.tavern.recommendations
 {
-  "version": 1,
+  "version": 2,
   "query": "帮我找几个适合慢节奏推理的女性侦探角色",
-  "cards": [
+  "items": [
+    { "kind": "text", "text": "挑了三个推理向的女性侦探，节奏都偏冷，看看哪个对味。" },
+    { "kind": "text", "text": "第一个是朱尼珀。蒙大拿小镇侦探，办案克制，案子之外是会拉你一起喝咖啡的那种朋友。" },
     {
-      "pageUrl": "https://character-tavern.com/character/corbinbear/juniper_harlow__detective",
-      "imageUrl": "https://cards.character-tavern.com/corbinbear/juniper_harlow__detective.png",
-      "name": "Juniper Harlow | Detective",
-      "nameZh": "朱尼珀·哈洛 · 侦探",
-      "tagline": "● ○ • =Your Detective friend= • ○ ●",
-      "taglineZh": "蒙大拿小镇上的侦探朋友，案子之外更愿意一起喝杯咖啡。",
-      "tags": ["detective", "female", "modern day", "mystery", "wholesome"],
-      "matchTags": ["女性", "侦探", "现代都市", "节奏舒缓"],
-      "reason": "案件氛围克制，性格偏温和保护型，适合慢慢推进线索而不是高速反转。",
-      "safety": "sfw"
-    }
+      "kind": "card",
+      "card": {
+        "pageUrl": "https://character-tavern.com/character/corbinbear/juniper_harlow__detective",
+        "imageUrl": "https://cards.character-tavern.com/corbinbear/juniper_harlow__detective.png",
+        "name": "Juniper Harlow | Detective",
+        "nameZh": "朱尼珀·哈洛 · 侦探",
+        "tagline": "● ○ • =Your Detective friend= • ○ ●",
+        "taglineZh": "蒙大拿小镇上的侦探朋友，案子之外更愿意一起喝杯咖啡。",
+        "tags": ["detective", "female", "modern day", "mystery", "wholesome"],
+        "matchTags": ["女性", "侦探", "现代都市", "节奏舒缓"],
+        "safety": "sfw"
+      }
+    },
+    { "kind": "text", "text": "想先聊哪个？" }
   ]
 }
 ```
-```
+````
+
+(The example shows only one card for brevity. A real turn must include 3–5.)
 
 ## Things You Must Not Do
 
@@ -239,8 +290,12 @@ Then you reply something like:
 - Do not call the bin script with shell pipes or `&&`. Run it once, capture
   stdout, parse, decide, output.
 - Do not produce more than one fenced block per turn.
+- Do not write any prose outside the fenced block. The KokoChat client will
+  not show it.
 - Do not write English prose to the user. KokoChat's user is reading this in
   Chinese.
+- Do not include a `reason` field on any card. The "why" lives in the
+  preceding `kind: "text"` bubble, not on the card.
 
 ## When The User Asks Follow-Up Questions
 

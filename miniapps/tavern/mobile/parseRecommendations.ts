@@ -2,19 +2,25 @@
  * Validation + extraction for the `koko.tavern.recommendations` fenced block.
  *
  * The Tavern OpenClaw skill (`kokochat-tavern-search`) returns assistant text
- * that contains exactly one fenced block of the shape:
+ * containing exactly one fenced block:
  *
  *   ```koko.tavern.recommendations
- *   { "version": 1, "query": "...", "cards": [ ... ] }
+ *   { "version": 2, "query": "...", "items": [ ... ] }
  *   ```
  *
- * KokoChat must never trust that text as-is; the model is allowed to drift in
- * tone or invent fields. This module is the only place the host is allowed to
- * convert raw assistant text into a typed value renderable by the chat surface.
+ * v2 (current): items[] is an ordered stream of "text" + "card" entries that
+ * KokoChat renders as multiple agent bubbles, IM-style. There is no `reason`
+ * field on cards; the prose lives in `kind: "text"` items.
  *
- * Validation rules mirror the SKILL.md output contract. A card that fails any
- * required-field check causes the whole block to be rejected; partial card
- * arrays would silently hide model mistakes from us.
+ * v1 (legacy): cards[] only, with a `reason` string per card. We keep v1
+ * support so a still-old agent build doesn't break the mini-app — we project
+ * v1 into the same items[] shape by synthesising one text bubble per
+ * `reason`.
+ *
+ * KokoChat must never trust assistant text as-is: the model is allowed to
+ * drift in tone or invent fields. This module is the only place the host is
+ * allowed to convert raw assistant text into a typed value renderable by the
+ * chat surface.
  */
 import { extractFencedBlock } from "@/runtime/messageBlocks";
 
@@ -36,16 +42,17 @@ export interface TavernRecommendationCard {
   taglineZh: string;
   tags: string[];
   matchTags: string[];
-  reason: string;
   safety: "sfw" | "nsfw" | "unknown";
 }
 
+export type TavernRecommendationItem =
+  | { kind: "text"; text: string }
+  | { kind: "card"; card: TavernRecommendationCard };
+
 export interface TavernRecommendations {
-  version: 1;
+  version: 2;
   query: string;
-  cards: TavernRecommendationCard[];
-  /** Plain prose the agent wrote outside the fenced block, if any. */
-  intro?: string;
+  items: TavernRecommendationItem[];
 }
 
 export interface ParseFailure {
@@ -81,44 +88,33 @@ export function parseTavernRecommendations(assistantText: string): ParseResult {
   if (!isRecord(raw)) {
     return { ok: false, error: "推荐块不是 JSON 对象" };
   }
-  if (raw.version !== 1) {
-    return { ok: false, error: `推荐块版本号不被支持: ${String(raw.version)}` };
-  }
-  const query = readNonEmptyString(raw.query, "query");
-  if (query.error !== undefined) return { ok: false, error: query.error };
 
-  if (!Array.isArray(raw.cards)) {
-    return { ok: false, error: "推荐块缺少 cards 数组" };
+  if (raw.version === 2) {
+    return parseV2(raw);
   }
-  if (raw.cards.length < MIN_CARDS || raw.cards.length > MAX_CARDS) {
-    return {
-      ok: false,
-      error: `推荐数量异常: 期望 ${MIN_CARDS}-${MAX_CARDS} 张，得到 ${raw.cards.length} 张`
-    };
+  if (raw.version === 1) {
+    return parseV1(raw, intro);
   }
-
-  const cards: TavernRecommendationCard[] = [];
-  for (let i = 0; i < raw.cards.length; i += 1) {
-    const result = parseCard(raw.cards[i], i);
-    if (result.error !== undefined) return { ok: false, error: result.error };
-    cards.push(result.value);
-  }
-
-  const recommendations: TavernRecommendations = {
-    version: 1,
-    query: query.value,
-    cards,
-    ...(intro.length > 0 ? { intro } : {})
-  };
-  return { ok: true, value: recommendations };
+  return { ok: false, error: `推荐块版本号不被支持: ${String(raw.version)}` };
 }
 
 export function isTavernRecommendations(data: unknown): data is TavernRecommendations {
   if (!isRecord(data)) return false;
-  if (data.version !== 1) return false;
+  if (data.version !== 2) return false;
   if (typeof data.query !== "string") return false;
-  if (!Array.isArray(data.cards)) return false;
-  return data.cards.every(isTavernRecommendationCard);
+  if (!Array.isArray(data.items)) return false;
+  return data.items.every(isTavernRecommendationItem);
+}
+
+export function isTavernRecommendationItem(data: unknown): data is TavernRecommendationItem {
+  if (!isRecord(data)) return false;
+  if (data.kind === "text") {
+    return typeof data.text === "string" && data.text.length > 0;
+  }
+  if (data.kind === "card") {
+    return isTavernRecommendationCard(data.card);
+  }
+  return false;
 }
 
 function isTavernRecommendationCard(data: unknown): data is TavernRecommendationCard {
@@ -134,9 +130,105 @@ function isTavernRecommendationCard(data: unknown): data is TavernRecommendation
     data.tags.every((tag) => typeof tag === "string") &&
     Array.isArray(data.matchTags) &&
     data.matchTags.every((tag) => typeof tag === "string") &&
-    typeof data.reason === "string" &&
     (data.safety === "sfw" || data.safety === "nsfw" || data.safety === "unknown")
   );
+}
+
+function parseV2(raw: Record<string, unknown>): ParseResult {
+  const query = readNonEmptyString(raw.query, "query");
+  if (query.error !== undefined) return { ok: false, error: query.error };
+
+  if (!Array.isArray(raw.items)) {
+    return { ok: false, error: "推荐块缺少 items 数组" };
+  }
+  if (raw.items.length === 0) {
+    return { ok: false, error: "推荐块的 items 为空" };
+  }
+
+  const items: TavernRecommendationItem[] = [];
+  let cardCount = 0;
+  for (let i = 0; i < raw.items.length; i += 1) {
+    const result = parseItem(raw.items[i], i);
+    if (result.error !== undefined) return { ok: false, error: result.error };
+    items.push(result.value);
+    if (result.value.kind === "card") cardCount += 1;
+  }
+
+  if (cardCount < MIN_CARDS || cardCount > MAX_CARDS) {
+    return {
+      ok: false,
+      error: `卡片数量异常: 期望 ${MIN_CARDS}-${MAX_CARDS} 张，得到 ${cardCount} 张`
+    };
+  }
+
+  return {
+    ok: true,
+    value: { version: 2, query: query.value, items }
+  };
+}
+
+function parseItem(value: unknown, index: number): ReadResult<TavernRecommendationItem> | ReadError {
+  const where = `items[${index}]`;
+  if (!isRecord(value)) {
+    return { error: `${where} 不是对象` };
+  }
+  if (value.kind === "text") {
+    const text = readNonEmptyString(value.text, `${where}.text`);
+    if (text.error !== undefined) return { error: text.error };
+    return { value: { kind: "text", text: text.value } };
+  }
+  if (value.kind === "card") {
+    const card = parseCard(value.card, index);
+    if (card.error !== undefined) return { error: card.error };
+    return { value: { kind: "card", card: card.value } };
+  }
+  return { error: `${where}.kind 期望 "text" 或 "card"，得到 ${String(value.kind)}` };
+}
+
+/**
+ * Project a v1 payload onto the v2 items[] shape so the renderer never sees
+ * the legacy schema. The agent's intro prose (if any) becomes the opening
+ * text bubble, and each card's `reason` becomes the per-card lead-in bubble.
+ * This is intentionally generous — it's a transitional shim, not a long-term
+ * contract.
+ */
+function parseV1(raw: Record<string, unknown>, intro: string): ParseResult {
+  const query = readNonEmptyString(raw.query, "query");
+  if (query.error !== undefined) return { ok: false, error: query.error };
+
+  if (!Array.isArray(raw.cards)) {
+    return { ok: false, error: "推荐块缺少 cards 数组" };
+  }
+  if (raw.cards.length < MIN_CARDS || raw.cards.length > MAX_CARDS) {
+    return {
+      ok: false,
+      error: `推荐数量异常: 期望 ${MIN_CARDS}-${MAX_CARDS} 张，得到 ${raw.cards.length} 张`
+    };
+  }
+
+  const items: TavernRecommendationItem[] = [];
+  if (intro.length > 0) {
+    items.push({ kind: "text", text: intro });
+  }
+
+  for (let i = 0; i < raw.cards.length; i += 1) {
+    const v1Card = raw.cards[i];
+    if (!isRecord(v1Card)) {
+      return { ok: false, error: `cards[${i}] 不是对象` };
+    }
+    const reason = typeof v1Card.reason === "string" ? v1Card.reason.trim() : "";
+    if (reason.length > 0) {
+      items.push({ kind: "text", text: reason });
+    }
+    const cardResult = parseCard(v1Card, i);
+    if (cardResult.error !== undefined) return { ok: false, error: cardResult.error };
+    items.push({ kind: "card", card: cardResult.value });
+  }
+
+  return {
+    ok: true,
+    value: { version: 2, query: query.value, items }
+  };
 }
 
 interface ReadResult<T> {
@@ -171,8 +263,6 @@ function parseCard(value: unknown, index: number): ReadResult<TavernRecommendati
   if (tagline.error !== undefined) return { error: tagline.error };
   const taglineZh = readNonEmptyString(value.taglineZh, `${where}.taglineZh`);
   if (taglineZh.error !== undefined) return { error: taglineZh.error };
-  const reason = readNonEmptyString(value.reason, `${where}.reason`);
-  if (reason.error !== undefined) return { error: reason.error };
 
   const tags = readStringArray(value.tags, `${where}.tags`);
   if (tags.error !== undefined) return { error: tags.error };
@@ -190,7 +280,6 @@ function parseCard(value: unknown, index: number): ReadResult<TavernRecommendati
       nameZh: nameZh.value,
       tagline: tagline.value,
       taglineZh: taglineZh.value,
-      reason: reason.value,
       tags: tags.value.slice(0, 24),
       matchTags: matchTags.value.slice(0, MAX_MATCH_TAGS),
       safety: safety.value

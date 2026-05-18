@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/providers/ThemeProvider";
 import { hydrateStorage } from "@/storage/mmkv";
 import { parseSetupCode } from "@/gateway/setupCode";
 import { registerMiniApps } from "@/miniapps";
+import { seedInitialKokoConversation } from "@/miniapps/koko";
 import { useConversationStore } from "@/state/conversations";
 import { useGatewayStore } from "@/state/gateway";
 import { KokoColors } from "@/theme/koko";
@@ -26,8 +27,11 @@ export default function RootLayout() {
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     void hydrateStorage().then(() => {
-      // Rehydrate the conversation registry once the sync KV is ready.
+      // Rehydrate the conversation registry once the sync KV is ready,
+      // then drop a pinned Koko conversation in for brand-new installs so
+      // the chat list isn't empty on first launch.
       useConversationStore.getState().rehydrate();
+      seedInitialKokoConversation();
       setHydrated(true);
     });
   }, []);
@@ -61,6 +65,8 @@ export default function RootLayout() {
                 <Stack.Screen name="pair" options={{ title: "配对 OpenClaw" }} />
                 <Stack.Screen name="chat/[id]" options={{ title: "聊天" }} />
                 <Stack.Screen name="settings" options={{ title: "设置" }} />
+                <Stack.Screen name="tavern/browse" options={{ title: "角色广场" }} />
+                <Stack.Screen name="tavern/card/[...path]" options={{ title: "角色详情" }} />
                 <Stack.Screen
                   name="dev/runtime-selftest"
                   options={{ title: "Runtime 自检" }}

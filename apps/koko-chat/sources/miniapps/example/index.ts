@@ -141,7 +141,10 @@ export function registerExampleMiniApp(): void {
     id: MINI_APP_ID,
     displayName: "Example",
     listGlyph: "Ex",
-    showInLauncher: true,
+    // Developer reference only — never surfaced in the production "+" menu.
+    // The registration stays so existing example conversations keep rendering
+    // and so mini-app authors can copy this folder as a starting point.
+    showInLauncher: false,
     defaultTitle: (createdAt) => `Example ${formatTime(createdAt)}`,
     // Keep the developer reference app usable on a stock OpenClaw install.
     // Real mini-apps should normally omit this so their default agent id is

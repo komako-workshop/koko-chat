@@ -1,9 +1,8 @@
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useRef } from "react";
 import {
   ActionSheetIOS,
   Alert,
   FlatList,
-  Image,
   Platform,
   Pressable,
   StyleSheet,
@@ -11,40 +10,36 @@ import {
   View,
   type ListRenderItemInfo
 } from "react-native";
+import Swipeable from "react-native-gesture-handler/Swipeable";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { KOKO_HOME_SESSION_KEY, openKokoHome } from "@/miniapps/koko";
+import { CachedImage } from "@/components/CachedImage";
 import {
   getLauncherMiniApps,
   getMiniAppListGlyph,
   getMiniAppListImage,
   type MiniAppDescriptor
 } from "@/runtime/miniApps";
-import { useGatewayStore } from "@/state/gateway";
 import { buildSessionKey, useConversationStore, type ConversationMeta } from "@/state/conversations";
 import { KokoColors, KokoRadius } from "@/theme/koko";
 
 /**
  * Chat list — first tab.
  *
- * Pinned Koko home row at the top, then user-created conversations
- * (newest first). The Koko palette gives the screen a warm off-white
- * feel; user messages use the Koko orange and agent rows stay on white
- * cards. No dark mode.
+ * All conversations live in one ordered list, sorted by pin state (pinned
+ * first, most recently pinned on top) and then by most recent activity.
+ * The chat list never special-cases Koko: a brand-new install gets a
+ * pinned Koko conversation seeded at startup, but the user is free to
+ * unpin or delete it like any other thread. No dark mode.
  */
 export default function ChatsTabScreen(): React.ReactElement {
-  const allConversations = useConversationStore((s) => s.list);
-  // The Koko home conversation is reachable only through the pinned row;
-  // hide it from the main list so it isn't rendered twice.
-  const conversations = allConversations.filter(
-    (item) => item.sessionKey !== KOKO_HOME_SESSION_KEY
-  );
+  const conversations = useConversationStore((s) => s.list);
   const createConversation = useConversationStore((s) => s.create);
   const archiveConversation = useConversationStore((s) => s.archive);
   const renameConversation = useConversationStore((s) => s.rename);
-  const gatewayStatus = useGatewayStore((s) => s.status);
+  const togglePin = useConversationStore((s) => s.togglePin);
 
   const navigation = useNavigation();
   useLayoutEffect(() => {
@@ -92,105 +87,42 @@ export default function ChatsTabScreen(): React.ReactElement {
     router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
   }
 
-  async function handleOpenKokoHome(): Promise<void> {
-    // openKokoHome works whether or not the Gateway is connected: in offline
-    // mode it skips the OpenClaw agent bootstrap and still seeds local
-    // welcome messages, so first-launch reviewers can see Koko in character.
-    try {
-      await openKokoHome((conversationId) => {
-        router.push({ pathname: "/chat/[id]", params: { id: conversationId } });
-      });
-    } catch (error) {
-      Alert.alert("打开 Koko 失败", error instanceof Error ? error.message : String(error));
-    }
+  function promptRename(conversation: ConversationMeta): void {
+    Alert.prompt(
+      "重命名",
+      undefined,
+      (text) => {
+        if (typeof text === "string" && text.trim().length > 0) {
+          renameConversation(conversation.id, text.trim());
+        }
+      },
+      "plain-text",
+      conversation.title
+    );
   }
 
-  function handleLongPress(conversation: ConversationMeta): void {
-    const options = ["取消", "重命名", "删除会话"];
-    const onSelect = (index: number): void => {
-      if (index === 1) {
-        Alert.prompt(
-          "重命名",
-          undefined,
-          (text) => {
-            if (typeof text === "string" && text.trim().length > 0) {
-              renameConversation(conversation.id, text.trim());
-            }
-          },
-          "plain-text",
-          conversation.title
-        );
-      } else if (index === 2) {
-        Alert.alert("删除会话", `确定要删除 "${conversation.title}" 吗？`, [
-          { text: "取消", style: "cancel" },
-          {
-            text: "删除",
-            style: "destructive",
-            onPress: () => archiveConversation(conversation.id)
-          }
-        ]);
+  function confirmDelete(conversation: ConversationMeta): void {
+    Alert.alert("删除会话", `确定要删除 "${conversation.title}" 吗？`, [
+      { text: "取消", style: "cancel" },
+      {
+        text: "删除",
+        style: "destructive",
+        onPress: () => archiveConversation(conversation.id)
       }
-    };
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options,
-          cancelButtonIndex: 0,
-          destructiveButtonIndex: 2
-        },
-        onSelect
-      );
-    } else {
-      Alert.alert(conversation.title, undefined, [
-        { text: "重命名", onPress: () => onSelect(1) },
-        { text: "删除会话", style: "destructive", onPress: () => onSelect(2) },
-        { text: "取消", style: "cancel" }
-      ]);
-    }
+    ]);
   }
 
   const renderRow = ({ item, index }: ListRenderItemInfo<ConversationMeta>) => {
     const isLast = index === conversations.length - 1;
-    const listImage = getMiniAppListImage(item.mode);
     return (
-      <Pressable
+      <ConversationRow
+        item={item}
+        isLast={isLast}
         onPress={() => router.push({ pathname: "/chat/[id]", params: { id: item.id } })}
-        onLongPress={() => handleLongPress(item)}
-        delayLongPress={350}
-        android_ripple={{ color: KokoColors.surfaceSoft }}
-        style={({ pressed }) => [
-          styles.row,
-          pressed && { backgroundColor: KokoColors.surfaceSoft }
-        ]}
-      >
-        <View style={styles.avatar}>
-          {listImage !== undefined ? (
-            <Image
-              source={listImage}
-              style={styles.avatarImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <Text style={styles.avatarGlyph}>
-              {getMiniAppListGlyph(item.mode) ?? avatarGlyph(item.title)}
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.rowBody}>
-          <View style={styles.rowText}>
-            <Text numberOfLines={1} style={styles.rowTitle}>
-              {item.title}
-            </Text>
-            <Text numberOfLines={1} style={styles.rowPreview}>
-              {item.lastPreview ?? "暂无消息"}
-            </Text>
-          </View>
-          <Text style={styles.rowTime}>{formatRelative(item.updatedAt)}</Text>
-        </View>
-
-        {isLast ? null : <View style={styles.separator} />}
-      </Pressable>
+        onLongPress={() => promptRename(item)}
+        onTogglePin={() => togglePin(item.id)}
+        onDelete={() => confirmDelete(item)}
+      />
     );
   };
 
@@ -214,9 +146,6 @@ export default function ChatsTabScreen(): React.ReactElement {
         keyExtractor={(item) => item.id}
         renderItem={renderRow}
         style={styles.list}
-        ListHeaderComponent={
-          <KokoPinnedRow onPress={() => void handleOpenKokoHome()} />
-        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyText}>
@@ -229,39 +158,133 @@ export default function ChatsTabScreen(): React.ReactElement {
   );
 }
 
-function KokoPinnedRow({ onPress }: { onPress: () => void }): React.ReactElement {
-  const listImage = getMiniAppListImage("koko");
+interface ConversationRowProps {
+  item: ConversationMeta;
+  isLast: boolean;
+  onPress: () => void;
+  onLongPress: () => void;
+  onTogglePin: () => void;
+  onDelete: () => void;
+}
+
+function ConversationRow({
+  item,
+  isLast,
+  onPress,
+  onLongPress,
+  onTogglePin,
+  onDelete
+}: ConversationRowProps): React.ReactElement {
+  const swipeRef = useRef<Swipeable>(null);
+  // Per-conversation avatar (e.g. a character card's portrait) wins over the
+  // mini-app's bundled icon. This lets mini-apps spawn conversations whose
+  // row shows the right artwork without polluting the mini-app descriptor.
+  const avatarUri = item.listSnapshot?.avatarUri;
+  const listImage =
+    avatarUri !== undefined && avatarUri.length > 0
+      ? { uri: avatarUri }
+      : getMiniAppListImage(item.mode);
+  const isPinned = item.pinned === true;
+
+  function handlePinPress(): void {
+    swipeRef.current?.close();
+    onTogglePin();
+  }
+
+  function handleDeletePress(): void {
+    swipeRef.current?.close();
+    onDelete();
+  }
+
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      android_ripple={{ color: KokoColors.surfaceSoft }}
-      style={({ pressed }) => [
-        styles.row,
-        styles.pinnedRow,
-        pressed && { backgroundColor: KokoColors.primarySoft }
-      ]}
-    >
-      <View style={[styles.avatar, styles.pinnedAvatar]}>
-        {listImage !== undefined ? (
-          <Image source={listImage} style={styles.avatarImage} resizeMode="cover" />
-        ) : (
-          <Text style={styles.avatarGlyph}>K</Text>
-        )}
-      </View>
-      <View style={styles.rowBody}>
-        <View style={styles.rowText}>
-          <Text numberOfLines={1} style={styles.rowTitle}>
-            Koko
-          </Text>
-          <Text numberOfLines={1} style={styles.rowPreview}>
-            你的 KokoChat 主助手
-          </Text>
+    <Swipeable
+      ref={swipeRef}
+      friction={2}
+      rightThreshold={40}
+      overshootRight={false}
+      renderRightActions={() => (
+        <View style={styles.swipeActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={isPinned ? "取消置顶" : "置顶"}
+            onPress={handlePinPress}
+            style={({ pressed }) => [
+              styles.swipeAction,
+              styles.swipeActionPin,
+              pressed && styles.swipeActionPressed
+            ]}
+          >
+            <Text style={styles.swipeActionText}>
+              {isPinned ? "取消置顶" : "置顶"}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="删除"
+            onPress={handleDeletePress}
+            style={({ pressed }) => [
+              styles.swipeAction,
+              styles.swipeActionDelete,
+              pressed && styles.swipeActionPressed
+            ]}
+          >
+            <Text style={[styles.swipeActionText, styles.swipeActionTextOnDark]}>
+              删除
+            </Text>
+          </Pressable>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={KokoColors.inkMuted} />
-      </View>
-      <View style={styles.separator} />
-    </Pressable>
+      )}
+    >
+      <Pressable
+        onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={350}
+        android_ripple={{ color: KokoColors.surfaceSoft }}
+        style={({ pressed }) => [
+          styles.row,
+          isPinned && styles.rowPinned,
+          pressed && { backgroundColor: KokoColors.surfaceSoft }
+        ]}
+      >
+        <View style={styles.avatar}>
+          {listImage !== undefined ? (
+            <CachedImage
+              source={listImage}
+              style={styles.avatarImage}
+              contentFit="cover"
+            />
+          ) : (
+            <Text style={styles.avatarGlyph}>
+              {getMiniAppListGlyph(item.mode) ?? avatarGlyph(item.title)}
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.rowBody}>
+          <View style={styles.rowText}>
+            <Text numberOfLines={1} style={styles.rowTitle}>
+              {item.title}
+            </Text>
+            <Text numberOfLines={1} style={styles.rowPreview}>
+              {item.lastPreview ?? "暂无消息"}
+            </Text>
+          </View>
+          <View style={styles.rowMeta}>
+            {isPinned ? (
+              <Ionicons
+                name="pin"
+                size={12}
+                color={KokoColors.inkMuted}
+                style={styles.rowPinIcon}
+              />
+            ) : null}
+            <Text style={styles.rowTime}>{formatRelative(item.updatedAt)}</Text>
+          </View>
+        </View>
+
+        {isLast ? null : <View style={styles.separator} />}
+      </Pressable>
+    </Swipeable>
   );
 }
 
@@ -341,7 +364,7 @@ const styles = StyleSheet.create({
     position: "relative",
     backgroundColor: KokoColors.bg
   },
-  pinnedRow: {
+  rowPinned: {
     backgroundColor: KokoColors.primaryWash
   },
   avatar: {
@@ -387,9 +410,46 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: KokoColors.inkSecondary
   },
+  rowMeta: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  rowPinIcon: {
+    marginRight: 4
+  },
   rowTime: {
     fontSize: 13,
     color: KokoColors.inkMuted
+  },
+  swipeActions: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    backgroundColor: KokoColors.bg
+  },
+  swipeAction: {
+    width: 84,
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8
+  },
+  swipeActionPin: {
+    backgroundColor: KokoColors.primarySoft
+  },
+  swipeActionDelete: {
+    backgroundColor: KokoColors.danger
+  },
+  swipeActionPressed: {
+    opacity: 0.85
+  },
+  swipeActionText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: KokoColors.ink,
+    textAlign: "center"
+  },
+  swipeActionTextOnDark: {
+    color: "#FFFFFF"
   },
   separator: {
     position: "absolute",

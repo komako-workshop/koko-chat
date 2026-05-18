@@ -14,6 +14,7 @@ import type { ConnectionStatus, JsonRecord } from "@koko/openclaw-client/protoco
 import { BrowserGatewayClient } from "@/gateway/BrowserGatewayClient";
 import {
   loadDeviceToken,
+  loadGatewayUrl,
   loadOrCreateDeviceSeed,
   saveDeviceToken,
   saveGatewayUrl,
@@ -47,6 +48,7 @@ interface GatewayState {
   lastError: string | null;
 
   connect: (setup: OpenClawSetup) => Promise<void>;
+  reconnectIfPossible: () => Promise<boolean>;
   disconnect: () => Promise<void>;
   forgetIdentity: () => Promise<void>;
   sendUserMessage: (conversationId: string, text: string) => Promise<void>;
@@ -103,11 +105,48 @@ function applyDelta(
   const fullText = extractText(event);
   const runId = typeof event.runId === "string" ? event.runId : null;
 
+  // Claim any unclaimed streaming placeholder this conversation has.
+  // sendUserMessage pre-inserts a blank streaming bubble so the
+  // breathing-pulse animation appears the instant the user hits send,
+  // instead of waiting for the gateway's first delta event. The first
+  // delta with a runId "adopts" that placeholder by stamping its runId
+  // on it, so the existing single-/multi-bubble update logic finds it.
+  if (runId !== null) {
+    claimPendingPlaceholder(conversationId, runId);
+  }
+
   if (runId !== null && shouldSplitAgentMessages(conversationId)) {
     applyMultiBubbleDelta(conversationId, runId, fullText, done);
   } else {
     applySingleBubbleDelta(conversationId, event, done, fullText);
   }
+}
+
+function claimPendingPlaceholder(conversationId: string, runId: string): void {
+  useConversationStore.getState().setMessages(conversationId, (prev) => {
+    const idx = prev.findIndex(
+      (m) =>
+        m.role === "agent" &&
+        m.streaming === true &&
+        m.runId === undefined &&
+        m.text.length === 0 &&
+        (m.blocks === undefined || m.blocks.length === 0) &&
+        m.error === undefined
+    );
+    if (idx < 0) return prev;
+    // If there's already a message with this runId (e.g. a multi-delta
+    // race), drop the placeholder rather than duplicating the row.
+    const alreadyHasRun = prev.some((m) => m.runId === runId && m.role === "agent");
+    const next = [...prev];
+    if (alreadyHasRun) {
+      next.splice(idx, 1);
+    } else {
+      const existing = next[idx];
+      if (existing === undefined) return prev;
+      next[idx] = { ...existing, runId };
+    }
+    return next;
+  });
 }
 
 function applySingleBubbleDelta(
@@ -317,6 +356,26 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     }
   },
 
+  async reconnectIfPossible() {
+    const { status, setup } = get();
+    if (status === "connected" || status === "connecting" || status === "handshaking") {
+      return true;
+    }
+
+    const fallbackUrl = setup?.url ?? loadGatewayUrl();
+    if (fallbackUrl === undefined) {
+      return false;
+    }
+
+    const fallbackSetup: OpenClawSetup = setup ?? { url: fallbackUrl };
+    try {
+      await get().connect(fallbackSetup);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
   async disconnect() {
     const client = get().client;
     if (client === null) return;
@@ -362,12 +421,46 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       throw new Error("outbound gatewayText is empty");
     }
 
+    // Pre-insert a blank streaming placeholder so the chat surface can
+    // render the breathing-pulse animation immediately. The first delta
+    // event from the gateway will claim this row (see applyDelta).
+    // Particularly noticeable for tavern-roleplay, where the first turn
+    // carries a multi-KB card JSON prefix and the model can take 5-30
+    // seconds before emitting the first token.
+    const placeholderId = newMessageId();
+    useConversationStore.getState().setMessages(conversationId, (prev) => [
+      ...prev,
+      { id: placeholderId, role: "agent", text: "", streaming: true }
+    ]);
+
     const idempotencyKey = `koko-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    await client.call("chat.send", {
-      sessionKey: meta.sessionKey,
-      message: gatewayText,
-      idempotencyKey
-    });
+    try {
+      await client.call("chat.send", {
+        sessionKey: meta.sessionKey,
+        message: gatewayText,
+        idempotencyKey
+      });
+    } catch (error) {
+      // If chat.send failed before any delta arrived, the placeholder is
+      // still unclaimed (no runId). Surface the error on it so the user
+      // gets feedback instead of a pulse that never stops.
+      useConversationStore.getState().setMessages(conversationId, (prev) => {
+        const idx = prev.findIndex(
+          (m) => m.id === placeholderId && m.runId === undefined
+        );
+        if (idx < 0) return prev;
+        const existing = prev[idx];
+        if (existing === undefined) return prev;
+        const next = [...prev];
+        next[idx] = {
+          ...existing,
+          streaming: false,
+          error: error instanceof Error ? error.message : String(error)
+        };
+        return next;
+      });
+      throw error;
+    }
   },
 
   resetError() {

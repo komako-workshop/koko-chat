@@ -8,8 +8,8 @@ import {
 } from "@/runtime/outboundMessages";
 import { ensureOpenClawAgent } from "@/runtime/openclaw";
 import { useGatewayStore } from "@/state/gateway";
+import { mmkv } from "@/storage/mmkv";
 import {
-  buildSessionKey,
   useConversationStore,
   type ChatMessage,
   type ConversationMeta
@@ -29,39 +29,33 @@ import {
 /**
  * Koko — KokoChat's built-in home assistant mini-app.
  *
- * UX role: a single pinned conversation ("home") that behaves like a
- * general-purpose chat assistant. Functionally a re-skin of the user's
- * OpenClaw with a Koko persona. It uses a dedicated `koko` OpenClaw agent
- * (not the user's `main`) so it can grow its own skills later without
- * polluting the terminal experience.
+ * UX role: a general-purpose chat assistant powered by the user's OpenClaw
+ * with a Koko persona. From the host's point of view a Koko conversation is
+ * a perfectly normal entry in the chat list — it can be pinned, unpinned,
+ * deleted, or duplicated from the "+" launcher just like any other mini-app
+ * conversation.
  *
- * Key contracts:
- * - Singleton session: one `koko/home` conversation per user, opened by
- *   `openKokoHome()` (pinned row tap in the chat list).
- * - First user turn loads Koko's persona document. Later turns include a
- *   short reminder so long conversations do not drift out of character.
- * - A welcome agent message is seeded into the local message cache on
- *   first creation so the conversation never looks empty.
+ * On a brand-new install the host calls `seedInitialKokoConversation()` once
+ * to drop a friendly opening exchange into the list (with the row pinned).
+ * If the user later deletes that row, it stays gone; they can spawn a fresh
+ * Koko conversation from the "+" menu at any time.
+ *
+ * Per turn behavior:
+ * - First user turn loads Koko's persona document.
+ * - Later turns include a short reminder so long conversations do not drift
+ *   out of character.
  */
 
 const kokoAvatar = require("../../../assets/brand/chat-avatar.png") as ImageSourcePropType;
 
 const MINI_APP_ID = "koko";
-const HOME_SCOPE = "home";
+/** Set once after we've decided whether to seed the initial Koko conversation. */
+const INITIAL_SEED_FLAG = "koko.initialKokoSeeded.v1";
 
 /**
- * Stable sessionKey for the singleton Koko home conversation. The chat
- * list filters this out of its main list so the pinned row is the only
- * way to enter it (and the row never appears twice).
- */
-export const KOKO_HOME_SESSION_KEY = buildSessionKey(MINI_APP_ID, HOME_SCOPE);
-
-/**
- * Local-only opening exchange shown when the Koko home conversation is first
- * created. Doubles as a sanity-check that the chat surface works without a
- * Gateway: the messages live entirely in the host's local store, so reviewers
- * (or any first-launch user without OpenClaw running) still see Koko in
- * character before they pair anything.
+ * Local-only opening exchange that ships with the initial Koko conversation.
+ * The messages live entirely in the host's local store so the chat surface
+ * has something to show before the user pairs OpenClaw.
  */
 const KOKO_WELCOME_TEXTS: Array<string | { sticker: KokoStickerId }> = [
   "嘿，你好呀～ ✨",
@@ -111,26 +105,16 @@ function buildReminderGatewayText(userText: string): string {
 }
 
 /**
- * "+ menu" entry for Koko: always create a fresh, independent OpenClaw
- * session under the koko agent so the home thread is not touched. Useful
- * for trying out new prompts / personas without polluting the canonical
- * home conversation.
+ * "+ menu" entry for Koko. Each invocation creates an independent
+ * conversation bound to the koko OpenClaw agent — no singleton, no special
+ * casing. Deleting a Koko conversation does not affect the rest.
  */
-async function createTestKokoConversation(): Promise<ConversationMeta> {
-  await ensureOpenClawAgent({ agentId: "koko", name: "koko" });
-  const now = Date.now();
-  const scope = `test-${now.toString(36)}`;
-  const stamp = formatHHMM(now);
+async function createKokoConversation(): Promise<ConversationMeta> {
+  await ensureKokoAgent();
   return useConversationStore.getState().create({
     mode: MINI_APP_ID,
-    sessionScope: scope,
-    title: `Koko 测试 ${stamp}`
+    title: "Koko"
   });
-}
-
-function formatHHMM(timestamp: number): string {
-  const d = new Date(timestamp);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 export function registerKokoMiniApp(): void {
@@ -140,17 +124,13 @@ export function registerKokoMiniApp(): void {
   registerMiniApp({
     id: MINI_APP_ID,
     displayName: "Koko",
-    // Surfaced in the "+" menu so we can spawn fresh test conversations
-    // without disturbing the singleton home thread (which is still entered
-    // through the pinned row + `openKokoHome`).
     showInLauncher: true,
     listGlyph: "K",
     listImage: kokoAvatar,
     defaultTitle: () => "Koko",
-    singletonSessionScope: HOME_SCOPE,
     openclaw: { defaultAgentId: "koko" },
     splitAgentMessages: true,
-    onCreate: createTestKokoConversation
+    onCreate: createKokoConversation
   });
 
   registerOutboundMessageBuilder(MINI_APP_ID, kokoOutboundBuilder);
@@ -162,50 +142,39 @@ export function registerKokoMiniApp(): void {
 }
 
 /**
- * Open (or create) the singleton Koko home conversation and route to it.
+ * Seed the initial Koko conversation on first launch only. Idempotent and
+ * safe to call on every app boot:
  *
- * - Ensures the OpenClaw `koko` agent exists.
- * - Reuses the existing home conversation if any; otherwise creates one
- *   and seeds a local welcome agent message so the UI is never empty.
- * - Calls `navigate(conversationId)` with the resolved conversation id.
- *   Caller picks the routing primitive (e.g. expo-router).
- *
- * Errors propagate; the caller is expected to surface them (e.g. as an
- * Alert) since failure usually means Gateway is not reachable.
+ * - If the seed flag is set, do nothing (we've already decided once).
+ * - If any Koko-mode conversation already exists, just set the flag — this
+ *   handles users upgrading from the old `koko/home` singleton flow.
+ * - Otherwise create a pinned Koko conversation with the local welcome
+ *   exchange so a brand-new install isn't an empty chat list.
  */
-export async function openKokoHome(
-  navigate: (conversationId: string) => void
-): Promise<void> {
-  await ensureKokoAgent();
+export function seedInitialKokoConversation(): void {
+  if (mmkv.getString(INITIAL_SEED_FLAG) !== undefined) return;
 
   const store = useConversationStore.getState();
-  const existing = store.list.find(
-    (meta) => meta.sessionKey === KOKO_HOME_SESSION_KEY
-  );
-  if (existing !== undefined) {
-    navigate(existing.id);
+  const alreadyHasKoko = store.list.some((meta) => meta.mode === MINI_APP_ID);
+  if (alreadyHasKoko) {
+    mmkv.set(INITIAL_SEED_FLAG, "1");
     return;
   }
 
   const meta = store.create({
     mode: MINI_APP_ID,
-    sessionScope: HOME_SCOPE,
     title: "Koko",
     listSnapshot: { title: "Koko", subtitle: "你的 KokoChat 主助手" }
   });
-
-  // Seed welcome messages in the local UI cache. Intentionally local-only:
-  // OpenClaw never sees them, so the first real user turn still triggers
-  // system-prompt injection (isFirstUserTurn === true).
+  store.togglePin(meta.id, true);
   store.setMessages(meta.id, () => buildWelcomeMessages(meta.id));
-
-  navigate(meta.id);
+  mmkv.set(INITIAL_SEED_FLAG, "1");
 }
 
 /**
  * Try to make sure the OpenClaw `koko` agent exists, but only if we're already
- * connected. When the user is offline we still want to be able to open the
- * Koko surface and see the local welcome messages; the agent will be created
+ * connected. When the user is offline we still want to be able to create the
+ * conversation and see the local welcome messages; the agent will be created
  * on demand when a real send happens later.
  */
 async function ensureKokoAgent(): Promise<void> {

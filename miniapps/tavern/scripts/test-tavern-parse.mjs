@@ -45,93 +45,160 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const happyText = [
+// ---------- v2 schema (current) ----------
+
+const v2Happy = wrap({
+  version: 2,
+  query: "demo",
+  items: [
+    { kind: "text", text: "挑了几张你看看" },
+    { kind: "text", text: "第一张：A 的氛围" },
+    { kind: "card", card: makeCard("a") },
+    { kind: "text", text: "第二张：B" },
+    { kind: "card", card: makeCard("b") },
+    { kind: "text", text: "第三张：C" },
+    { kind: "card", card: makeCard("c") }
+  ]
+});
+
+test("v2 happy: 3 cards in items[] are preserved with prose bubbles", () => {
+  const result = parseTavernRecommendations(v2Happy);
+  assert(result.ok, `expected ok, got error: ${result.ok ? "" : result.error}`);
+  if (result.ok) {
+    assertEq(result.value.version, 2, "version");
+    assertEq(result.value.query, "demo", "query");
+    assertEq(result.value.items.length, 7, "item count");
+    const cardCount = result.value.items.filter((it) => it.kind === "card").length;
+    assertEq(cardCount, 3, "card count");
+  }
+});
+
+test("v2 rejects fewer than 3 cards", () => {
+  const text = wrap({
+    version: 2,
+    query: "x",
+    items: [
+      { kind: "text", text: "only one" },
+      { kind: "card", card: makeCard("only") }
+    ]
+  });
+  const result = parseTavernRecommendations(text);
+  assert(!result.ok, "expected failure");
+});
+
+test("v2 rejects more than 5 cards", () => {
+  const items = [];
+  ["a", "b", "c", "d", "e", "f"].forEach((slug) => {
+    items.push({ kind: "text", text: slug });
+    items.push({ kind: "card", card: makeCard(slug) });
+  });
+  const text = wrap({ version: 2, query: "x", items });
+  const result = parseTavernRecommendations(text);
+  assert(!result.ok, "expected failure");
+});
+
+test("v2 rejects card pageUrl outside character-tavern.com", () => {
+  const card = makeCard("a");
+  card.pageUrl = "https://evil.example.com/character/a/b";
+  const text = wrap({
+    version: 2,
+    query: "x",
+    items: [
+      { kind: "card", card },
+      { kind: "card", card: makeCard("b") },
+      { kind: "card", card: makeCard("c") }
+    ]
+  });
+  const result = parseTavernRecommendations(text);
+  assert(!result.ok, "expected failure");
+});
+
+test("v2 rejects unknown item kind", () => {
+  const text = wrap({
+    version: 2,
+    query: "x",
+    items: [
+      { kind: "sticker", id: "wave" },
+      { kind: "card", card: makeCard("a") },
+      { kind: "card", card: makeCard("b") },
+      { kind: "card", card: makeCard("c") }
+    ]
+  });
+  const result = parseTavernRecommendations(text);
+  assert(!result.ok, "expected failure");
+});
+
+test("v2 rejects empty text bubble", () => {
+  const text = wrap({
+    version: 2,
+    query: "x",
+    items: [
+      { kind: "text", text: "" },
+      { kind: "card", card: makeCard("a") },
+      { kind: "card", card: makeCard("b") },
+      { kind: "card", card: makeCard("c") }
+    ]
+  });
+  const result = parseTavernRecommendations(text);
+  assert(!result.ok, "expected failure");
+});
+
+// ---------- v1 compatibility (legacy agent build) ----------
+
+const v1Happy = [
   "我挑了几张推荐。",
   "",
   "```koko.tavern.recommendations",
   JSON.stringify({
     version: 1,
     query: "demo",
-    cards: [
-      makeCard("a"),
-      makeCard("b"),
-      makeCard("c")
-    ]
+    cards: [makeV1Card("a"), makeV1Card("b"), makeV1Card("c")]
   }),
   "```"
 ].join("\n");
 
-test("happy path: 3 cards, intro preserved", () => {
-  const result = parseTavernRecommendations(happyText);
+test("v1 happy: legacy shape is projected into v2 items[]", () => {
+  const result = parseTavernRecommendations(v1Happy);
   assert(result.ok, `expected ok, got error: ${result.ok ? "" : result.error}`);
   if (result.ok) {
-    assertEq(result.value.cards.length, 3, "card count");
-    assertEq(result.value.query, "demo", "query");
-    assertEq(result.value.intro, "我挑了几张推荐。", "intro");
+    assertEq(result.value.version, 2, "version coerced to 2");
+    const cards = result.value.items.filter((it) => it.kind === "card");
+    assertEq(cards.length, 3, "card count");
+    const firstText = result.value.items.find((it) => it.kind === "text");
+    assert(firstText !== undefined, "first text bubble (intro) present");
+    if (firstText !== undefined && firstText.kind === "text") {
+      assertEq(firstText.text, "我挑了几张推荐。", "intro projected to first text");
+    }
+    // Each v1 reason becomes a text bubble preceding its card.
+    const reasonTexts = result.value.items
+      .filter((it) => it.kind === "text")
+      .map((it) => it.text);
+    assert(reasonTexts.includes("推荐理由"), "v1 reason projected to text bubble");
   }
 });
 
-test("rejects fewer than 3 cards", () => {
-  const text = wrap({
-    version: 1,
-    query: "x",
-    cards: [makeCard("only")]
-  });
-  const result = parseTavernRecommendations(text);
-  assert(!result.ok, "expected failure");
-});
-
-test("rejects more than 5 cards", () => {
-  const text = wrap({
-    version: 1,
-    query: "x",
-    cards: [
-      makeCard("a"),
-      makeCard("b"),
-      makeCard("c"),
-      makeCard("d"),
-      makeCard("e"),
-      makeCard("f")
-    ]
-  });
-  const result = parseTavernRecommendations(text);
-  assert(!result.ok, "expected failure");
-});
-
-test("rejects pageUrl outside character-tavern.com", () => {
-  const card = makeCard("a");
-  card.pageUrl = "https://evil.example.com/character/a/b";
-  const text = wrap({
-    version: 1,
-    query: "x",
-    cards: [card, makeCard("b"), makeCard("c")]
-  });
-  const result = parseTavernRecommendations(text);
-  assert(!result.ok, "expected failure");
-});
-
-test("rejects unknown safety value", () => {
-  const card = makeCard("a");
-  card.safety = "naughty";
-  const text = wrap({
-    version: 1,
-    query: "x",
-    cards: [card, makeCard("b"), makeCard("c")]
-  });
-  const result = parseTavernRecommendations(text);
-  assert(!result.ok, "expected failure");
-});
+// ---------- shared error paths ----------
 
 test("rejects when fenced block is missing", () => {
   const result = parseTavernRecommendations("普通对话，没有代码块。");
   assert(!result.ok, "expected failure");
 });
 
+test("rejects unknown version", () => {
+  const text = wrap({ version: 99, query: "x", items: [] });
+  const result = parseTavernRecommendations(text);
+  assert(!result.ok, "expected failure");
+});
+
 test("tolerates extra whitespace inside the block", () => {
   const text = "前置文本。\n\n```koko.tavern.recommendations\n\n" + JSON.stringify({
-    version: 1,
+    version: 2,
     query: "trim",
-    cards: [makeCard("a"), makeCard("b"), makeCard("c")]
+    items: [
+      { kind: "card", card: makeCard("a") },
+      { kind: "card", card: makeCard("b") },
+      { kind: "card", card: makeCard("c") }
+    ]
   }) + "\n\n```";
   const result = parseTavernRecommendations(text);
   assert(result.ok, `expected ok, got: ${result.ok ? "" : result.error}`);
@@ -154,9 +221,12 @@ function makeCard(slug) {
     taglineZh: "中文场景",
     tags: ["t1", "t2"],
     matchTags: ["m1", "m2"],
-    reason: "推荐理由",
     safety: "sfw"
   };
+}
+
+function makeV1Card(slug) {
+  return { ...makeCard(slug), reason: "推荐理由" };
 }
 
 function wrap(obj) {

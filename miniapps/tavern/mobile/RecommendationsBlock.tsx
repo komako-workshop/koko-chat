@@ -1,44 +1,66 @@
 import { useState } from "react";
-import { ActivityIndicator, Alert, Image, Pressable, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  Text,
+  View,
+  useWindowDimensions
+} from "react-native";
 import tw from "twrnc";
 
+import { CachedImage } from "@/components/CachedImage";
 import type { BlockRenderer } from "@/runtime/messageBlocks";
-import {
-  type TavernRecommendations,
-  type TavernRecommendationCard
-} from "./parseRecommendations";
+import { type TavernRecommendationCard } from "./parseRecommendations";
 import { startTavernRoleplaySession } from "../../tavern-roleplay/mobile";
 
 /**
- * Renderer for `koko.tavern.recommendations` message blocks. Receives the
- * already-validated payload that the Tavern mini-app produced from the agent's
- * fenced output and renders a vertical stack of character cards.
+ * The card renders inside a `blockOnlyBubble` (transparent, no padding) sitting
+ * in an `agentRow` with `maxWidth: 88%` and a 36px avatar slot. The chat
+ * bubble has no explicit width — it grows to its intrinsic content size.
  *
- * Block data is validated by the host registry guard before this renderer is
- * called.
+ * Inside the card we use a `flex-row` Pressable with an 80px image + a
+ * `flex-1` text column. Without an explicit width on the Pressable, the
+ * `flex-1` column collapses to 0 because grow has nothing to grow into.
+ * That's why the previous build looked "squashed": chips and text were
+ * fighting for ~0px of usable space.
  *
- * Tap behaviour: hand off to the `tavern-roleplay` mini-app, which fetches the
- * full Character Tavern card, translates the opening line to Chinese, and
- * creates a new conversation bound to that character. The user is routed into
- * the new conversation automatically.
+ * We give the Pressable an explicit width based on the window width so the
+ * text column has a real number to flex against. Clamped to leave room for
+ * the avatar slot and stay readable on iPad / large displays.
  */
-export const TavernRecommendationsBlock: BlockRenderer<TavernRecommendations> = ({ block }) => {
-  const recommendations = block.data;
+const CARD_WIDTH_RATIO = 0.78;
+const CARD_WIDTH_MAX = 380;
 
-  return (
-    <View style={tw`gap-2`}>
-      {recommendations.cards.map((card, index) => (
-        <RecommendationRow key={`${card.pageUrl}:${index}`} card={card} />
-      ))}
-    </View>
-  );
+/**
+ * Single-card block. The Tavern mini-app emits one of these per recommended
+ * character, interleaved with `kind: "text"` prose bubbles. The data shape
+ * is exactly `TavernRecommendationCard` — there's no `reason` field; the
+ * "why" lives in the preceding text bubble, in the agent's own voice.
+ *
+ * Tap behaviour: hand off to the `tavern-roleplay` mini-app, which fetches
+ * the full Character Tavern card, translates the opening line to Chinese,
+ * and creates a new conversation bound to that character. The user is
+ * routed into the new conversation automatically.
+ */
+export const TavernCardBlock: BlockRenderer<TavernRecommendationCard> = ({ block }) => {
+  return <RecommendationRow card={block.data} />;
 };
 
 function RecommendationRow({ card }: { card: TavernRecommendationCard }): React.ReactElement {
   const [busy, setBusy] = useState(false);
+  const { width: windowWidth } = useWindowDimensions();
+  const cardWidth = Math.min(windowWidth * CARD_WIDTH_RATIO, CARD_WIDTH_MAX);
 
-  async function handlePress(): Promise<void> {
+  function handlePress(): void {
     if (busy) return;
+    // The press is a fire-and-forget: startTavernRoleplaySession creates the
+    // conversation + navigates synchronously, then kicks off the real fetch
+    // in the background. The chat page itself shows a loading banner until
+    // the card + first message are ready.
+    //
+    // We still gate with `busy` for one frame so a double-tap can't trigger
+    // two duplicate conversations.
     setBusy(true);
     try {
       const path = pathFromPageUrl(card.pageUrl);
@@ -46,7 +68,7 @@ function RecommendationRow({ card }: { card: TavernRecommendationCard }): React.
         Alert.alert("无法打开", "这张卡缺少 Character Tavern 路径。");
         return;
       }
-      await startTavernRoleplaySession({
+      startTavernRoleplaySession({
         path,
         pageUrl: card.pageUrl,
         imageUrl: card.imageUrl,
@@ -58,25 +80,30 @@ function RecommendationRow({ card }: { card: TavernRecommendationCard }): React.
     } catch (error) {
       Alert.alert("无法打开角色", error instanceof Error ? error.message : String(error));
     } finally {
-      setBusy(false);
+      // Release the press lock on the next macrotask so the conversation
+      // route is already pushed before this component re-renders.
+      setTimeout(() => setBusy(false), 0);
     }
   }
 
   return (
     <Pressable
-      onPress={() => void handlePress()}
+      onPress={handlePress}
       disabled={busy}
       android_ripple={{ color: "#1f2937" }}
-      style={tw.style(
-        "flex-row gap-3 rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900",
-        busy && "opacity-70"
-      )}
+      style={[
+        tw.style(
+          "flex-row gap-3 rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900",
+          busy && "opacity-70"
+        ),
+        { width: cardWidth }
+      ]}
     >
       <View style={tw`relative h-20 w-20`}>
-        <Image
+        <CachedImage
           source={{ uri: card.imageUrl }}
           style={tw`h-20 w-20 rounded-xl bg-slate-200 dark:bg-slate-800`}
-          resizeMode="cover"
+          contentFit="cover"
         />
         {busy ? (
           <View
@@ -124,12 +151,6 @@ function RecommendationRow({ card }: { card: TavernRecommendationCard }): React.
             ))}
           </View>
         ) : null}
-        <Text
-          style={tw`mt-2 text-xs leading-4 text-slate-500 dark:text-slate-400`}
-          numberOfLines={3}
-        >
-          {card.reason}
-        </Text>
       </View>
     </Pressable>
   );
@@ -140,4 +161,25 @@ function pathFromPageUrl(pageUrl: string): string | null {
   const match = /character-tavern\.com\/character\/([^?#]+)/.exec(pageUrl);
   if (!match || !match[1]) return null;
   return match[1].replace(/^\/+|\/+$/g, "");
+}
+
+/**
+ * Guard for the single-card block payload.
+ */
+export function isTavernRecommendationCard(data: unknown): data is TavernRecommendationCard {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) return false;
+  const d = data as Record<string, unknown>;
+  return (
+    typeof d.pageUrl === "string" &&
+    typeof d.imageUrl === "string" &&
+    typeof d.name === "string" &&
+    typeof d.nameZh === "string" &&
+    typeof d.tagline === "string" &&
+    typeof d.taglineZh === "string" &&
+    Array.isArray(d.tags) &&
+    d.tags.every((tag) => typeof tag === "string") &&
+    Array.isArray(d.matchTags) &&
+    d.matchTags.every((tag) => typeof tag === "string") &&
+    (d.safety === "sfw" || d.safety === "nsfw" || d.safety === "unknown")
+  );
 }

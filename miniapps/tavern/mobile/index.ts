@@ -1,3 +1,5 @@
+import type { ImageSourcePropType } from "react-native";
+
 import { registerMiniApp } from "@/runtime/miniApps";
 import { registerSharedBlockRenderer } from "@/runtime/messageBlocks";
 import {
@@ -5,18 +7,13 @@ import {
   type OutboundMessageBuilder
 } from "@/runtime/outboundMessages";
 import { inferOnce } from "@/runtime/openclaw";
-import {
-  useConversationStore,
-  type ChatMessage,
-  type MessageBlock
-} from "@/state/conversations";
+import { useConversationStore, type ChatMessage } from "@/state/conversations";
 
 import {
-  isTavernRecommendations,
   parseTavernRecommendations,
-  type TavernRecommendations
+  type TavernRecommendationItem
 } from "./parseRecommendations";
-import { TavernRecommendationsBlock } from "./RecommendationsBlock";
+import { TavernCardBlock, isTavernRecommendationCard } from "./RecommendationsBlock";
 
 /**
  * Tavern mini-app: 酒馆助手.
@@ -27,18 +24,29 @@ import { TavernRecommendationsBlock } from "./RecommendationsBlock";
  *      `inferOnce`, with the mini-app id steering session/agent routing.
  *   3. The `tavern` agent calls its `kokochat-tavern-search` skill, which
  *      hits Character Tavern's catalog endpoint and returns normalized hits.
- *   4. The agent picks 3-5 cards and replies with a koko.tavern.recommendations
- *      fenced block.
- *   5. KokoChat parses + validates the block and renders a stack of character
- *      cards. Tapping a card opens its Character Tavern detail page (v0).
+ *   4. The agent replies with a single `koko.tavern.recommendations` fenced
+ *      block whose `items` array interleaves short prose bubbles with 3-5
+ *      character cards (IM-style stream).
+ *   5. KokoChat parses + validates the block and expands `items` into
+ *      multiple agent messages: text → plain bubble, card → single-card
+ *      `koko.tavern.card` block. Tapping a card hands off to the
+ *      `tavern-roleplay` mini-app.
  *
  * The mini-app intentionally owns no scraping logic, no prompt about the
- * Character Tavern API, and no per-card detail fetching: that all lives in the
- * skill. Anything UI-shaped lives here.
+ * Character Tavern API, and no per-card detail fetching: that all lives in
+ * the skill. Anything UI-shaped lives here.
  */
 
 const MINI_APP_ID = "tavern";
-const RECOMMENDATIONS_BLOCK_TYPE = "koko.tavern.recommendations";
+/**
+ * Single-card block type, emitted one-per-card from the recommendations
+ * fenced block. The mini-app no longer registers a "whole batch" block —
+ * the host renders a stream of agent messages instead.
+ */
+const CARD_BLOCK_TYPE = "koko.tavern.card";
+// Character Tavern's own mascot artwork. Surfaces in the chat list / launcher
+// so users immediately associate the row with the upstream catalog.
+const tavernAvatar = require("./assets/character-tavern-logo.png") as ImageSourcePropType;
 // 1 hour. A normal Tavern turn (search-cards tool call + 3-5 card
 // translation + reason writing) usually completes within 30-90s, but agent
 // runs that involve a retry, a slow upstream, or longer prompt windows can
@@ -113,7 +121,7 @@ async function runRecommendation(
         console.warn("[tavern] recommendations parse failed:", parsed.error);
       }
       const fallback = assistantText.trim();
-      finalize(conversationId, placeholderId, {
+      finalizePlaceholder(conversationId, placeholderId, {
         text: fallback.length > 0 ? fallback : "（这次没有给出推荐，再换个说法试试？）"
       });
       if (fallback.length > 0) {
@@ -122,22 +130,19 @@ async function runRecommendation(
       return;
     }
 
-    const block: MessageBlock<TavernRecommendations> = {
-      type: RECOMMENDATIONS_BLOCK_TYPE,
-      version: 1,
-      data: parsed.value
-    };
-    finalize(conversationId, placeholderId, {
-      text: parsed.value.intro ?? "",
-      blocks: [block]
-    });
+    expandItemsIntoMessages(conversationId, placeholderId, parsed.value.items);
 
-    const preview =
-      parsed.value.cards
-        .slice(0, 2)
-        .map((card) => card.nameZh)
-        .join("、") || parsed.value.query;
-    store.touch(conversationId, `推荐了 ${parsed.value.cards.length} 个：${preview}`);
+    const cards = parsed.value.items.filter(
+      (item): item is Extract<TavernRecommendationItem, { kind: "card" }> => item.kind === "card"
+    );
+    const previewNames = cards
+      .slice(0, 2)
+      .map((item) => item.card.nameZh)
+      .join("、");
+    const preview = previewNames.length > 0
+      ? `推荐了 ${cards.length} 张：${previewNames}`
+      : `推荐了 ${cards.length} 张`;
+    store.touch(conversationId, preview);
   } catch (error) {
     // Surface a short, actionable Chinese message to the user. Keep the raw
     // error in the dev console for debugging.
@@ -148,11 +153,61 @@ async function runRecommendation(
     const userMessage = isTimeout(raw)
       ? "推荐这次跑得有点久，超时了。再发一次试试？"
       : "推荐失败了，稍后再试一次吧。";
-    finalize(conversationId, placeholderId, {
+    finalizePlaceholder(conversationId, placeholderId, {
       text: "",
       error: userMessage
     });
   }
+}
+
+/**
+ * Expand a parsed items[] into a stream of agent messages, replacing the
+ * single streaming placeholder. All synthesized messages share one runId so
+ * the chat UI groups them (collapsed avatars on continuation rows, etc).
+ */
+function expandItemsIntoMessages(
+  conversationId: string,
+  placeholderId: string,
+  items: TavernRecommendationItem[]
+): void {
+  const runId = `tavern-${Date.now()}`;
+  const messages: ChatMessage[] = items.map((item, idx) => {
+    const id = `${runId}-${idx}`;
+    if (item.kind === "text") {
+      return {
+        id,
+        role: "agent",
+        text: item.text,
+        runId,
+        streaming: false
+      };
+    }
+    return {
+      id,
+      role: "agent",
+      text: "",
+      runId,
+      streaming: false,
+      blocks: [
+        {
+          type: CARD_BLOCK_TYPE,
+          version: 1,
+          data: item.card
+        }
+      ]
+    };
+  });
+
+  useConversationStore.getState().setMessages(conversationId, (prev) => {
+    const idx = prev.findIndex((m) => m.id === placeholderId);
+    if (idx < 0) {
+      // Placeholder was already removed somehow; just append.
+      return [...prev, ...messages];
+    }
+    const next = [...prev];
+    next.splice(idx, 1, ...messages);
+    return next;
+  });
 }
 
 function isTimeout(message: string): boolean {
@@ -161,11 +216,19 @@ function isTimeout(message: string): boolean {
 
 interface FinalizePatch {
   text: string;
-  blocks?: MessageBlock[];
   error?: string;
 }
 
-function finalize(conversationId: string, placeholderId: string, patch: FinalizePatch): void {
+/**
+ * Replace the streaming placeholder in-place with a single final message
+ * (used for failure / fallback paths). Successful recommendations go
+ * through `expandItemsIntoMessages` instead.
+ */
+function finalizePlaceholder(
+  conversationId: string,
+  placeholderId: string,
+  patch: FinalizePatch
+): void {
   useConversationStore.getState().setMessages(conversationId, (prev) => {
     const idx = prev.findIndex((m) => m.id === placeholderId);
     if (idx < 0) return prev;
@@ -176,7 +239,6 @@ function finalize(conversationId: string, placeholderId: string, patch: Finalize
       ...existing,
       text: patch.text,
       streaming: false,
-      ...(patch.blocks !== undefined ? { blocks: patch.blocks } : {}),
       ...(patch.error !== undefined ? { error: patch.error } : {})
     };
     next[idx] = updated;
@@ -192,6 +254,7 @@ export function registerTavernMiniApp(): void {
     id: MINI_APP_ID,
     displayName: "酒馆",
     listGlyph: "🍺",
+    listImage: tavernAvatar,
     showInLauncher: true,
     defaultTitle: () => "酒馆助手",
     openclaw: {
@@ -210,8 +273,8 @@ export function registerTavernMiniApp(): void {
 
   registerOutboundMessageBuilder(MINI_APP_ID, tavernOutboundBuilder);
   registerSharedBlockRenderer(
-    RECOMMENDATIONS_BLOCK_TYPE,
-    isTavernRecommendations,
-    TavernRecommendationsBlock
+    CARD_BLOCK_TYPE,
+    isTavernRecommendationCard,
+    TavernCardBlock
   );
 }

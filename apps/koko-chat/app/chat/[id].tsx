@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  Animated,
   AppState,
+  Easing,
   FlatList,
-  Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -11,20 +12,25 @@ import {
   Text,
   TextInput,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type ListRenderItemInfo
 } from "react-native";
 import { Link, useLocalSearchParams, useNavigation, router } from "expo-router";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
+import { CachedImage } from "@/components/CachedImage";
 import { MarkdownText } from "@/components/MarkdownText";
 import { useGatewayStore } from "@/state/gateway";
 import { useConversationStore, type ChatMessage, type ConversationMeta } from "@/state/conversations";
 import { MessageBlockView } from "@/runtime/messageBlocks";
+import { getMiniAppListImage } from "@/runtime/miniApps";
 import { KokoColors, KokoRadius } from "@/theme/koko";
 
 const KOKO_CHAT_AVATAR = require("../../assets/brand/chat-avatar.png");
-const KOKO_STICKER_BLOCK_TYPE = "koko.sticker";
+const NEAR_BOTTOM_THRESHOLD_PX = 44;
 
 function messageKey(message: ChatMessage): string {
   return `${message.role}:${message.runId ?? "local"}:${message.id}`;
@@ -72,27 +78,33 @@ function getEmptyStateHint(mode: string, isConnected: boolean): string {
   return "跟 Koko 说点什么吧～";
 }
 
-function isStickerOnlyMessage(message: ChatMessage): boolean {
+/**
+ * "Block-only" agent messages — no text, no error, just one or more rendered
+ * blocks (sticker, tavern card, …). These blocks own their full visual
+ * presentation (border, background, padding); wrapping them inside the
+ * default white agent bubble would double up padding/border and squash the
+ * inner layout. We render them on a transparent bubble instead.
+ */
+function isBlockOnlyMessage(message: ChatMessage): boolean {
   return (
     message.role === "agent" &&
     message.text.length === 0 &&
     message.error === undefined &&
-    message.blocks?.length === 1 &&
-    message.blocks[0]?.type === KOKO_STICKER_BLOCK_TYPE
+    message.blocks !== undefined &&
+    message.blocks.length > 0
   );
 }
 
 function renderAgentBody(message: ChatMessage): React.ReactElement | null {
   const hasText = message.text.length > 0;
   if (!hasText && message.streaming !== true) return null;
-  const trailing = message.streaming === true ? <StreamingCursor /> : undefined;
-  return (
-    <MarkdownText
-      text={message.text}
-      color={KokoColors.ink}
-      trailing={trailing}
-    />
-  );
+  // Show the breathing pulse only while waiting for the very first token.
+  // Once any text has streamed in, the growing text itself signals "still
+  // working" — same pattern as ChatGPT / Claude.
+  if (!hasText) {
+    return <StreamingPulse />;
+  }
+  return <MarkdownText text={message.text} color={KokoColors.ink} />;
 }
 
 function renderUserBody(message: ChatMessage): React.ReactElement | null {
@@ -100,8 +112,83 @@ function renderUserBody(message: ChatMessage): React.ReactElement | null {
   return <Text style={[styles.messageText, styles.userText]}>{message.text}</Text>;
 }
 
-function StreamingCursor(): React.ReactElement {
-  return <Text style={styles.streamingCursor}> ·</Text>;
+/**
+ * Breathing-halo "thinking" indicator. A solid Koko-orange core with two
+ * staggered halo rings that scale out and fade. Designed to read as "Koko
+ * is thinking" without the typewriter implication of 3-dot bouncers.
+ *
+ * Loop period is 1600ms; the second halo is offset by 800ms so the user
+ * always sees one ring expanding while the other dissolves — no dead frames.
+ */
+function StreamingPulse(): React.ReactElement {
+  const ring1 = useRef(new Animated.Value(0)).current;
+  const ring2 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const makeLoop = (value: Animated.Value): Animated.CompositeAnimation =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(value, {
+            toValue: 1,
+            duration: 1600,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true
+          })
+        ])
+      );
+
+    const loop1 = makeLoop(ring1);
+    loop1.start();
+
+    // The second ring kicks in 800ms later so the two halos overlap and the
+    // user never sees a dead frame. We keep the loop handle in a tiny holder
+    // so the cleanup below can stop it without recomputing scope.
+    const loop2Holder: { current?: Animated.CompositeAnimation } = {};
+    const offsetTimer = setTimeout(() => {
+      const loop2 = makeLoop(ring2);
+      loop2.start();
+      loop2Holder.current = loop2;
+    }, 800);
+
+    return () => {
+      loop1.stop();
+      clearTimeout(offsetTimer);
+      loop2Holder.current?.stop();
+    };
+  }, [ring1, ring2]);
+
+  const haloStyle = (value: Animated.Value) => ({
+    transform: [
+      {
+        scale: value.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.55, 1.9]
+        })
+      }
+    ],
+    opacity: value.interpolate({
+      inputRange: [0, 0.85, 1],
+      outputRange: [0.45, 0, 0]
+    })
+  });
+
+  return (
+    <View
+      style={styles.streamingPulse}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel="正在思考"
+    >
+      <Animated.View style={[styles.streamingHalo, haloStyle(ring1)]} />
+      <Animated.View style={[styles.streamingHalo, haloStyle(ring2)]} />
+      <View style={styles.streamingCore} />
+    </View>
+  );
 }
 
 function renderMessageBlocks(
@@ -131,15 +218,25 @@ interface MessageRowProps {
 function MessageRow({ item, conversation, isContinuation }: MessageRowProps): React.ReactElement {
   const isAgent = item.role === "agent";
   const hasBlocks = item.blocks !== undefined && item.blocks.length > 0;
-  const stickerOnly = isStickerOnlyMessage(item);
+  const blockOnly = isBlockOnlyMessage(item);
   const body = isAgent ? renderAgentBody(item) : renderUserBody(item);
+  // In-chat agent avatar resolution, in order of priority:
+  //   1. The conversation's own listSnapshot.avatarUri — e.g. a Character
+  //      Tavern card portrait set by a mini-app at create time.
+  //   2. The mini-app descriptor's bundled listImage.
+  //   3. The Koko mascot, as a friendly default.
+  const conversationAvatarUri = conversation.listSnapshot?.avatarUri;
+  const agentAvatar =
+    conversationAvatarUri !== undefined && conversationAvatarUri.length > 0
+      ? { uri: conversationAvatarUri }
+      : getMiniAppListImage(conversation.mode) ?? KOKO_CHAT_AVATAR;
 
   const bubble = (
     <View
       style={[
         styles.bubble,
         isAgent ? styles.agentBubble : styles.userBubble,
-        stickerOnly && styles.stickerBubble
+        blockOnly && styles.blockOnlyBubble
       ]}
     >
       {item.error !== undefined ? (
@@ -161,7 +258,7 @@ function MessageRow({ item, conversation, isContinuation }: MessageRowProps): Re
         {isContinuation ? (
           <View style={styles.avatarSpacer} />
         ) : (
-          <Image source={KOKO_CHAT_AVATAR} style={styles.avatar} />
+          <CachedImage source={agentAvatar} style={styles.avatar} contentFit="cover" />
         )}
         {bubble}
       </View>
@@ -188,6 +285,58 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const headerHeight = useHeaderHeight();
+  const isNearBottomRef = useRef(true);
+  const scrollMetricsRef = useRef({
+    contentHeight: 0,
+    viewportHeight: 0,
+    offsetY: 0
+  });
+
+  function updateNearBottom(): void {
+    const { contentHeight, viewportHeight, offsetY } = scrollMetricsRef.current;
+    if (contentHeight <= 0 || viewportHeight <= 0) {
+      isNearBottomRef.current = true;
+      return;
+    }
+    const distanceToBottom = contentHeight - (offsetY + viewportHeight);
+    isNearBottomRef.current = distanceToBottom <= NEAR_BOTTOM_THRESHOLD_PX;
+  }
+
+  function scrollToBottomSoon(animated: boolean): void {
+    setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated });
+    }, 16);
+  }
+
+  function handleListScroll(event: NativeSyntheticEvent<NativeScrollEvent>): void {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    scrollMetricsRef.current = {
+      contentHeight: contentSize.height,
+      viewportHeight: layoutMeasurement.height,
+      offsetY: contentOffset.y
+    };
+    updateNearBottom();
+  }
+
+  function handleListLayout(height: number): void {
+    scrollMetricsRef.current = {
+      ...scrollMetricsRef.current,
+      viewportHeight: height
+    };
+    updateNearBottom();
+  }
+
+  function handleContentSizeChange(height: number): void {
+    const shouldFollowBottom = isNearBottomRef.current;
+    scrollMetricsRef.current = {
+      ...scrollMetricsRef.current,
+      contentHeight: height
+    };
+    updateNearBottom();
+    if (shouldFollowBottom && messages.length > 0) {
+      scrollToBottomSoon(false);
+    }
+  }
 
   // Register this conversation as the currently active one so side effects
   // (routing in from a notification, cross-mini-app nav, etc.) can reason
@@ -204,14 +353,35 @@ export default function ChatScreen() {
   }, [conversationId]);
 
   const navigation = useNavigation();
+  // The 酒馆助手 conversation gets an extra header button that jumps to the
+  // browse grid. Other mini-app conversations don't surface this — they're
+  // either character-bound (tavern-roleplay) or unrelated (koko, etc).
+  const showBrowseShortcut = conversation?.mode === "tavern";
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: conversation?.title ?? "聊天"
+      title: conversation?.title ?? "聊天",
+      headerRight: showBrowseShortcut
+        ? () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="角色广场"
+              onPress={() => router.push("/tavern/browse")}
+              hitSlop={10}
+              style={({ pressed }) => [
+                styles.headerButton,
+                pressed && styles.headerButtonPressed
+              ]}
+            >
+              <Ionicons name="grid-outline" size={20} color={KokoColors.primaryDeep} />
+            </Pressable>
+          )
+        : undefined
     });
-  }, [conversation?.title, navigation]);
+  }, [conversation?.title, navigation, showBrowseShortcut]);
 
   useEffect(() => {
     if (messages.length === 0) return;
+    if (!isNearBottomRef.current) return;
     const timer = setTimeout(() => {
       listRef.current?.scrollToEnd({ animated: false });
     }, 16);
@@ -219,7 +389,7 @@ export default function ChatScreen() {
   }, [messages]);
 
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextState) => {
+    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
       if (nextState !== "active") {
         // iOS can restore a stale keyboard frame after backgrounding, which
         // makes KeyboardAvoidingView collapse the FlatList and place the input
@@ -228,7 +398,18 @@ export default function ChatScreen() {
         Keyboard.dismiss();
       }
     });
-    return () => subscription.remove();
+    const keyboardShowSubscription = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => {
+        if (isNearBottomRef.current) {
+          scrollToBottomSoon(true);
+        }
+      }
+    );
+    return () => {
+      appStateSubscription.remove();
+      keyboardShowSubscription.remove();
+    };
   }, []);
 
   async function handleSend(): Promise<void> {
@@ -263,8 +444,21 @@ export default function ChatScreen() {
     );
   }
 
-  const isConnected = status === "connected" || status === "handshaking";
-  const sendDisabled = sending || draft.trim().length === 0 || !isConnected;
+  const isConnected = status === "connected";
+  const isRecoveringConnection = status === "connecting" || status === "handshaking";
+  // Mini-apps can mark a conversation as still bootstrapping (e.g. tavern
+  // roleplay fetching the character card + translating). While loading we
+  // show a banner and lock the input; on error we show the reason but keep
+  // input locked so the user doesn't send into a half-set-up chat.
+  const bootstrap = conversation.bootstrap;
+  const isBootstrapping = bootstrap?.status === "loading";
+  const bootstrapError = bootstrap?.status === "error" ? bootstrap.error ?? "加载失败" : null;
+  const sendDisabled =
+    sending ||
+    draft.trim().length === 0 ||
+    !isConnected ||
+    isBootstrapping ||
+    bootstrapError !== null;
 
   return (
     <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
@@ -273,7 +467,24 @@ export default function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={headerHeight}
       >
-        {!isConnected ? (
+        {isBootstrapping ? (
+          <View style={styles.banner}>
+            <Text style={styles.bannerTitle}>正在加载角色卡</Text>
+            <Text style={styles.bannerHint}>
+              {bootstrap?.hint ?? "正在拉取角色信息，准备好就可以开始聊天。"}
+            </Text>
+          </View>
+        ) : bootstrapError !== null ? (
+          <View style={styles.banner}>
+            <Text style={styles.bannerTitle}>角色卡加载失败</Text>
+            <Text style={styles.bannerHint}>{bootstrapError}</Text>
+          </View>
+        ) : isRecoveringConnection ? (
+          <View style={styles.banner}>
+            <Text style={styles.bannerTitle}>正在连接 OpenClaw</Text>
+            <Text style={styles.bannerHint}>正在恢复本地 Gateway 连接，稍等一下就能继续聊天。</Text>
+          </View>
+        ) : !isConnected ? (
           <Link href="/pair" asChild>
             <Pressable accessibilityRole="button" style={styles.banner}>
               <Text style={styles.bannerTitle}>未连接 OpenClaw</Text>
@@ -295,10 +506,13 @@ export default function ChatScreen() {
             />
           )}
           contentContainerStyle={styles.listContent}
-          onContentSizeChange={() => {
-            if (messages.length > 0) {
-              listRef.current?.scrollToEnd({ animated: false });
-            }
+          onLayout={(event) => {
+            handleListLayout(event.nativeEvent.layout.height);
+          }}
+          onScroll={handleListScroll}
+          scrollEventThrottle={16}
+          onContentSizeChange={(_width, height) => {
+            handleContentSizeChange(height);
           }}
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -314,10 +528,23 @@ export default function ChatScreen() {
             <TextInput
               value={draft}
               onChangeText={setDraft}
-              placeholder={isConnected ? "说点什么…" : "连接 OpenClaw 后可以聊天"}
+              placeholder={
+                isBootstrapping
+                  ? "角色卡加载中…"
+                  : bootstrapError !== null
+                    ? "角色卡加载失败，无法发送"
+                    : isConnected
+                      ? "说点什么…"
+                      : "连接 OpenClaw 后可以聊天"
+              }
               placeholderTextColor={KokoColors.inkPlaceholder}
-              editable={isConnected}
+              editable={isConnected && !isBootstrapping && bootstrapError === null}
               multiline
+              onFocus={() => {
+                if (isNearBottomRef.current) {
+                  scrollToBottomSoon(true);
+                }
+              }}
               style={styles.input}
             />
             <Pressable
@@ -390,7 +617,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: KokoColors.border
   },
-  stickerBubble: {
+  blockOnlyBubble: {
     paddingHorizontal: 0,
     paddingVertical: 0,
     backgroundColor: "transparent",
@@ -410,12 +637,38 @@ const styles = StyleSheet.create({
   userText: {
     color: "#FFFFFF"
   },
-  streamingCursor: {
-    opacity: 0.6
+  streamingPulse: {
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  streamingHalo: {
+    position: "absolute",
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: KokoColors.primary
+  },
+  streamingCore: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: KokoColors.primary
   },
   errorText: {
     fontSize: 14,
     color: KokoColors.danger
+  },
+  headerButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: KokoRadius.pill,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  headerButtonPressed: {
+    backgroundColor: KokoColors.surfaceSoft
   },
   blocksColumn: {
     gap: 8

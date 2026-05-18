@@ -1,12 +1,12 @@
 import { registerMiniApp } from "@/runtime/miniApps";
 import { getMiniAppStorage } from "@/runtime/miniAppStorage";
+import { openConversation } from "@/runtime/navigation";
 import {
   registerOutboundMessageBuilder,
   type OutboundMessageBuilder
 } from "@/runtime/outboundMessages";
 import { inferOnce } from "@/runtime/openclaw";
 import { useConversationStore } from "@/state/conversations";
-import { router } from "expo-router";
 
 /**
  * Tavern Roleplay mini-app: 用一张 Character Tavern 角色卡开启一场长会话。
@@ -48,17 +48,59 @@ export interface TavernRoleplayCardSummary {
   tagline?: string;
   /** Localized Chinese tagline when available. */
   taglineZh?: string;
+  /**
+   * Optional pre-fetched payload from the Tavern browse page. When supplied
+   * we skip both the remote `fetchFullCard()` HTTP hop and the LLM
+   * `translateFirstMes()` round-trip — the chat opens instantly with the
+   * pre-baked Chinese opening line. Used by `BrowseScreen` so cards from
+   * the curated catalogue don't pay any network cost on entry.
+   *
+   * Fields:
+   *   - description: original English description (kept for the agent
+   *                  bootstrap prompt — see `buildBootstrapPrefix`).
+   *   - personality / scenario: original English persona definitions, also
+   *                  used by the bootstrap prompt.
+   *   - firstMessage: original English first_mes, used as the canonical
+   *                  card text the agent sees.
+   *   - firstMessageZh: pre-translated Chinese first_mes, surfaced as the
+   *                  conversation's first agent message.
+   */
+  prefetched?: {
+    description?: string;
+    personality?: string;
+    scenario?: string;
+    firstMessage?: string;
+    firstMessageZh?: string;
+  };
 }
 
-/** Public entry point used by the Tavern recommendations renderer. */
-export async function startTavernRoleplaySession(summary: TavernRoleplayCardSummary): Promise<void> {
+/**
+ * Public entry point used by the Tavern recommendations renderer.
+ *
+ * UX requirement: the user taps a card and lands in the roleplay chat
+ * window *immediately*, even though we need to hit character-tavern.com
+ * for the full card and run an LLM translation pass for the opening
+ * line. We split the work in two:
+ *
+ *   1. Synchronous (this function, before it returns):
+ *      - create the conversation with what we already know from the
+ *        recommendation summary (avatar, names, tagline)
+ *      - mark the conversation as `bootstrap: "loading"` so the chat
+ *        page shows a status banner and locks the input
+ *      - push the route — user sees the new chat window within a frame
+ *
+ *   2. Background (`bootstrapInBackground`):
+ *      - fetch the full Character Tavern card
+ *      - translate the opening line
+ *      - seed the first agent message
+ *      - flip the bootstrap state to `ready` (chat unlocks)
+ *      - on failure, set `error` so the user sees what broke
+ */
+export function startTavernRoleplaySession(summary: TavernRoleplayCardSummary): void {
   registerTavernRoleplayMiniApp();
-  const card = await fetchFullCard(summary.path);
-  STORAGE.setJson(`card.${summary.path}`, card);
 
-  const characterName = card.inChatName || card.name || summary.nameZh || summary.name;
-  const localizedFirstMes = await translateFirstMes(card, characterName);
-  const titleZh = summary.nameZh || characterName;
+  const characterName = summary.nameZh || summary.name;
+  const titleZh = characterName;
   const subtitle = summary.taglineZh || summary.tagline || "";
 
   const meta = useConversationStore.getState().create({
@@ -74,6 +116,10 @@ export async function startTavernRoleplaySession(summary: TavernRoleplayCardSumm
       title: titleZh,
       ...(subtitle.length > 0 ? { subtitle } : {}),
       avatarUri: summary.imageUrl
+    },
+    bootstrap: {
+      status: "loading",
+      hint: "正在拉角色卡 + 翻译开场白，准备好就可以开始聊天～"
     }
   });
 
@@ -82,19 +128,128 @@ export async function startTavernRoleplaySession(summary: TavernRoleplayCardSumm
     bootstrapped: false
   });
 
-  if (localizedFirstMes.trim().length > 0) {
-    useConversationStore.getState().setMessages(meta.id, () => [
-      {
-        id: `tavern-roleplay-firstmes-${meta.id}`,
-        role: "agent",
-        text: localizedFirstMes
-      }
-    ]);
-    useConversationStore.getState().touch(meta.id, localizedFirstMes.slice(0, 120));
+  openConversation(meta.id);
+
+  // Browse-page entry: we already have the full English card + Chinese
+  // first_mes in the bundle, no remote work needed. Hydrate everything
+  // synchronously on the next tick and flip bootstrap to "ready" without
+  // ever showing the loading banner.
+  if (summary.prefetched !== undefined && hasUsablePrefetch(summary.prefetched)) {
+    bootstrapFromPrefetched(meta.id, summary);
+    return;
   }
 
-  router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
+  // Recommendation-card entry (酒馆助手): we only have a card summary; need
+  // to fetch the full card + translate first_mes from character-tavern.
+  void bootstrapInBackground(meta.id, summary);
 }
+
+function hasUsablePrefetch(p: NonNullable<TavernRoleplayCardSummary["prefetched"]>): boolean {
+  // The minimum needed to open the chat sensibly is a first_mes (or its
+  // Chinese version). Everything else (description / personality /
+  // scenario) is gravy used by the system prompt.
+  return (
+    (typeof p.firstMessageZh === "string" && p.firstMessageZh.trim().length > 0) ||
+    (typeof p.firstMessage === "string" && p.firstMessage.trim().length > 0)
+  );
+}
+
+function bootstrapFromPrefetched(
+  conversationId: string,
+  summary: TavernRoleplayCardSummary
+): void {
+  const store = useConversationStore.getState();
+  const pre = summary.prefetched!;
+  // Synthesise the same in-memory card shape `fetchFullCard()` produces,
+  // so the existing outbound builder + buildBootstrapPrefix path works
+  // unchanged. Fields we don't have stay empty.
+  const card: PartialFetchedCard = {
+    source: "character_tavern",
+    id: summary.path,
+    path: summary.path,
+    pageUrl: summary.pageUrl,
+    imageUrl: summary.imageUrl,
+    name: summary.name,
+    inChatName: summary.nameZh || summary.name,
+    tagline: summary.tagline ?? "",
+    pageDescription: pre.description ?? "",
+    isNSFW: false,
+    isOC: false,
+    tokenTotal: 0,
+    data: {
+      name: summary.nameZh || summary.name,
+      description: pre.description ?? "",
+      personality: pre.personality ?? "",
+      scenario: pre.scenario ?? "",
+      first_mes: pre.firstMessage ?? "",
+      mes_example: "",
+      system_prompt: "",
+      post_history_instructions: "",
+      alternate_greetings: [],
+      character_book: null,
+      tags: []
+    }
+  };
+  STORAGE.setJson(`card.${summary.path}`, card);
+
+  // Pick the Chinese first_mes when available; fall back to the original
+  // English one. The browse catalogue ships both for almost every card.
+  const opening =
+    (pre.firstMessageZh && pre.firstMessageZh.trim().length > 0
+      ? pre.firstMessageZh
+      : pre.firstMessage) ?? "";
+
+  if (opening.trim().length > 0) {
+    store.setMessages(conversationId, () => [
+      {
+        id: `tavern-roleplay-firstmes-${conversationId}`,
+        role: "agent",
+        text: opening
+      }
+    ]);
+    store.touch(conversationId, opening.slice(0, 120));
+  }
+
+  store.setBootstrap(conversationId, { status: "ready" });
+}
+
+async function bootstrapInBackground(
+  conversationId: string,
+  summary: TavernRoleplayCardSummary
+): Promise<void> {
+  const store = useConversationStore.getState();
+  try {
+    const card = await fetchFullCard(summary.path);
+    STORAGE.setJson(`card.${summary.path}`, card);
+
+    const characterName = card.inChatName || card.name || summary.nameZh || summary.name;
+    const localizedFirstMes = await translateFirstMes(card, characterName);
+
+    if (localizedFirstMes.trim().length > 0) {
+      store.setMessages(conversationId, () => [
+        {
+          id: `tavern-roleplay-firstmes-${conversationId}`,
+          role: "agent",
+          text: localizedFirstMes
+        }
+      ]);
+      store.touch(conversationId, localizedFirstMes.slice(0, 120));
+    }
+
+    store.setBootstrap(conversationId, { status: "ready" });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (__DEV__) {
+      console.warn("[tavern-roleplay] bootstrap failed:", message);
+    }
+    store.setBootstrap(conversationId, {
+      status: "error",
+      error: `角色卡加载失败：${message.slice(0, 200)}`
+    });
+  }
+}
+
+type PartialFetchedCard = FetchedCard;
 
 const tavernRoleplayOutboundBuilder: OutboundMessageBuilder = async ({ conversation, visibleText }) => {
   const state = STORAGE.getJson<{ cardPath: string; bootstrapped: boolean }>(`session.${conversation.id}`);
