@@ -246,8 +246,7 @@ export class BrowserGatewayClient {
         auth: { token: this.options.token },
         client,
         minProtocol: GATEWAY_PROTOCOL_VERSION,
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        nonce
+        maxProtocol: GATEWAY_PROTOCOL_VERSION
       };
     }
 
