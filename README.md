@@ -2,6 +2,40 @@
 
 > Chat-first 的移动 App,容纳多个 AI mini-app。底层蹭用户已经配好的 OpenClaw(Codex / Claude Code 订阅)做能力供给。By Komako.
 
+## 这是什么
+
+KokoChat 不是又一个 ChatGPT 客户端,而是 **OpenClaw 在你手机上的家**。
+
+如果你已经在 Mac 上跑了 OpenClaw,把它接到 Codex / Claude Code / 自部署 LLM 之类——KokoChat 就是把那一整套 AI 能力搬到手机上的入口。一次配对(扫码),之后所有聊天 / agent / mini-app 都跑在你自己机器上,模型 token 全部走你自己的订阅,不经任何第三方服务。
+
+跟现在 GitHub 上一堆 "openclaw client" 不同的地方在于:KokoChat **不是** OpenClaw 的薄壳。它在 OpenClaw 之上盖了一层产品形态——**chat-first 的 mini-app 容器**。
+
+## 怎么用
+
+跟 ChatGPT / Character.AI 这种"一个聊天界面"的形态不同,KokoChat 想长成"多个 AI 小程序同时活在一个聊天 App 里"的样子。
+
+* **主聊天里有一个常驻的 AI 小搭子 Koko**:你说话不需要明确"我想用哪个功能",Koko 听懂你的意图,该召唤哪个 mini-app 就召唤哪个。
+* **每个具体场景是一个独立 mini-app**:有自己的 chat surface、UI 页面、本地存储、OpenClaw 一侧的 skill / agent。可以是工具、可以是娱乐、可以是长会话型的玩法。
+* **mini-app 是会越来越多的**。第一版只内置一个,后面会逐步加。开发者 / 用户也可以自己写。
+* **数据在你手里**:聊天记录、角色卡、笔记 source、persona——全部留在你的手机和你的 OpenClaw 机器上,不上传任何云。
+
+当前内置的 mini-app:
+
+* **酒馆**(`miniapps/tavern`):从 character-tavern.com 推荐 / 浏览 AI 角色卡。预置 440 张中文译名 / 中文 tagline 的二次元向卡片,从广场进入秒开聊天。
+* **酒馆角色聊天**(`miniapps/tavern-roleplay`):点角色卡进入的角色扮演会话。SillyTavern V2 卡完整 binding、`{{user}}/{{char}}` 替换、persona 设置一次全局生效。
+
+下一步:打算做 Notebook 形态(基于一组用户信任的资料的 scoped chat,参考 NotebookLM 但 agent 主动 bootstrap 资料、用户做减法)、学习/陪读类、digest 类。
+
+## 设计原则
+
+KokoChat 的几条不会动摇的设计判断:
+
+1. **Chat-first**——主对话是产品的家,不是入口跳板。所有 mini-app 都从主对话被召唤出来。
+2. **Mini-app 容器,不是 chatbot wrapper**——每个 mini-app 拥有自己的 surface 和数据,host 只管聊天 UI / 路由 / 持久化。
+3. **借 OpenClaw 启动期借势,但不绑死身份**——OpenClaw 是当前的 capability provider,以后可以换、可以加,产品身份不锁。
+4. **不卖 token、不卖订阅**——AI 能力来自你已有的 Codex / Claude Code 等订阅,KokoChat 只是把它移动化。
+5. **用户自治**——数据在你手机 + 你 Mac,KokoChat 没有云端账号体系,也没打算做。
+
 ## Status
 
 迭代中。当前主干能跑:
@@ -38,6 +72,47 @@ docs/                    mini-app runtime / skills 设计文档
 2. [`DECISIONS.md`](./DECISIONS.md) — 不可逆的工程决定(Gateway 直连、sessionKey、block envelope 等)
 3. [`docs/mini-app-runtime.md`](./docs/mini-app-runtime.md) — 内置 mini-app 怎么写
 4. [`miniapps/tavern/mobile/README.md`](./miniapps/tavern/mobile/README.md) — 最完整的 mini-app 范例
+
+## OpenClaw Setup
+
+KokoChat 的手机 App 只负责 UI、配对和本地聊天记录。真正的 AI 能力、角色卡搜索、角色扮演 agent 都跑在用户自己的 OpenClaw 里。第一次使用前，需要在 OpenClaw 机器上安装 KokoChat 支持。
+
+拿到公开仓库后，先 clone:
+
+```bash
+git clone https://github.com/Eyelids/koko-chat.git
+cd koko-chat
+```
+
+如果你已经 clone 了这个仓库，在仓库根目录运行:
+
+```bash
+pnpm install
+pnpm openclaw:install
+```
+
+等价的 Node 入口:
+
+```bash
+node scripts/install-openclaw-support.mjs
+```
+
+这个脚本会做这些事:
+
+- 确认 OpenClaw CLI 可用。
+- 创建缺失的 `koko`、`tavern`、`tavern-roleplay` agents。
+- 安装 `kokochat-pairing` 到默认 OpenClaw workspace。
+- 安装 `kokochat-tavern-search` 到 `tavern` agent workspace。
+- 安装 `kokochat-tavern-roleplay` 到 `tavern-roleplay` agent workspace。
+- 用 `openclaw skills info` 验证这些 skills 能被目标 agent 看见。
+
+安装完成后，打开 KokoChat 的「配对 OpenClaw」页面，复制页面生成的配对请求发给 OpenClaw。OpenClaw 会批准设备并返回 KokoChat 连接码。
+
+检查安装计划但不改机器:
+
+```bash
+node scripts/install-openclaw-support.mjs --dry-run
+```
 
 ## Development
 
