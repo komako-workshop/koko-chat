@@ -32,8 +32,30 @@ import { KokoColors, KokoRadius } from "@/theme/koko";
 const KOKO_CHAT_AVATAR = require("../../assets/brand/chat-avatar.png");
 const NEAR_BOTTOM_THRESHOLD_PX = 44;
 
+interface ChatScrollSnapshot {
+  contentHeight: number;
+  viewportHeight: number;
+  offsetY: number;
+  isNearBottom: boolean;
+}
+
+const chatScrollSnapshots = new Map<string, ChatScrollSnapshot>();
+
 function messageKey(message: ChatMessage): string {
   return `${message.role}:${message.runId ?? "local"}:${message.id}`;
+}
+
+function saveChatScrollSnapshot(
+  conversationId: string | null,
+  metrics: ChatScrollSnapshot
+): void {
+  if (conversationId === null) return;
+  chatScrollSnapshots.set(conversationId, {
+    contentHeight: metrics.contentHeight,
+    viewportHeight: metrics.viewportHeight,
+    offsetY: Math.max(0, metrics.offsetY),
+    isNearBottom: metrics.isNearBottom
+  });
 }
 
 /**
@@ -291,6 +313,10 @@ export default function ChatScreen() {
     viewportHeight: 0,
     offsetY: 0
   });
+  const pendingScrollRestoreRef = useRef<ChatScrollSnapshot | null>(
+    conversationId === null ? null : chatScrollSnapshots.get(conversationId) ?? null
+  );
+  const hasRestoredScrollRef = useRef(pendingScrollRestoreRef.current === null);
 
   function updateNearBottom(): void {
     const { contentHeight, viewportHeight, offsetY } = scrollMetricsRef.current;
@@ -302,10 +328,47 @@ export default function ChatScreen() {
     isNearBottomRef.current = distanceToBottom <= NEAR_BOTTOM_THRESHOLD_PX;
   }
 
+  function saveCurrentScrollSnapshot(): void {
+    saveChatScrollSnapshot(conversationId, {
+      ...scrollMetricsRef.current,
+      isNearBottom: isNearBottomRef.current
+    });
+  }
+
   function scrollToBottomSoon(animated: boolean): void {
     setTimeout(() => {
       listRef.current?.scrollToEnd({ animated });
     }, 16);
+  }
+
+  function tryRestoreSavedScroll(): boolean {
+    const snapshot = pendingScrollRestoreRef.current;
+    if (snapshot === null || hasRestoredScrollRef.current) return false;
+
+    const { contentHeight, viewportHeight } = scrollMetricsRef.current;
+    if (contentHeight <= 0 || viewportHeight <= 0) return true;
+
+    hasRestoredScrollRef.current = true;
+    pendingScrollRestoreRef.current = null;
+
+    if (snapshot.isNearBottom) {
+      isNearBottomRef.current = true;
+      scrollToBottomSoon(false);
+      return true;
+    }
+
+    const maxOffset = Math.max(0, contentHeight - viewportHeight);
+    const offset = Math.min(Math.max(0, snapshot.offsetY), maxOffset);
+    scrollMetricsRef.current = {
+      ...scrollMetricsRef.current,
+      offsetY: offset
+    };
+    updateNearBottom();
+
+    setTimeout(() => {
+      listRef.current?.scrollToOffset({ offset, animated: false });
+    }, 16);
+    return true;
   }
 
   function handleListScroll(event: NativeSyntheticEvent<NativeScrollEvent>): void {
@@ -316,6 +379,7 @@ export default function ChatScreen() {
       offsetY: contentOffset.y
     };
     updateNearBottom();
+    saveCurrentScrollSnapshot();
   }
 
   function handleListLayout(height: number): void {
@@ -324,6 +388,7 @@ export default function ChatScreen() {
       viewportHeight: height
     };
     updateNearBottom();
+    tryRestoreSavedScroll();
   }
 
   function handleContentSizeChange(height: number): void {
@@ -333,6 +398,7 @@ export default function ChatScreen() {
       contentHeight: height
     };
     updateNearBottom();
+    if (tryRestoreSavedScroll()) return;
     if (shouldFollowBottom && messages.length > 0) {
       scrollToBottomSoon(false);
     }
@@ -380,13 +446,31 @@ export default function ChatScreen() {
   }, [conversation?.title, navigation, showBrowseShortcut]);
 
   useEffect(() => {
+    const snapshot = conversationId === null
+      ? null
+      : chatScrollSnapshots.get(conversationId) ?? null;
+    pendingScrollRestoreRef.current = snapshot;
+    hasRestoredScrollRef.current = snapshot === null;
+    if (snapshot !== null) {
+      isNearBottomRef.current = snapshot.isNearBottom;
+    }
+  }, [conversationId]);
+
+  useEffect(() => {
     if (messages.length === 0) return;
+    if (pendingScrollRestoreRef.current !== null && !hasRestoredScrollRef.current) return;
     if (!isNearBottomRef.current) return;
     const timer = setTimeout(() => {
       listRef.current?.scrollToEnd({ animated: false });
     }, 16);
     return () => clearTimeout(timer);
   }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      saveCurrentScrollSnapshot();
+    };
+  }, [conversationId]);
 
   useEffect(() => {
     const appStateSubscription = AppState.addEventListener("change", (nextState) => {
