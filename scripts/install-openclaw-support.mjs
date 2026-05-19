@@ -76,7 +76,7 @@ const AGENT_DEFINITIONS = {
       "For concrete roleplay-card recommendation requests, run exactly this local search tool first:",
       "",
       "```bash",
-      "node ~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs '<json>'",
+      "~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs '<json>'",
       "```",
       "",
       "Use an English keyword `query`, `limit: 20`, and `includeNsfw: true` only when the user explicitly asks for adult/NSFW content. If the request is only a greeting or filler, reply briefly in Chinese without a fenced block.",
@@ -115,10 +115,15 @@ const AGENT_DEFINITIONS = {
       exec: {
         security: "allowlist",
         ask: "off",
-        safeBins: ["node"],
         timeoutSec: 120
       }
-    }
+    },
+    execAllowlist: [
+      {
+        skillId: "kokochat-tavern-search",
+        relativePath: join("bin", "search-cards.mjs")
+      }
+    ]
   }
 };
 
@@ -166,6 +171,7 @@ function main() {
 
   installAgentDefinitions(workspaceByAgent);
   configureAgentOpenClawConfig(installed);
+  configureExecApprovals(workspaceByAgent);
 
   if (!skipVerify) {
     for (const entry of installed) {
@@ -402,6 +408,47 @@ function configureAgentOpenClawConfig(installed) {
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 }
 
+function configureExecApprovals(workspaceByAgent) {
+  const approvalsPath = join(openclawHome, "exec-approvals.json");
+  const entriesByAgent = new Map();
+  for (const [agentId, definition] of Object.entries(AGENT_DEFINITIONS)) {
+    if (!Array.isArray(definition.execAllowlist)) continue;
+    const workspace = workspaceByAgent.get(agentId) ?? agentFallbackWorkspace(agentId);
+    for (const item of definition.execAllowlist) {
+      const pattern = join(workspace, "skills", item.skillId, item.relativePath);
+      const current = entriesByAgent.get(agentId) ?? [];
+      current.push(pattern);
+      entriesByAgent.set(agentId, current);
+    }
+  }
+  if (entriesByAgent.size === 0) return;
+
+  log(`exec approvals: ${approvalsPath}`);
+  for (const [agentId, patterns] of entriesByAgent) {
+    log(`exec allowlist ${agentId}: ${patterns.join(", ")}`);
+  }
+  if (dryRun) return;
+
+  const approvals = existsSync(approvalsPath)
+    ? readJsonObject(approvalsPath)
+    : { version: 1, defaults: {}, agents: {} };
+  approvals.version = 1;
+  if (!isRecord(approvals.defaults)) approvals.defaults = {};
+  const agents = isRecord(approvals.agents) ? approvals.agents : {};
+  approvals.agents = agents;
+
+  for (const [agentId, patterns] of entriesByAgent) {
+    const agent = isRecord(agents[agentId]) ? agents[agentId] : {};
+    agents[agentId] = agent;
+    agent.security = "allowlist";
+    agent.ask = "off";
+    agent.askFallback = "allowlist";
+    agent.allowlist = mergeExecAllowlist(agent.allowlist, patterns);
+  }
+
+  writeFileSync(approvalsPath, `${JSON.stringify(approvals, null, 2)}\n`);
+}
+
 function readJsonObject(path) {
   const text = existsSync(path) ? readFileSync(path, "utf8").trim() : "{}";
   if (text.length === 0) return {};
@@ -451,11 +498,36 @@ function mergeToolConfig(current, required) {
   if (isRecord(required.exec)) {
     merged.exec = {
       ...(isRecord(merged.exec) ? merged.exec : {}),
-      ...required.exec,
-      safeBins: mergeStringArray(isRecord(merged.exec) ? merged.exec.safeBins : undefined, required.exec.safeBins ?? [])
+      ...required.exec
     };
   }
   return merged;
+}
+
+function mergeExecAllowlist(current, patterns) {
+  const merged = Array.isArray(current)
+    ? current.filter((value) => isRecord(value) && typeof value.pattern === "string")
+    : [];
+  const seen = new Set(merged.map((value) => value.pattern));
+  for (const pattern of patterns) {
+    if (seen.has(pattern)) continue;
+    seen.add(pattern);
+    merged.push({
+      id: stableId(`kokochat:${pattern}`),
+      pattern
+    });
+  }
+  return merged;
+}
+
+function stableId(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const hex = (hash >>> 0).toString(16).padStart(8, "0");
+  return `kokochat-${hex}`;
 }
 
 function shouldKeepCurrentProfile(current, required) {
