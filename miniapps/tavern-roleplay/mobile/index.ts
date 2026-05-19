@@ -6,6 +6,12 @@ import {
   type OutboundMessageBuilder
 } from "@/runtime/outboundMessages";
 import { inferOnce } from "@/runtime/openclaw";
+import {
+  buildDefaultSessionRestoreMessage,
+  formatRecentTranscript,
+  registerSessionRestoreBuilder,
+  type SessionRestoreBuilder
+} from "@/runtime/sessionRestore";
 import { useConversationStore } from "@/state/conversations";
 
 import { resolvePersonaName } from "@/state/tavernPersona";
@@ -312,6 +318,33 @@ function buildBootstrapPrefix(card: unknown): string {
   ].join("\n");
 }
 
+const tavernRoleplaySessionRestoreBuilder: SessionRestoreBuilder = (input) => {
+  const state = STORAGE.getJson<{ cardPath: string; bootstrapped: boolean }>(`session.${input.conversation.id}`);
+  if (state === undefined) return buildDefaultSessionRestoreMessage(input);
+
+  const card = STORAGE.getJson<unknown>(`card.${state.cardPath}`);
+  if (card === undefined) return buildDefaultSessionRestoreMessage(input);
+
+  const transcript = formatRecentTranscript(input.messages);
+  if (transcript === null) return null;
+
+  return [
+    "KokoChat Tavern roleplay session restore.",
+    "The phone has local roleplay history, but this OpenClaw session is empty or missing.",
+    "Use the character card and transcript below as established context.",
+    "Stay in character. Do not repeat the opening message, summarize the restore, or ask for setup again.",
+    "Reply only to the current user turn that follows this restore block.",
+    "",
+    "<character_card_json>",
+    JSON.stringify(card),
+    "</character_card_json>",
+    "",
+    "<recent_transcript>",
+    transcript,
+    "</recent_transcript>"
+  ].join("\n");
+};
+
 async function fetchFullCard(path: string): Promise<FetchedCard> {
   // V0: KokoChat fetches the Character Tavern detail endpoint directly from
   // the device. This is fine on the iOS simulator and on networks that can
@@ -493,4 +526,5 @@ export function registerTavernRoleplayMiniApp(): void {
   } as Parameters<typeof registerMiniApp>[0]);
 
   registerOutboundMessageBuilder(MINI_APP_ID, tavernRoleplayOutboundBuilder);
+  registerSessionRestoreBuilder(MINI_APP_ID, tavernRoleplaySessionRestoreBuilder);
 }

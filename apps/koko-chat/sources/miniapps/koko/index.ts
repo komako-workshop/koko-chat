@@ -7,6 +7,11 @@ import {
   type OutboundMessageBuilder
 } from "@/runtime/outboundMessages";
 import { ensureOpenClawAgent } from "@/runtime/openclaw";
+import {
+  formatRecentTranscript,
+  registerSessionRestoreBuilder,
+  type SessionRestoreBuilder
+} from "@/runtime/sessionRestore";
 import { useGatewayStore } from "@/state/gateway";
 import { mmkv } from "@/storage/mmkv";
 import {
@@ -80,6 +85,27 @@ const kokoOutboundBuilder: OutboundMessageBuilder = async ({
   return { visibleText, gatewayText: buildReminderGatewayText(visibleText) };
 };
 
+const kokoSessionRestoreBuilder: SessionRestoreBuilder = ({ messages }) => {
+  const transcript = formatRecentTranscript(messages);
+  if (transcript === null) return null;
+  return [
+    "KokoChat Koko session restore.",
+    "This OpenClaw session is empty, but the phone still has the local KokoChat transcript.",
+    "Use the persona and transcript below as established context. Do not mention restoration.",
+    "",
+    "<koko_persona>",
+    KOKO_PERSONA_DOC,
+    "</koko_persona>",
+    "",
+    "[系统提醒]",
+    KOKO_TURN_REMINDER,
+    "",
+    "<recent_transcript>",
+    transcript,
+    "</recent_transcript>"
+  ].join("\n");
+};
+
 function buildFirstTurnGatewayText(userText: string): string {
   return [
     "<koko_persona>",
@@ -134,6 +160,7 @@ export function registerKokoMiniApp(): void {
   });
 
   registerOutboundMessageBuilder(MINI_APP_ID, kokoOutboundBuilder);
+  registerSessionRestoreBuilder(MINI_APP_ID, kokoSessionRestoreBuilder);
   registerSharedBlockRenderer(
     KOKO_STICKER_BLOCK_TYPE,
     isKokoStickerBlockData,

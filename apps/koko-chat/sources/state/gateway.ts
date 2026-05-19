@@ -24,7 +24,12 @@ import type { OpenClawSetup } from "@/gateway/setupCode";
 import { buildOutboundMessage, isFirstUserTurn } from "@/runtime/outboundMessages";
 import { getMiniAppDescriptor } from "@/runtime/miniApps";
 import { parseMessageBoundaries } from "@/runtime/messageBoundary";
-import { useConversationStore, type ChatMessage } from "@/state/conversations";
+import {
+  buildSessionRestoreMessage,
+  hasRestorableLocalHistory,
+  wrapGatewayTextWithSessionRestore
+} from "@/runtime/sessionRestore";
+import { useConversationStore, type ChatMessage, type ConversationMeta } from "@/state/conversations";
 
 /** Minimal shape of an OpenClaw chat event payload as observed on the wire. */
 export interface ChatEventPayload extends JsonRecord {
@@ -40,6 +45,7 @@ export interface ChatEventPayload extends JsonRecord {
 export type { ChatMessage };
 
 const KOKO_STICKER_BLOCK_TYPE = "koko.sticker";
+const REMOTE_SESSION_HISTORY_TIMEOUT_MS = 8_000;
 
 interface GatewayState {
   client: BrowserGatewayClient | null;
@@ -294,6 +300,122 @@ function applyError(conversationId: string, event: ChatEventPayload): void {
   useConversationStore.getState().touch(conversationId);
 }
 
+async function shouldRestoreRemoteSession({
+  client,
+  sessionKey,
+  localMessages
+}: {
+  client: BrowserGatewayClient;
+  sessionKey: string;
+  localMessages: ChatMessage[];
+}): Promise<boolean> {
+  if (!hasRestorableLocalHistory(localMessages)) return false;
+
+  try {
+    const remoteMessages = await withTimeout(
+      readRemoteSessionMessages(client, sessionKey),
+      REMOTE_SESSION_HISTORY_TIMEOUT_MS
+    );
+    return remoteMessages.length === 0;
+  } catch (error) {
+    if (isMissingRemoteSessionError(error)) return true;
+    if (__DEV__) {
+      console.warn(
+        "[koko] remote session history check failed; skipping restore:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+    return false;
+  }
+}
+
+async function buildBestEffortSessionRestoreMessage({
+  conversationId,
+  conversation,
+  messages,
+  currentGatewayText
+}: {
+  conversationId: string;
+  conversation: ConversationMeta;
+  messages: ChatMessage[];
+  currentGatewayText: string;
+}): Promise<string | null> {
+  try {
+    return await buildSessionRestoreMessage({
+      conversation,
+      messages,
+      currentGatewayText
+    });
+  } catch (error) {
+    if (__DEV__) {
+      console.warn(
+        `[koko] session restore prompt failed for ${conversationId}; sending without restore:`,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+    return null;
+  }
+}
+
+async function readRemoteSessionMessages(
+  client: BrowserGatewayClient,
+  sessionKey: string
+): Promise<JsonRecord[]> {
+  const params = {
+    sessionKey,
+    limit: 1,
+    maxChars: 1_024
+  };
+  let payload: JsonRecord;
+  try {
+    payload = await client.call("chat.history", params);
+  } catch (error) {
+    if (!isUnsupportedHistoryMaxCharsError(error)) throw error;
+    payload = await client.call("chat.history", {
+      sessionKey: params.sessionKey,
+      limit: params.limit
+    });
+  }
+  return Array.isArray(payload.messages)
+    ? payload.messages.filter(isRecord)
+    : [];
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`remote session history check timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isUnsupportedHistoryMaxCharsError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /maxChars/i.test(message) &&
+    /(unexpected|unknown|unrecognized|unsupported|invalid)/i.test(message)
+  );
+}
+
+function isMissingRemoteSessionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /(session|history).*(missing|not found|not exist|unknown)|no such session/i.test(message);
+}
+
 export const useGatewayStore = create<GatewayState>((set, get) => ({
   client: null,
   status: "disconnected",
@@ -439,9 +561,25 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
     const idempotencyKey = `koko-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     try {
+      const needsRestore = await shouldRestoreRemoteSession({
+        client,
+        sessionKey: meta.sessionKey,
+        localMessages: messages
+      });
+      const restoreMessage = needsRestore
+        ? await buildBestEffortSessionRestoreMessage({
+            conversationId,
+            conversation: meta,
+            messages,
+            currentGatewayText: gatewayText
+          })
+        : null;
+      const messageToSend = restoreMessage === null
+        ? gatewayText
+        : wrapGatewayTextWithSessionRestore(restoreMessage, gatewayText);
       await client.call("chat.send", {
         sessionKey: meta.sessionKey,
-        message: gatewayText,
+        message: messageToSend,
         idempotencyKey
       });
     } catch (error) {
