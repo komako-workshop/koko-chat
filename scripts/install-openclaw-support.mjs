@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -100,6 +108,8 @@ function main() {
       workspace
     });
   }
+
+  configureSkillAllowlists(installed);
 
   if (!skipVerify) {
     for (const entry of installed) {
@@ -280,6 +290,71 @@ function installRelayConnector(defaultWorkspace) {
   cpSync(RELAY_SOURCE, target, { recursive: true });
 }
 
+function configureSkillAllowlists(installed) {
+  const configPath = join(openclawHome, "openclaw.json");
+  const skillsByAgent = new Map();
+  for (const entry of installed) {
+    const current = skillsByAgent.get(entry.agent) ?? [];
+    current.push(entry.id);
+    skillsByAgent.set(entry.agent, current);
+  }
+
+  log(`skill allowlists: ${configPath}`);
+  for (const [agentId, skillIds] of skillsByAgent) {
+    log(`allowlist ${agentId}: ${skillIds.join(", ")}`);
+  }
+  if (dryRun) return;
+
+  const config = readJsonObject(configPath);
+  const agents = isRecord(config.agents) ? config.agents : {};
+  config.agents = agents;
+  const list = Array.isArray(agents.list) ? agents.list : [];
+  agents.list = list;
+
+  for (const [agentId, skillIds] of skillsByAgent) {
+    const entry = ensureAgentConfigEntry(list, agentId);
+    entry.skills = mergeStringArray(entry.skills, skillIds);
+  }
+
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+}
+
+function readJsonObject(path) {
+  const text = existsSync(path) ? readFileSync(path, "utf8").trim() : "{}";
+  if (text.length === 0) return {};
+  const parsed = JSON.parse(text);
+  if (!isRecord(parsed)) {
+    throw new Error(`${path} must contain a JSON object`);
+  }
+  return parsed;
+}
+
+function ensureAgentConfigEntry(list, agentId) {
+  for (const value of list) {
+    if (isRecord(value) && value.id === agentId) return value;
+  }
+  const entry = { id: agentId };
+  list.push(entry);
+  return entry;
+}
+
+function mergeStringArray(current, additions) {
+  const merged = [];
+  if (Array.isArray(current)) {
+    for (const value of current) {
+      if (typeof value === "string" && !merged.includes(value)) {
+        merged.push(value);
+      }
+    }
+  }
+  for (const value of additions) {
+    if (!merged.includes(value)) {
+      merged.push(value);
+    }
+  }
+  return merged;
+}
+
 function verifySkill(skillId, agentId) {
   log(`verify ${skillId} on agent ${agentId}`);
   if (dryRun) return;
@@ -287,8 +362,15 @@ function verifySkill(skillId, agentId) {
     capture: true,
     allowFailure: true
   });
-  if (result.status === 0) return;
   const output = `${result.stdout}\n${result.stderr}`;
+  if (result.status === 0) {
+    if (/Excluded by agent allowlist|Visible to model:\s*no/i.test(output)) {
+      throw new Error(
+        `openclaw skills info ${skillId} --agent ${agentId} reports the skill is not visible\n${output}`
+      );
+    }
+    return;
+  }
   if (/unknown option ['"]?--agent/i.test(output)) {
     log(`verify skipped: this OpenClaw CLI does not support skills --agent yet`);
     return;
