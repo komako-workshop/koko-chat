@@ -156,11 +156,11 @@ export class BrowserGatewayClient {
     this.setStatus("disconnected");
   }
 
-  async call(method: string, params?: JsonRecord): Promise<JsonRecord> {
+  async call(method: string, params?: JsonRecord, timeoutMs?: number): Promise<JsonRecord> {
     if (this.status !== "connected" || this.ws === null) {
       throw new Error(`not connected (status=${this.status})`);
     }
-    return this.sendRequest(method, params);
+    return this.sendRequest(method, params, timeoutMs);
   }
 
   on(event: string, callback: EventCallback): () => void {
@@ -255,7 +255,11 @@ export class BrowserGatewayClient {
     });
   }
 
-  private sendRequest(method: string, params?: JsonRecord): Promise<JsonRecord> {
+  private sendRequest(
+    method: string,
+    params?: JsonRecord,
+    timeoutMs?: number
+  ): Promise<JsonRecord> {
     if (this.ws === null || this.ws.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("ws not open"));
     }
@@ -266,7 +270,7 @@ export class BrowserGatewayClient {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
         reject(new Error(`request ${method} timed out`));
-      }, this.options.requestTimeoutMs ?? 3_600_000);
+      }, timeoutMs ?? this.options.requestTimeoutMs ?? 3_600_000);
       this.pendingRequests.set(id, { resolve, reject, timer });
       this.ws!.send(JSON.stringify(frame));
     });

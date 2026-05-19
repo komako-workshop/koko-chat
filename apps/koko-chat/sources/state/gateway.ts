@@ -50,6 +50,9 @@ export type { ChatMessage };
 
 const KOKO_STICKER_BLOCK_TYPE = "koko.sticker";
 const REMOTE_SESSION_HISTORY_TIMEOUT_MS = 8_000;
+const PENDING_SESSION_SYNC_HISTORY_LIMIT = 12;
+const PENDING_SESSION_SYNC_MAX_CHARS = 80_000;
+const PENDING_SESSION_SYNC_TIMEOUT_MS = 8_000;
 
 interface GatewayState {
   client: BrowserGatewayClient | null;
@@ -59,11 +62,25 @@ interface GatewayState {
 
   connect: (setup: OpenClawSetup) => Promise<void>;
   reconnectIfPossible: () => Promise<boolean>;
+  syncPendingConversations: () => Promise<void>;
   disconnect: () => Promise<void>;
   forgetIdentity: () => Promise<void>;
   sendUserMessage: (conversationId: string, text: string) => Promise<void>;
   resetError: () => void;
 }
+
+interface PendingConversationSyncTarget {
+  conversation: ConversationMeta;
+  localUserText: string;
+  fallbackRunId: string;
+}
+
+interface RemoteAssistantCandidate {
+  text: string;
+  runId?: string;
+}
+
+let pendingSyncPromise: Promise<void> | null = null;
 
 let nextMessageId = 1;
 function newMessageId(): string {
@@ -258,6 +275,136 @@ function shouldDeferStreamingAgentText(
   return shouldDeferAgentResponseText({ conversation, runId, text: fullText });
 }
 
+function collectPendingConversationSyncTargets(): PendingConversationSyncTarget[] {
+  const store = useConversationStore.getState();
+  const targets: PendingConversationSyncTarget[] = [];
+  for (const conversation of store.list) {
+    const messages = store.getMessages(conversation.id);
+    const pendingIndex = findLastPendingAgentIndex(messages);
+    if (pendingIndex < 0) continue;
+    const localUser = findLastUserBefore(messages, pendingIndex);
+    if (localUser === null) continue;
+    const pendingMessage = messages[pendingIndex];
+    targets.push({
+      conversation,
+      localUserText: localUser.text,
+      fallbackRunId: pendingMessage?.runId ?? `recovered-${conversation.id}-${Date.now()}`
+    });
+  }
+  return targets;
+}
+
+function findLastPendingAgentIndex(messages: ChatMessage[]): number {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role === "agent" && message.streaming === true) return i;
+  }
+  return -1;
+}
+
+function findLastUserBefore(
+  messages: ChatMessage[],
+  beforeIndex: number
+): ChatMessage | null {
+  for (let i = beforeIndex - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (
+      message?.role === "user" &&
+      message.error === undefined &&
+      message.text.trim().length > 0
+    ) {
+      return message;
+    }
+  }
+  return null;
+}
+
+function findRemoteAssistantAfterLocalUser(
+  remoteMessages: JsonRecord[],
+  localUserText: string
+): RemoteAssistantCandidate | null {
+  const needle = normalizeHistoryText(localUserText);
+  if (needle.length === 0) return null;
+
+  for (let i = remoteMessages.length - 1; i >= 0; i -= 1) {
+    const message = remoteMessages[i];
+    if (message === undefined || remoteMessageRole(message) !== "user") continue;
+    if (!normalizeHistoryText(remoteMessageText(message)).includes(needle)) continue;
+
+    for (let j = i + 1; j < remoteMessages.length; j += 1) {
+      const candidate = remoteMessages[j];
+      if (candidate === undefined || remoteMessageRole(candidate) !== "agent") continue;
+      const text = remoteMessageText(candidate).trim();
+      if (text.length === 0) continue;
+      const runId = typeof candidate.runId === "string" ? candidate.runId : undefined;
+      return runId === undefined ? { text } : { text, runId };
+    }
+    return null;
+  }
+  return null;
+}
+
+function remoteMessageRole(message: JsonRecord): "user" | "agent" | null {
+  if (message.role === "user") return "user";
+  if (message.role === "assistant" || message.role === "agent") return "agent";
+  return null;
+}
+
+function remoteMessageText(message: JsonRecord): string {
+  if (typeof message.text === "string") return message.text;
+  const content = message.content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) =>
+      isRecord(part) && part.type === "text" && typeof part.text === "string"
+        ? part.text
+        : ""
+    )
+    .join("");
+}
+
+function normalizeHistoryText(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function applyRecoveredAgentFinal(
+  conversationId: string,
+  runId: string,
+  fullText: string
+): boolean {
+  let applied = false;
+  let preview: string | undefined;
+
+  useConversationStore.getState().setMessages(conversationId, (prev) => {
+    const pendingIndex = findLastPendingAgentIndex(prev);
+    if (pendingIndex < 0) return prev;
+
+    const transformed = buildTransformedAgentMessages(conversationId, runId, fullText);
+    const next = [...prev];
+    if (transformed !== null) {
+      preview = transformed.preview;
+      next.splice(pendingIndex, 1, ...transformed.messages);
+    } else {
+      const existing = next[pendingIndex];
+      if (existing === undefined) return prev;
+      next[pendingIndex] = {
+        ...existing,
+        text: fullText,
+        runId,
+        streaming: false
+      };
+      preview = previewFromText(fullText);
+    }
+    applied = true;
+    return next;
+  });
+
+  if (applied) {
+    useConversationStore.getState().touch(conversationId, preview);
+  }
+  return applied;
+}
+
 function applyMultiBubbleDelta(
   conversationId: string,
   runId: string,
@@ -429,22 +576,27 @@ async function buildBestEffortSessionRestoreMessage({
 
 async function readRemoteSessionMessages(
   client: BrowserGatewayClient,
-  sessionKey: string
+  sessionKey: string,
+  options?: {
+    limit?: number;
+    maxChars?: number;
+    timeoutMs?: number;
+  }
 ): Promise<JsonRecord[]> {
   const params = {
     sessionKey,
-    limit: 1,
-    maxChars: 1_024
+    limit: options?.limit ?? 1,
+    maxChars: options?.maxChars ?? 1_024
   };
   let payload: JsonRecord;
   try {
-    payload = await client.call("chat.history", params);
+    payload = await client.call("chat.history", params, options?.timeoutMs);
   } catch (error) {
     if (!isUnsupportedHistoryMaxCharsError(error)) throw error;
     payload = await client.call("chat.history", {
       sessionKey: params.sessionKey,
       limit: params.limit
-    });
+    }, options?.timeoutMs);
   }
   return Array.isArray(payload.messages)
     ? payload.messages.filter(isRecord)
@@ -570,6 +722,55 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     } catch {
       return false;
     }
+  },
+
+  async syncPendingConversations() {
+    if (pendingSyncPromise !== null) {
+      return pendingSyncPromise;
+    }
+
+    pendingSyncPromise = (async () => {
+      const { client, status } = get();
+      if (client === null || status !== "connected") return;
+
+      const targets = collectPendingConversationSyncTargets();
+      if (targets.length === 0) return;
+
+      for (const target of targets) {
+        try {
+          const remoteMessages = await readRemoteSessionMessages(
+            client,
+            target.conversation.sessionKey,
+            {
+              limit: PENDING_SESSION_SYNC_HISTORY_LIMIT,
+              maxChars: PENDING_SESSION_SYNC_MAX_CHARS,
+              timeoutMs: PENDING_SESSION_SYNC_TIMEOUT_MS
+            }
+          );
+          const assistant = findRemoteAssistantAfterLocalUser(
+            remoteMessages,
+            target.localUserText
+          );
+          if (assistant === null) continue;
+          applyRecoveredAgentFinal(
+            target.conversation.id,
+            assistant.runId ?? target.fallbackRunId,
+            assistant.text
+          );
+        } catch (error) {
+          if (__DEV__) {
+            console.warn(
+              `[koko] pending session sync failed for ${target.conversation.id}:`,
+              error instanceof Error ? error.message : String(error)
+            );
+          }
+        }
+      }
+    })().finally(() => {
+      pendingSyncPromise = null;
+    });
+
+    return pendingSyncPromise;
   },
 
   async disconnect() {
