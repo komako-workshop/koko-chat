@@ -14,6 +14,7 @@ import { Link, router } from "expo-router";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
 import { parseSetupCode } from "@/gateway/setupCode";
 import { buildKokoChatPairingPrompt } from "@/gateway/pairingRequest";
@@ -59,6 +60,7 @@ export default function PairScreen() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
   const [pairingPrompt, setPairingPrompt] = useState<string | null>(null);
   const status = useGatewayStore((s) => s.status);
   const connect = useGatewayStore((s) => s.connect);
@@ -108,7 +110,8 @@ export default function PairScreen() {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } else {
-      Alert.alert("复制失败", "请长按上面的话术手动复制。");
+      setShowPrompt(true);
+      Alert.alert("复制失败", "已展开完整请求，请长按手动复制。");
     }
   }
 
@@ -137,43 +140,51 @@ export default function PairScreen() {
         keyboardDismissMode="interactive"
       >
         <Text style={styles.intro}>
-          KokoChat 是 OpenClaw 的手机版伴侣 App。聊天和 AI 能力来自你的 OpenClaw
-          服务器，所以第一步需要把这台手机连接到你已有的 OpenClaw。
+          把这台手机连接到你的 OpenClaw。复制请求发给 OpenClaw，拿到连接码后粘贴回来。
         </Text>
 
-        <View style={[styles.card, styles.preFlightCard]}>
-          <Text style={styles.preFlightTitle}>开始之前</Text>
-          <Text style={styles.preFlightItem}>
-            · OpenClaw 服务器已经装好 OpenClaw，并能正常和它聊天。
-          </Text>
-          <Text style={styles.preFlightItem}>
-            · 第一次配对时，OpenClaw 会按 KokoChat 的安装说明准备配对和小程序支持。
-          </Text>
-          <Text style={styles.preFlightItem}>
-            · 手机能访问 OpenClaw 服务器的 Gateway；本地服务器才需要同一局域网，云服务器不需要同一 Wi-Fi。
-          </Text>
-          <Text style={styles.preFlightItem}>
-            · 还没装 OpenClaw？可以先回到 Koko 看预览版的对话；正式聊天需要先装 OpenClaw。
-          </Text>
-        </View>
-
-        <Text style={styles.stepLabel}>第 1 步 · 把下面这句话发给你的 OpenClaw</Text>
+        <Text style={styles.stepLabel}>第 1 步 · 复制配对请求</Text>
         <View style={styles.card}>
-          <Text selectable style={styles.promptText}>
-            {pairingPrompt ?? "正在生成配对请求…"}
+          <Text style={styles.cardTitle}>发给 OpenClaw</Text>
+          <Text style={styles.cardHint}>
+            OpenClaw 会按 README 安装或更新 KokoChat 支持，然后返回连接码。
           </Text>
           <Pressable
             accessibilityRole="button"
+            disabled={pairingPrompt === null}
             onPress={() => void handleCopyPrompt()}
-            style={[styles.copyButton, copied && styles.copyButtonOn]}
+            style={[
+              styles.copyButton,
+              pairingPrompt === null && styles.copyButtonDisabled,
+              copied && styles.copyButtonOn
+            ]}
           >
+            <Ionicons
+              name={copied ? "checkmark" : "copy-outline"}
+              size={16}
+              color="#FFFFFF"
+            />
             <Text style={styles.copyButtonText}>
-              {copied ? "✓ 已复制" : "📋 复制配对请求"}
+              {copied ? "已复制" : pairingPrompt === null ? "生成中" : "复制请求"}
             </Text>
           </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setShowPrompt((value) => !value)}
+            style={styles.plainButton}
+          >
+            <Text style={styles.plainButtonText}>
+              {showPrompt ? "收起完整内容" : "查看完整内容"}
+            </Text>
+          </Pressable>
+          {showPrompt ? (
+            <Text selectable style={styles.promptText}>
+              {pairingPrompt ?? "正在生成配对请求…"}
+            </Text>
+          ) : null}
         </View>
 
-        <Text style={styles.stepLabel}>第 2 步 · 把 OpenClaw 回复的连接码粘到这里</Text>
+        <Text style={styles.stepLabel}>第 2 步 · 粘贴连接码</Text>
         <View style={styles.card}>
           <TextInput
             value={input}
@@ -189,7 +200,8 @@ export default function PairScreen() {
             onPress={() => void handlePaste()}
             style={styles.pasteButton}
           >
-            <Text style={styles.pasteButtonText}>📋 从剪贴板粘贴</Text>
+            <Ionicons name="clipboard-outline" size={14} color={KokoColors.inkSecondary} />
+            <Text style={styles.pasteButtonText}>从剪贴板粘贴</Text>
           </Pressable>
         </View>
 
@@ -256,23 +268,19 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: KokoColors.border
   },
-  preFlightCard: {
-    marginTop: 20,
-    backgroundColor: KokoColors.primarySoft,
-    borderColor: KokoColors.border
+  cardTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: KokoColors.ink
   },
-  preFlightTitle: {
+  cardHint: {
+    marginTop: 6,
     fontSize: 13,
-    fontWeight: "600",
-    color: KokoColors.ink,
-    marginBottom: 6
-  },
-  preFlightItem: {
-    fontSize: 13,
-    lineHeight: 20,
+    lineHeight: 19,
     color: KokoColors.inkSecondary
   },
   promptText: {
+    marginTop: 12,
     fontSize: 16,
     lineHeight: 24,
     color: KokoColors.ink
@@ -280,6 +288,9 @@ const styles = StyleSheet.create({
   copyButton: {
     alignSelf: "flex-start",
     marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    columnGap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: KokoRadius.pill,
@@ -287,6 +298,9 @@ const styles = StyleSheet.create({
   },
   copyButtonOn: {
     backgroundColor: KokoColors.success
+  },
+  copyButtonDisabled: {
+    backgroundColor: KokoColors.primarySoft
   },
   copyButtonText: {
     color: "#FFFFFF",
@@ -302,6 +316,9 @@ const styles = StyleSheet.create({
   pasteButton: {
     alignSelf: "flex-start",
     marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    columnGap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: KokoRadius.pill,
@@ -310,6 +327,14 @@ const styles = StyleSheet.create({
     backgroundColor: KokoColors.surfaceSoft
   },
   pasteButtonText: {
+    fontSize: 12,
+    color: KokoColors.inkSecondary
+  },
+  plainButton: {
+    alignSelf: "flex-start",
+    marginTop: 12
+  },
+  plainButtonText: {
     fontSize: 12,
     color: KokoColors.inkSecondary
   },
