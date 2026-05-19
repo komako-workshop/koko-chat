@@ -66,6 +66,61 @@ const SKILLS = [
   }
 ];
 const RELAY_SOURCE = join(REPO_ROOT, "openclaw", "relay");
+const AGENT_DEFINITIONS = {
+  tavern: {
+    instructions: [
+      "## KokoChat Tavern Mini-App",
+      "",
+      "This agent serves the KokoChat Tavern mini-app. Do not run the generic OpenClaw bootstrap/onboarding flow for KokoChat users.",
+      "",
+      "For concrete roleplay-card recommendation requests, run exactly this local search tool first:",
+      "",
+      "```bash",
+      "node ~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs '<json>'",
+      "```",
+      "",
+      "Use an English keyword `query`, `limit: 20`, and `includeNsfw: true` only when the user explicitly asks for adult/NSFW content. If the request is only a greeting or filler, reply briefly in Chinese without a fenced block.",
+      "",
+      "Recommendation output must be exactly one fenced block tagged `koko.tavern.recommendations`. The JSON must be v2:",
+      "",
+      "```json",
+      "{",
+      "  \"version\": 2,",
+      "  \"query\": \"the original user request\",",
+      "  \"items\": [",
+      "    { \"kind\": \"text\", \"text\": \"短中文介绍\" },",
+      "    {",
+      "      \"kind\": \"card\",",
+      "      \"card\": {",
+      "        \"pageUrl\": \"https://character-tavern.com/character/<author>/<slug>\",",
+      "        \"imageUrl\": \"https://cards.character-tavern.com/<author>/<slug>.png\",",
+      "        \"name\": \"original name\",",
+      "        \"nameZh\": \"中文名\",",
+      "        \"tagline\": \"original tagline\",",
+      "        \"taglineZh\": \"中文一句话\",",
+      "        \"tags\": [\"original\", \"tags\"],",
+      "        \"matchTags\": [\"最多\", \"四个\", \"中文\", \"标签\"],",
+      "        \"safety\": \"sfw\"",
+      "      }",
+      "    }",
+      "  ]",
+      "}",
+      "```",
+      "",
+      "Return 3-5 `kind: \"card\"` items. Copy `pageUrl`, `imageUrl`, `name`, `tagline`, and `tags` from the search tool output. Do not invent cards. Do not use top-level `recommendations`, `cards`, `title`, `url`, `reason`, `why`, or `source` as the final schema."
+    ].join("\n"),
+    tools: {
+      profile: "minimal",
+      alsoAllow: ["exec"],
+      exec: {
+        security: "allowlist",
+        ask: "off",
+        safeBins: ["node"],
+        timeoutSec: 120
+      }
+    }
+  }
+};
 
 main();
 
@@ -109,7 +164,8 @@ function main() {
     });
   }
 
-  configureSkillAllowlists(installed);
+  installAgentDefinitions(workspaceByAgent);
+  configureAgentOpenClawConfig(installed);
 
   if (!skipVerify) {
     for (const entry of installed) {
@@ -290,7 +346,30 @@ function installRelayConnector(defaultWorkspace) {
   cpSync(RELAY_SOURCE, target, { recursive: true });
 }
 
-function configureSkillAllowlists(installed) {
+function installAgentDefinitions(workspaceByAgent) {
+  for (const [agentId, definition] of Object.entries(AGENT_DEFINITIONS)) {
+    const workspace = workspaceByAgent.get(agentId) ?? agentFallbackWorkspace(agentId);
+    const target = join(workspace, "AGENTS.md");
+    log(`agent instructions ${agentId}: ${target}`);
+    if (dryRun) continue;
+    mkdirSync(workspace, { recursive: true });
+    upsertManagedBlock(target, `KOKOCHAT:${agentId}`, definition.instructions);
+  }
+}
+
+function upsertManagedBlock(path, marker, body) {
+  const start = `<!-- ${marker}:BEGIN -->`;
+  const end = `<!-- ${marker}:END -->`;
+  const block = `${start}\n${body.trim()}\n${end}`;
+  const existing = existsSync(path) ? readFileSync(path, "utf8").trimEnd() : "";
+  const pattern = new RegExp(`${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}`, "m");
+  const next = pattern.test(existing)
+    ? existing.replace(pattern, block)
+    : `${existing}${existing.length > 0 ? "\n\n" : ""}${block}`;
+  writeFileSync(path, `${next}\n`);
+}
+
+function configureAgentOpenClawConfig(installed) {
   const configPath = join(openclawHome, "openclaw.json");
   const skillsByAgent = new Map();
   for (const entry of installed) {
@@ -314,6 +393,10 @@ function configureSkillAllowlists(installed) {
   for (const [agentId, skillIds] of skillsByAgent) {
     const entry = ensureAgentConfigEntry(list, agentId);
     entry.skills = mergeStringArray(entry.skills, skillIds);
+  }
+  for (const [agentId, definition] of Object.entries(AGENT_DEFINITIONS)) {
+    const entry = ensureAgentConfigEntry(list, agentId);
+    entry.tools = mergeToolConfig(entry.tools, definition.tools);
   }
 
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
@@ -353,6 +436,35 @@ function mergeStringArray(current, additions) {
     }
   }
   return merged;
+}
+
+function mergeToolConfig(current, required) {
+  const merged = isRecord(current) ? { ...current } : {};
+  if (typeof required.profile === "string") {
+    merged.profile = shouldKeepCurrentProfile(merged.profile, required.profile)
+      ? merged.profile
+      : required.profile;
+  }
+  if (Array.isArray(required.alsoAllow)) {
+    merged.alsoAllow = mergeStringArray(merged.alsoAllow, required.alsoAllow);
+  }
+  if (isRecord(required.exec)) {
+    merged.exec = {
+      ...(isRecord(merged.exec) ? merged.exec : {}),
+      ...required.exec,
+      safeBins: mergeStringArray(isRecord(merged.exec) ? merged.exec.safeBins : undefined, required.exec.safeBins ?? [])
+    };
+  }
+  return merged;
+}
+
+function shouldKeepCurrentProfile(current, required) {
+  const rank = { minimal: 0, messaging: 1, coding: 2, full: 3 };
+  return typeof current === "string" && rank[current] >= rank[required];
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function verifySkill(skillId, agentId) {

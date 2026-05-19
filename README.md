@@ -119,6 +119,7 @@ node scripts/install-openclaw-support.mjs
 - 安装 `kokochat-tavern-search` 到 `tavern` agent workspace。
 - 安装 `kokochat-tavern-roleplay` 到 `tavern-roleplay` agent workspace。
 - 自动把这些 skills 写入对应 agent 的 allowlist。
+- 自动写入 KokoChat 小程序 agent 指令，并给 `tavern` agent 开启必要的 `exec` 工具权限。
 - 用 `openclaw skills info` 验证这些 skills 能被目标 agent 看见；旧版 OpenClaw CLI 不支持按 agent 查询时会跳过对应验证。
 
 安装完成后，打开 KokoChat 的「配对 OpenClaw」页面，复制页面生成的内容发给 OpenClaw。那段内容会指向本节说明，并附带当前手机的 `kokochat.pairingRequest`。如果 OpenClaw 还没装 KokoChat 支持，先按本节安装 / 更新；装好后用 `kokochat-pairing` 批准请求并返回 KokoChat 连接码。
