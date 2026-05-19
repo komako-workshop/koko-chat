@@ -14,6 +14,7 @@ export const DEFAULT_ROLE = "operator";
  * profile and Gateway rejects the handshake as `bootstrap_token_invalid`.
  */
 export const DEFAULT_SCOPES = [
+  "operator.admin",
   "operator.read",
   "operator.write",
   "operator.approvals",

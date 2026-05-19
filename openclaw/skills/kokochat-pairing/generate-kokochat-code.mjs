@@ -6,11 +6,18 @@ import { dirname, join } from "node:path";
 import { homedir, platform } from "node:os";
 import { fileURLToPath } from "node:url";
 
-const DEFAULT_SCOPES = [
+const REQUIRED_SCOPES = [
   "operator.read",
   "operator.write",
   "operator.approvals",
   "operator.talk.secrets"
+];
+const OPTIONAL_SCOPES = [
+  "operator.admin"
+];
+const DEFAULT_SCOPES = [
+  ...OPTIONAL_SCOPES,
+  ...REQUIRED_SCOPES
 ];
 const RELAY_STATE_FILE = "relay.json";
 
@@ -93,7 +100,7 @@ function validateRequest(value) {
   }
   const requestedScopes = normalizeScopes(Array.isArray(value.scopes) ? value.scopes : DEFAULT_SCOPES);
   const scopes = DEFAULT_SCOPES.filter((scope) => requestedScopes.includes(scope));
-  if (!DEFAULT_SCOPES.every((scope) => scopes.includes(scope))) {
+  if (!REQUIRED_SCOPES.every((scope) => scopes.includes(scope))) {
     throw new Error("KokoChat pairing request is missing required operator scopes.");
   }
   const client = value.client && typeof value.client === "object" && !Array.isArray(value.client) ? value.client : {};

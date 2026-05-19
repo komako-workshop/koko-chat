@@ -1,6 +1,6 @@
 ---
 name: kokochat-pairing
-version: 0.2.0
+version: 0.2.1
 description: "Approve a KokoChat device pairing request and return a device-token connection code. Use when the user asks to pair KokoChat, generate a KokoChat connection code, or sends a KokoChat pairing request."
 metadata: { "openclaw": { "emoji": "📱", "requires": { "bins": ["node"] } } }
 ---
@@ -14,7 +14,11 @@ scopes before returning a connection code.
 
 Do not return the shared `gateway.auth.token` for KokoChat. Shared-token
 device-less clients may connect without `operator.write`; KokoChat needs a
-device token tied to its public key.
+device token tied to its public key. Newer KokoChat builds also request
+`operator.admin` because current OpenClaw protects `sessions.delete` with that
+scope, and the mobile runtime uses it to clean up temporary `inferOnce`
+sessions. Older builds without that scope can still pair, but cleanup remains
+best-effort.
 
 ## If The User Included A Pairing Request
 
