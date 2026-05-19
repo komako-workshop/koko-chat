@@ -479,12 +479,9 @@ export function registerTavernRoleplayMiniApp(): void {
     defaultTitle: () => "酒馆角色",
     openclaw: {
       defaultAgentId: "tavern-roleplay",
-      requiredSkills: ["kokochat-tavern-roleplay", "kokochat-tavern-search"],
+      requiredSkills: ["kokochat-tavern-roleplay"],
       requiredCoreTools: ["exec"],
-      localSkillDirs: [
-        "miniapps/tavern/openclaw/skills/kokochat-tavern-roleplay",
-        "miniapps/tavern/openclaw/skills/kokochat-tavern-search"
-      ]
+      localSkillDirs: ["miniapps/tavern/openclaw/skills/kokochat-tavern-roleplay"]
     },
     onCreate: () => {
       // The mini-app does not expose a generic "new conversation" entry; the

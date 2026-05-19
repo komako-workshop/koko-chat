@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 
 import { parseSetupCode } from "@/gateway/setupCode";
+import { buildKokoChatPairingPrompt } from "@/gateway/pairingRequest";
 import { useGatewayStore } from "@/state/gateway";
 import { KokoColors, KokoRadius } from "@/theme/koko";
 
@@ -25,16 +26,15 @@ import { KokoColors, KokoRadius } from "@/theme/koko";
  * KokoChat assumes every user already has a working OpenClaw they can chat with
  * (Web UI, Desktop, another paired phone, etc.). To add a new device, we don't
  * make them open a terminal — we give them a ready-made prompt to send to their
- * existing Claw. The `kokochat-pairing` workspace skill returns a token-based
- * connection code as plain text.
+ * existing Claw. KokoChat generates a device pairing request first, and the
+ * `kokochat-pairing` workspace skill returns a device-token connection code
+ * as plain text.
  * The user copies that string back into the paste box below.
  *
  * We deliberately do not use QR codes (ASCII or image). Plain text keeps the
  * path robust across every Claw frontend (terminal, Web UI, mobile) without
  * needing to solve QR rendering / scanning in each.
  */
-
-const PAIRING_PROMPT = "请帮我生成一个新的 KokoChat 连接码。";
 
 async function readClipboardText(): Promise<string | null> {
   try {
@@ -59,10 +59,29 @@ export default function PairScreen() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [pairingPrompt, setPairingPrompt] = useState<string | null>(null);
   const status = useGatewayStore((s) => s.status);
   const connect = useGatewayStore((s) => s.connect);
   const lastError = useGatewayStore((s) => s.lastError);
   const headerHeight = useHeaderHeight();
+
+  useEffect(() => {
+    let cancelled = false;
+    void buildKokoChatPairingPrompt()
+      .then((prompt) => {
+        if (!cancelled) {
+          setPairingPrompt(prompt);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setLocalError(error instanceof Error ? error.message : String(error));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function connectWith(raw: string): Promise<void> {
     setLocalError(null);
@@ -80,7 +99,11 @@ export default function PairScreen() {
   }
 
   async function handleCopyPrompt(): Promise<void> {
-    const ok = await writeClipboardText(PAIRING_PROMPT);
+    if (pairingPrompt === null) {
+      setLocalError("配对请求还在生成，请稍后再试。");
+      return;
+    }
+    const ok = await writeClipboardText(pairingPrompt);
     if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
@@ -124,6 +147,9 @@ export default function PairScreen() {
             · Mac 上已经装好 OpenClaw，并能正常和它聊天。
           </Text>
           <Text style={styles.preFlightItem}>
+            · 第一次配对时，OpenClaw 会按 KokoChat 的安装说明准备配对和小程序支持。
+          </Text>
+          <Text style={styles.preFlightItem}>
             · 手机和 Mac 在同一 Wi-Fi 下；首次连接时 iOS 会弹"允许访问本地网络"，请选「允许」。
           </Text>
           <Text style={styles.preFlightItem}>
@@ -134,7 +160,7 @@ export default function PairScreen() {
         <Text style={styles.stepLabel}>第 1 步 · 把下面这句话发给你的 OpenClaw</Text>
         <View style={styles.card}>
           <Text selectable style={styles.promptText}>
-            {PAIRING_PROMPT}
+            {pairingPrompt ?? "正在生成配对请求…"}
           </Text>
           <Pressable
             accessibilityRole="button"
@@ -142,7 +168,7 @@ export default function PairScreen() {
             style={[styles.copyButton, copied && styles.copyButtonOn]}
           >
             <Text style={styles.copyButtonText}>
-              {copied ? "✓ 已复制" : "📋 复制这句话"}
+              {copied ? "✓ 已复制" : "📋 复制配对请求"}
             </Text>
           </Pressable>
         </View>

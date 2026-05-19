@@ -292,11 +292,23 @@ export async function readAgentHistory(
   input: ReadAgentHistoryInput
 ): Promise<ReadAgentHistoryResult> {
   const client = input.client ?? getConnectedGatewayClient();
-  const payload = await client.call("chat.history", {
+  const params = {
     sessionKey: input.sessionKey,
     limit: input.limit ?? DEFAULT_HISTORY_LIMIT,
     maxChars: input.maxChars ?? DEFAULT_HISTORY_MAX_CHARS
-  });
+  };
+  let payload: JsonRecord;
+  try {
+    payload = await client.call("chat.history", params);
+  } catch (error) {
+    if (!isUnsupportedHistoryMaxCharsError(error)) {
+      throw error;
+    }
+    payload = await client.call("chat.history", {
+      sessionKey: params.sessionKey,
+      limit: params.limit
+    });
+  }
   return {
     sessionKey: typeof payload.sessionKey === "string" ? payload.sessionKey : input.sessionKey,
     ...(typeof payload.sessionId === "string" ? { sessionId: payload.sessionId } : {}),
@@ -389,6 +401,14 @@ function requireString(value: unknown, message: string): string {
 
 function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isUnsupportedHistoryMaxCharsError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /maxChars/i.test(message) &&
+    /(unexpected|unknown|unrecognized|unsupported|invalid)/i.test(message)
+  );
 }
 
 function normalizeSessionPart(value: string, fallback: string): string {

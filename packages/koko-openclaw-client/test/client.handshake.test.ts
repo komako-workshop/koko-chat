@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GatewayClient, HandshakeFailedError, HandshakeTimeoutError, FatalCloseError, type DeviceIdentity } from "../src";
+import { Buffer } from "node:buffer";
+import { verifyAsync } from "@noble/ed25519";
+import {
+  GatewayClient,
+  HandshakeFailedError,
+  HandshakeTimeoutError,
+  FatalCloseError,
+  buildConnectParams,
+  buildSignaturePayload,
+  type DeviceIdentity
+} from "../src";
 import { MockWsServer, waitFor } from "./helpers/mockWsServer";
 
 const seed = Uint8Array.from({ length: 32 }, (_value, index) => index + 1);
@@ -15,6 +25,38 @@ afterEach(async () => {
 });
 
 describe("GatewayClient handshake", () => {
+  it("signs device-token-only connect params with the device token", async () => {
+    const client = { id: "webchat", version: "0.0.1", platform: "web", mode: "webchat" };
+    const built = await buildConnectParams({
+      deviceToken: "device-token-1",
+      deviceSeed: seed,
+      nonce: "nonce-1",
+      client,
+      role: "operator",
+      scopes: ["operator.read", "operator.write"]
+    });
+
+    expect(built.params.auth).toEqual({ deviceToken: "device-token-1" });
+
+    const payload = buildSignaturePayload({
+      deviceId: built.device.id,
+      clientId: client.id,
+      clientMode: client.mode,
+      role: "operator",
+      scopes: ["operator.read", "operator.write"],
+      signedAtMs: built.device.signedAt,
+      token: "device-token-1",
+      nonce: "nonce-1"
+    });
+    await expect(
+      verifyAsync(
+        Buffer.from(built.device.signature, "base64url"),
+        new TextEncoder().encode(payload),
+        Buffer.from(built.device.publicKey, "base64url")
+      )
+    ).resolves.toBe(true);
+  });
+
   it("responds to connect.challenge and resolves after hello-ok", async () => {
     server = await MockWsServer.start({ challengeNonce: "nonce-1" });
     const onDeviceToken = vi.fn();

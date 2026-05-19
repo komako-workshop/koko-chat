@@ -21,7 +21,6 @@ import {
   DEFAULT_SCOPES,
   assertHelloOkPayload,
   deviceTokenFromHelloOk,
-  GATEWAY_PROTOCOL_VERSION,
   maxPayloadFromHelloOk,
   type EventFrame,
   type JsonRecord,
@@ -226,29 +225,6 @@ export class BrowserGatewayClient {
   }): Promise<JsonRecord> {
     const role = DEFAULT_ROLE;
     const scopes = [...(this.options.scopes ?? DEFAULT_SCOPES)];
-
-    // KokoChat's token-based setup code intentionally means "this phone may
-    // connect as this OpenClaw operator client" and should not create a
-    // pending device approval request. Gateway supports shared-token auth
-    // without a device identity; using that path removes the extra
-    // `openclaw devices approve` step for the mobile app.
-    //
-    // Bootstrap-token and cached-device-token flows still need a signed device
-    // identity, so they keep using the protocol helper below.
-    if (
-      this.options.token !== undefined &&
-      this.options.bootstrapToken === undefined &&
-      this.options.deviceToken === undefined
-    ) {
-      return {
-        role,
-        scopes,
-        auth: { token: this.options.token },
-        client,
-        minProtocol: GATEWAY_PROTOCOL_VERSION,
-        maxProtocol: GATEWAY_PROTOCOL_VERSION
-      };
-    }
 
     const { params } = await buildConnectParams({
       ...(this.options.token !== undefined ? { token: this.options.token } : {}),

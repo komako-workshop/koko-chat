@@ -307,7 +307,8 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     }
 
     const deviceSeed = loadOrCreateDeviceSeed();
-    const storedDeviceToken = loadDeviceToken();
+    const setupDeviceToken = setup.deviceToken;
+    const storedDeviceToken = setupDeviceToken ?? loadDeviceToken();
 
     const client = new BrowserGatewayClient({
       url: setup.url,
@@ -345,6 +346,9 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
     try {
       await client.connect();
+      if (setupDeviceToken !== undefined) {
+        saveDeviceToken(setupDeviceToken);
+      }
       saveGatewayUrl(setup.url);
     } catch (error) {
       set({

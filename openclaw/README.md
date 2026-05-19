@@ -1,4 +1,4 @@
-# OpenClaw integration archive
+# OpenClaw integration
 
 This folder is the **single source of truth** for KokoChat-side OpenClaw
 customization that lives outside `node_modules` on your Mac.
@@ -16,8 +16,8 @@ openclaw/
   README.md                         ← this file
   skills/
     kokochat-pairing/
-      SKILL.md                      ← canonical source; ~/.openclaw/workspace/skills/kokochat-pairing/SKILL.md
-                                      should mirror this file
+      SKILL.md                      ← pairing approval skill
+      generate-kokochat-code.mjs    ← device-token setup-code generator
   patches/
     gateway-auto-approve.md         ← documented patch against the installed
                                       openclaw dist so KokoChat bootstrap-token
@@ -26,32 +26,54 @@ openclaw/
 
 ## Installing on a fresh machine
 
-1. Install OpenClaw (`pnpm add -g openclaw@^2026.5.5` or equivalent).
-2. Copy `openclaw/skills/kokochat-pairing/SKILL.md` into
-   `~/.openclaw/workspace/skills/kokochat-pairing/SKILL.md`.
-3. Add `"kokochat-pairing"` to `agents.defaults.skills` in `~/.openclaw/openclaw.json`.
-4. Apply `openclaw/patches/gateway-auto-approve.md` against the installed
-   `message-handler-*.js` dist file. The filename suffix is content-hashed, so
-   locate the right file with:
+Use the repo-level installer instead of copying files by hand. The machine needs
+`git`, `node`, and the `openclaw` CLI. On a fresh OpenClaw machine:
 
-   ```bash
-   ls ~/.npm-global/lib/node_modules/openclaw/dist/message-handler-*.js
-   ```
+```bash
+KOKOCHAT_REPO="${HOME}/.kokochat/koko-chat"
+mkdir -p "$(dirname "$KOKOCHAT_REPO")"
+if [ -d "$KOKOCHAT_REPO/.git" ]; then
+  git -C "$KOKOCHAT_REPO" pull --ff-only
+else
+  git clone https://github.com/komako-workshop/koko-chat.git "$KOKOCHAT_REPO"
+fi
+node "$KOKOCHAT_REPO/scripts/install-openclaw-support.mjs"
+```
 
-5. `openclaw gateway restart`.
-6. Sanity-check: `openclaw skills list` should show `✓ ready` for
-   `kokochat-pairing`.
+From a development checkout, the same installer is exposed as:
+
+```bash
+pnpm openclaw:install
+```
+
+The installer creates the KokoChat agents if needed and syncs:
+
+- `openclaw/skills/kokochat-pairing` →
+  `~/.openclaw/workspace/skills/kokochat-pairing`
+- `miniapps/tavern/openclaw/skills/kokochat-tavern-search` →
+  `~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search`
+- `miniapps/tavern/openclaw/skills/kokochat-tavern-roleplay` →
+  `~/.openclaw/agents/tavern-roleplay/workspace/skills/kokochat-tavern-roleplay`
+
+Sanity-check manually on OpenClaw versions that support `--agent`:
+
+```bash
+openclaw skills info kokochat-pairing --agent main
+openclaw skills info kokochat-tavern-search --agent tavern
+openclaw skills info kokochat-tavern-roleplay --agent tavern-roleplay
+```
 
 ## Why these files are here
 
 - **skills/kokochat-pairing/SKILL.md** is what tells the OpenClaw agent how
-  to respond when the user asks "生成一个新的 KokoChat 配对码". It must stay
-  in lock-step with the KokoChat pair screen UX.
-- **patches/gateway-auto-approve.md** captures a two-line change to the
-  bootstrap pairing handler. Without it, a newly pasted setup code sits as a
-  pending request until an operator explicitly runs `openclaw devices approve
-  <id>`. KokoChat is a private, single-user runtime, so this handshake is
-  cognitive overhead we intentionally skip.
+  to approve the `kokochat.pairingRequest` payload copied from the phone.
+- **skills/kokochat-pairing/generate-kokochat-code.mjs** is the deterministic
+  local command that validates the pairing request, approves the device, and
+  returns a device-token setup code.
+- **patches/gateway-auto-approve.md** is historical context for the old
+  bootstrap-token flow. New KokoChat pairing uses explicit device-token approval
+  and should not need patching OpenClaw dist files.
 
-If you upgrade OpenClaw and the patch location / wording changes, update the
-patch doc and re-apply; this directory is the only place to track that drift.
+If the device-pairing protocol changes in OpenClaw, update this directory and
+the installer together. The pairing screen, pairing skill, and setup-code
+generator must stay in lock-step.

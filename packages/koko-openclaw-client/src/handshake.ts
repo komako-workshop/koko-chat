@@ -98,7 +98,7 @@ export async function buildConnectParams(args: BuildConnectParamsArgs): Promise<
     role: args.role,
     scopes: args.scopes,
     signedAtMs: signedAt,
-    token: args.token ?? args.bootstrapToken ?? null,
+    token: args.token ?? args.deviceToken ?? args.bootstrapToken ?? null,
     nonce: args.nonce
   });
   const signature = await signDevicePayload(args.deviceSeed, payload);

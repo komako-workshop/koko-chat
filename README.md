@@ -77,14 +77,20 @@ docs/                    mini-app runtime / skills 设计文档
 
 KokoChat 的手机 App 只负责 UI、配对和本地聊天记录。真正的 AI 能力、角色卡搜索、角色扮演 agent 都跑在用户自己的 OpenClaw 里。第一次使用前，需要在 OpenClaw 机器上安装 KokoChat 支持。
 
-拿到公开仓库后，先 clone:
+OpenClaw 机器上需要有 `git`、`node` 和 `openclaw` CLI。直接安装 / 更新:
 
 ```bash
-git clone https://github.com/Eyelids/koko-chat.git
-cd koko-chat
+KOKOCHAT_REPO="${HOME}/.kokochat/koko-chat"
+mkdir -p "$(dirname "$KOKOCHAT_REPO")"
+if [ -d "$KOKOCHAT_REPO/.git" ]; then
+  git -C "$KOKOCHAT_REPO" pull --ff-only
+else
+  git clone https://github.com/komako-workshop/koko-chat.git "$KOKOCHAT_REPO"
+fi
+node "$KOKOCHAT_REPO/scripts/install-openclaw-support.mjs"
 ```
 
-如果你已经 clone 了这个仓库，在仓库根目录运行:
+如果你在开发这个仓库，也可以在仓库根目录运行:
 
 ```bash
 pnpm install
@@ -104,9 +110,9 @@ node scripts/install-openclaw-support.mjs
 - 安装 `kokochat-pairing` 到默认 OpenClaw workspace。
 - 安装 `kokochat-tavern-search` 到 `tavern` agent workspace。
 - 安装 `kokochat-tavern-roleplay` 到 `tavern-roleplay` agent workspace。
-- 用 `openclaw skills info` 验证这些 skills 能被目标 agent 看见。
+- 用 `openclaw skills info` 验证这些 skills 能被目标 agent 看见；旧版 OpenClaw CLI 不支持按 agent 查询时会跳过对应验证。
 
-安装完成后，打开 KokoChat 的「配对 OpenClaw」页面，复制页面生成的配对请求发给 OpenClaw。OpenClaw 会批准设备并返回 KokoChat 连接码。
+安装完成后，打开 KokoChat 的「配对 OpenClaw」页面，复制页面生成的内容发给 OpenClaw。那段内容已经包含 clone / 更新仓库、安装 skills、批准设备并生成 KokoChat 连接码的命令。
 
 检查安装计划但不改机器:
 

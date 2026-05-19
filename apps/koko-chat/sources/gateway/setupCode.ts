@@ -3,6 +3,7 @@
  *
  * The `setupCode` field is base64 (NOT base64url) encoding a JSON with
  *   { url: "ws://...", bootstrapToken: "..." }
+ *   { url: "ws://...", deviceToken: "...", deviceId: "..." }
  *
  * Example from `openclaw qr --json --public-url ...`:
  *   {"setupCode": "eyJ1cmwiOiJ3c3M6...", "gatewayUrl": "wss://...", ...}
@@ -14,6 +15,8 @@ export interface OpenClawSetup {
   url: string;
   bootstrapToken?: string;
   token?: string;
+  deviceToken?: string;
+  deviceId?: string;
 }
 
 export function parseSetupCode(input: string): OpenClawSetup {
@@ -68,14 +71,15 @@ function validateSetup(value: unknown): OpenClawSetup {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("setup code must decode to an object");
   }
-  const { url, bootstrapToken, token } = value as Record<string, unknown>;
+  const { url, bootstrapToken, token, deviceToken, deviceId } = value as Record<string, unknown>;
   if (typeof url !== "string" || url.length === 0) {
     throw new Error("setup code is missing a url field");
   }
   const hasBootstrapToken = typeof bootstrapToken === "string" && bootstrapToken.length > 0;
   const hasToken = typeof token === "string" && token.length > 0;
-  if (!hasBootstrapToken && !hasToken) {
-    throw new Error("setup code is missing a bootstrapToken or token field");
+  const hasDeviceToken = typeof deviceToken === "string" && deviceToken.length > 0;
+  if (!hasBootstrapToken && !hasToken && !hasDeviceToken) {
+    throw new Error("setup code is missing a bootstrapToken, token, or deviceToken field");
   }
   if (!url.startsWith("ws://") && !url.startsWith("wss://") && !url.startsWith("http://") && !url.startsWith("https://")) {
     throw new Error(`setup code url must start with ws:// or wss://, got ${url}`);
@@ -85,6 +89,8 @@ function validateSetup(value: unknown): OpenClawSetup {
   return {
     url: wsUrl,
     ...(hasBootstrapToken ? { bootstrapToken } : {}),
-    ...(hasToken ? { token } : {})
+    ...(hasToken ? { token } : {}),
+    ...(hasDeviceToken ? { deviceToken } : {}),
+    ...(typeof deviceId === "string" && deviceId.length > 0 ? { deviceId } : {})
   };
 }
