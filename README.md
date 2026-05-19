@@ -4,11 +4,11 @@
 
 ## 这是什么
 
-KokoChat 不是又一个 ChatGPT 客户端,而是 **OpenClaw 在你手机上的家**。
+KokoChat 是基于 OpenClaw 的移动端 agent 开源平台。
 
-如果你已经在 Mac 上跑了 OpenClaw,把它接到 Codex / Claude Code / 自部署 LLM 之类——KokoChat 就是把那一整套 AI 能力搬到手机上的入口。一次配对(扫码),之后所有聊天 / agent / mini-app 都跑在你自己机器上,模型 token 全部走你自己的订阅,不经任何第三方服务。
+你在 Mac 上跑着 OpenClaw,KokoChat 把它装到手机上,并且开放一套 mini-app 容器架构——任何人都可以在它之上写自己的移动端 agent。
 
-跟现在 GitHub 上一堆 "openclaw client" 不同的地方在于:KokoChat **不是** OpenClaw 的薄壳。它在 OpenClaw 之上盖了一层产品形态——**chat-first 的 mini-app 容器**。
+仓库里已经内置了几个参考实现:Koko 聊天助手、酒馆角色卡、角色扮演。它们是样例,不是产品边界,真正的目标是让社区往里塞更多东西。
 
 ## 怎么用
 
