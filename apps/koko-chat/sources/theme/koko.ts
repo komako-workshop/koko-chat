@@ -49,6 +49,8 @@ export const KokoColors = {
 
   /** Positive state tone — soft gentle green that doesn't clash with orange. */
   success: "#56B07C",
+  /** Tinted background for positive status chips and diagnostics. */
+  successSoft: "#E5F6ED",
   /** Tab bar inactive icon / label. */
   inactive: "#A89274"
 } as const;

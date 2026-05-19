@@ -46,16 +46,7 @@ const config = {
     bundler: "metro",
     output: "single"
   },
-  plugins: [
-    "expo-router",
-    [
-      "expo-camera",
-      {
-        cameraPermission:
-          "KokoChat uses the camera to scan OpenClaw pairing QR codes."
-      }
-    ]
-  ],
+  plugins: ["expo-router"],
   experiments: {
     typedRoutes: true
   },

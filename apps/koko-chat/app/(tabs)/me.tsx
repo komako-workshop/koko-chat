@@ -98,7 +98,7 @@ export default function MeTabScreen(): React.ReactElement {
             valueTone={gatewayStatus === "connected" ? "good" : "warn"}
           />
           <Link href="/pair" asChild>
-            <Row icon="qr-code-outline" label="配对 OpenClaw" chevron last={gatewayStatus !== "connected"} />
+            <Row icon="link-outline" label="配对 OpenClaw" chevron last={gatewayStatus !== "connected"} />
           </Link>
           {gatewayStatus === "connected" ? (
             <Row
@@ -136,16 +136,9 @@ export default function MeTabScreen(): React.ReactElement {
               );
             }}
           />
-          {/* Dev-only entry into the runtime self-test page. Hidden from
-              production builds (TestFlight / App Store) so users never see
-              the developer instrumentation surface. The route file itself
-              still ships in the bundle but, without an entry point, is
-              effectively unreachable. */}
-          {__DEV__ ? (
-            <Link href="/dev/runtime-selftest" asChild>
-              <Row icon="hammer-outline" label="OpenClaw Runtime 自检" chevron last />
-            </Link>
-          ) : null}
+          <Link href="/network-test" asChild>
+            <Row icon="pulse-outline" label="网络连接测试" chevron last />
+          </Link>
         </Group>
 
         {/* Danger zone */}

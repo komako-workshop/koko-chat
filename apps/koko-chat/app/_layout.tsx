@@ -73,10 +73,7 @@ export default function RootLayout() {
                 <Stack.Screen name="tavern/browse" options={{ title: "角色广场" }} />
                 <Stack.Screen name="tavern/card/[...path]" options={{ title: "角色详情" }} />
                 <Stack.Screen name="tavern/settings" options={{ title: "酒馆设置" }} />
-                <Stack.Screen
-                  name="dev/runtime-selftest"
-                  options={{ title: "Runtime 自检" }}
-                />
+                <Stack.Screen name="network-test" options={{ title: "网络连接测试" }} />
               </Stack>
             </ThemeProvider>
           </AppStateProvider>
@@ -89,7 +86,7 @@ export default function RootLayout() {
 /**
  * Dev-only side effect: when scripts/dev-start.mjs has populated
  * `extra.devGatewayUrl` + `extra.devGatewayToken`, auto-connect to the
- * local Gateway on first mount so we don't have to rescan a QR on every
+ * local Gateway on first mount so we don't have to re-pair on every
  * reload. Production builds skip this branch entirely.
  *
  * We do NOT navigate here anymore: with multiple conversations the user
@@ -103,14 +100,10 @@ function DevAutoConnect(): null {
   useEffect(() => {
     if (ranRef.current) return;
     if (!__DEV__) return;
-    const devGatewayUrl = (Constants.expoConfig?.extra?.devGatewayUrl ?? null) as
-      | string
-      | null;
-    const devGatewayToken = (Constants.expoConfig?.extra?.devGatewayToken ?? null) as
-      | string
-      | null;
-    if (devGatewayUrl === null || devGatewayUrl.length === 0) return;
-    if (devGatewayToken === null || devGatewayToken.length === 0) return;
+    const devGatewayUrl = Constants.expoConfig?.extra?.devGatewayUrl;
+    const devGatewayToken = Constants.expoConfig?.extra?.devGatewayToken;
+    if (typeof devGatewayUrl !== "string" || devGatewayUrl.length === 0) return;
+    if (typeof devGatewayToken !== "string" || devGatewayToken.length === 0) return;
     if (status !== "disconnected") return;
     ranRef.current = true;
 
