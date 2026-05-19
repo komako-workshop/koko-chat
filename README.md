@@ -6,7 +6,7 @@
 
 KokoChat 是基于 OpenClaw 的移动端 agent 开源平台。
 
-你在 Mac 上跑着 OpenClaw,KokoChat 把它装到手机上,并且开放一套 mini-app 容器架构——任何人都可以在它之上写自己的移动端 agent。
+你有一台运行 OpenClaw 的服务器或电脑,KokoChat 把它装到手机上,并且开放一套 mini-app 容器架构——任何人都可以在它之上写自己的移动端 agent。
 
 仓库里已经内置了几个参考实现:Koko 聊天助手、酒馆角色卡、角色扮演。它们是样例,不是产品边界,真正的目标是让社区往里塞更多东西。
 
@@ -34,13 +34,13 @@ KokoChat 的几条不会动摇的设计判断:
 2. **Mini-app 容器,不是 chatbot wrapper**——每个 mini-app 拥有自己的 surface 和数据,host 只管聊天 UI / 路由 / 持久化。
 3. **借 OpenClaw 启动期借势,但不绑死身份**——OpenClaw 是当前的 capability provider,以后可以换、可以加,产品身份不锁。
 4. **不卖 token、不卖订阅**——AI 能力来自你已有的 Codex / Claude Code 等订阅,KokoChat 只是把它移动化。
-5. **用户自治**——数据在你手机 + 你 Mac,KokoChat 没有云端账号体系,也没打算做。
+5. **用户自治**——数据在你手机 + 你的 OpenClaw 服务器,KokoChat 没有云端账号体系,也没打算做。
 
 ## Status
 
 迭代中。当前主干能跑:
 
-- **App**(`apps/koko-chat`):Expo / RN,在 iOS 真机/模拟器/Web 跑,WebSocket 直连用户 Mac 上的 OpenClaw Gateway。
+- **App**(`apps/koko-chat`):Expo / RN,在 iOS 真机/模拟器/Web 跑,WebSocket 直连用户 OpenClaw 服务器上的 Gateway。
 - **Mini-app runtime**(`apps/koko-chat/sources/runtime`):`inferOnce` + 长会话原语,fenced block 协议,scoped storage,mini-app 注册表。
 - **内置 mini-apps**:
   - `miniapps/tavern` —— 酒馆助手(角色卡推荐)
@@ -112,7 +112,7 @@ node scripts/install-openclaw-support.mjs
 - 安装 `kokochat-tavern-roleplay` 到 `tavern-roleplay` agent workspace。
 - 用 `openclaw skills info` 验证这些 skills 能被目标 agent 看见；旧版 OpenClaw CLI 不支持按 agent 查询时会跳过对应验证。
 
-安装完成后，打开 KokoChat 的「配对 OpenClaw」页面，复制页面生成的内容发给 OpenClaw。那段内容已经包含 clone / 更新仓库、安装 skills、批准设备并生成 KokoChat 连接码的命令。
+安装完成后，打开 KokoChat 的「配对 OpenClaw」页面，复制页面生成的内容发给 OpenClaw。那段内容会指向本节说明，并附带当前手机的 `kokochat.pairingRequest`。如果 OpenClaw 还没装 KokoChat 支持，先按本节安装 / 更新；装好后用 `kokochat-pairing` 批准请求并返回 KokoChat 连接码。
 
 检查安装计划但不改机器:
 

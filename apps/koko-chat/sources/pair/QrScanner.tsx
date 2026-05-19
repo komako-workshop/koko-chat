@@ -115,7 +115,7 @@ function NativeScanner({ onScanned, onCancel }: Props) {
         <View style={tw`flex-1 justify-between`}>
           <View style={tw`items-center px-6 py-4`}>
             <Text style={tw`rounded-full bg-black/60 px-4 py-2 text-sm text-white`}>
-              Point at the OpenClaw QR code in your Mac terminal
+              Point at the OpenClaw QR code in your OpenClaw terminal
             </Text>
           </View>
           <View style={tw`items-center px-6 py-6`}>

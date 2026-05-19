@@ -6,7 +6,7 @@
  * OpenClaw Gateway without making the user paste a setup code each time.
  *
  * Steps:
- *   1. Detect the Mac's LAN IP (so the phone can reach Gateway over WiFi).
+ *   1. Detect the local machine's LAN IP (so the phone can reach Gateway).
  *   2. Run `openclaw qr --json --no-ascii --url ws://<lan-ip>:18789` to get
  *      a fresh setupCode (TTL ~10 minutes).
  *   3. Inject the setupCode into the APP via env var

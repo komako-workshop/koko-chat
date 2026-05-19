@@ -129,8 +129,8 @@ export default function MeTabScreen(): React.ReactElement {
                   `版本 v${appVersion}`,
                   "",
                   "KokoChat 是 OpenClaw 的手机版伴侣 App。",
-                  "聊天和 AI 能力来自你 Mac 上运行的 OpenClaw；",
-                  "手机和 Mac 在同一 Wi-Fi 下完成一次配对，",
+                  "聊天和 AI 能力来自你的 OpenClaw 服务器；",
+                  "手机能访问 OpenClaw 服务器的 Gateway 后，",
                   "就可以在手机上继续和你的 AI 小搭子 Koko 聊天。"
                 ].join("\n")
               );

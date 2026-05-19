@@ -24,13 +24,13 @@ const config = {
     supportsTablet: false,
     bundleIdentifier: "ai.komako.kokochat",
     infoPlist: {
-      // Required when KokoChat is paired with an OpenClaw Gateway running on
-      // the user's own Mac in the same Wi-Fi network. Without this string iOS
-      // shows a generic permission prompt and Apple reviewers may flag it as
-      // unclear usage. We also list Bonjour service types so the system can
-      // resolve the gateway via mDNS when the user prefers a friendly name.
+      // Required when KokoChat is paired with a local OpenClaw Gateway. Without
+      // this string iOS shows a generic permission prompt and Apple reviewers
+      // may flag it as unclear usage. We also list Bonjour service types so the
+      // system can resolve the gateway via mDNS when the user prefers a
+      // friendly name.
       NSLocalNetworkUsageDescription:
-        "KokoChat 通过本地网络连接你 Mac 上运行的 OpenClaw，用于配对设备和收发聊天消息。",
+        "KokoChat 通过网络连接你的 OpenClaw 服务器，用于配对设备和收发聊天消息。",
       NSBonjourServices: ["_openclaw._tcp", "_openclaw-gateway._tcp"],
       ITSAppUsesNonExemptEncryption: false
     }
@@ -62,7 +62,7 @@ const config = {
   extra: {
     // Populated by scripts/dev-start.mjs in dev mode only. This intentionally
     // bypasses QR/bootstrap pairing for local development so Expo Go can open
-    // straight into Chat against the Mac's running Gateway.
+    // straight into Chat against the local OpenClaw Gateway.
     devGatewayUrl: process.env.KOKO_DEV_GATEWAY_URL ?? null,
     devGatewayToken: process.env.KOKO_DEV_GATEWAY_TOKEN ?? null,
     eas: {

@@ -137,20 +137,20 @@ export default function PairScreen() {
         keyboardDismissMode="interactive"
       >
         <Text style={styles.intro}>
-          KokoChat 是 OpenClaw 的手机版伴侣 App。聊天和 AI 能力来自你 Mac 上运行的
-          OpenClaw（claw.ai），所以第一步需要把这台手机连接到你已有的 OpenClaw。
+          KokoChat 是 OpenClaw 的手机版伴侣 App。聊天和 AI 能力来自你的 OpenClaw
+          服务器，所以第一步需要把这台手机连接到你已有的 OpenClaw。
         </Text>
 
         <View style={[styles.card, styles.preFlightCard]}>
           <Text style={styles.preFlightTitle}>开始之前</Text>
           <Text style={styles.preFlightItem}>
-            · Mac 上已经装好 OpenClaw，并能正常和它聊天。
+            · OpenClaw 服务器已经装好 OpenClaw，并能正常和它聊天。
           </Text>
           <Text style={styles.preFlightItem}>
             · 第一次配对时，OpenClaw 会按 KokoChat 的安装说明准备配对和小程序支持。
           </Text>
           <Text style={styles.preFlightItem}>
-            · 手机和 Mac 在同一 Wi-Fi 下；首次连接时 iOS 会弹"允许访问本地网络"，请选「允许」。
+            · 手机能访问 OpenClaw 服务器的 Gateway；本地服务器才需要同一局域网，云服务器不需要同一 Wi-Fi。
           </Text>
           <Text style={styles.preFlightItem}>
             · 还没装 OpenClaw？可以先回到 Koko 看预览版的对话；正式聊天需要先装 OpenClaw。
