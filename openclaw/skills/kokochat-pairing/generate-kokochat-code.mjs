@@ -26,6 +26,7 @@ const input = process.env.KOKOCHAT_PAIRING_REQUEST || argInput || readStdin();
 
 const request = parsePairingRequest(input);
 const stateDir = process.env.OPENCLAW_CONFIG_DIR ?? process.env.OPENCLAW_HOME ?? join(homedir(), ".openclaw");
+const openclawEnv = readEnvFile(join(stateDir, "openclaw.env"));
 const deviceToken = approveDevice(stateDir, request);
 const relay = prepareRelayConnector(stateDir, request);
 const gatewayUrl = relay?.gatewayUrl ?? resolveGatewayUrl(stateDir);
@@ -223,12 +224,49 @@ function writeJsonAtomic(file, value) {
   renameSync(temp, file);
 }
 
-function resolveGatewayUrl(root) {
-  if (process.env.KOKOCHAT_GATEWAY_URL) {
-    return normalizeWsUrl(process.env.KOKOCHAT_GATEWAY_URL);
+function readEnvFile(file) {
+  let raw;
+  try {
+    raw = readFileSync(file, "utf8");
+  } catch {
+    return {};
   }
-  if (process.env.OPENCLAW_PUBLIC_URL) {
-    return normalizeWsUrl(process.env.OPENCLAW_PUBLIC_URL);
+
+  const out = {};
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(trimmed);
+    if (!match) continue;
+    out[match[1]] = unquoteEnvValue(match[2] ?? "");
+  }
+  return out;
+}
+
+function unquoteEnvValue(value) {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function envValue(key) {
+  const value = process.env[key] ?? openclawEnv[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function resolveGatewayUrl(root) {
+  const explicitGatewayUrl = envValue("KOKOCHAT_GATEWAY_URL");
+  if (explicitGatewayUrl) {
+    return normalizeWsUrl(explicitGatewayUrl);
+  }
+  const publicUrl = envValue("OPENCLAW_PUBLIC_URL");
+  if (publicUrl) {
+    return normalizeWsUrl(publicUrl);
   }
 
   const config = readJsonObject(join(root, "openclaw.json"));
@@ -239,12 +277,12 @@ function resolveGatewayUrl(root) {
   if (origin) {
     return normalizeWsUrl(origin);
   }
-  const host = process.env.OPENCLAW_PUBLIC_HOST || localLanIp() || "127.0.0.1";
+  const host = envValue("OPENCLAW_PUBLIC_HOST") || localLanIp() || "127.0.0.1";
   return `ws://${host}:${port}`;
 }
 
 function prepareRelayConnector(root, request) {
-  const rawRelayUrl = process.env.KOKOCHAT_RELAY_URL;
+  const rawRelayUrl = envValue("KOKOCHAT_RELAY_URL");
   if (!rawRelayUrl) {
     return null;
   }
@@ -294,8 +332,9 @@ function loadOrCreateRelayCredentials(root, relayUrl) {
 }
 
 function resolveLocalGatewayUrl(root) {
-  if (process.env.KOKOCHAT_LOCAL_GATEWAY_URL) {
-    return normalizeWsUrl(process.env.KOKOCHAT_LOCAL_GATEWAY_URL);
+  const localGatewayUrl = envValue("KOKOCHAT_LOCAL_GATEWAY_URL");
+  if (localGatewayUrl) {
+    return normalizeWsUrl(localGatewayUrl);
   }
   const config = readJsonObject(join(root, "openclaw.json"));
   const port = Number(config.gateway?.port) || 18789;
@@ -331,6 +370,7 @@ function startRelayConnector(root, relayId, configPath) {
     detached: true,
     stdio: "ignore",
     env: {
+      ...openclawEnv,
       ...process.env,
       KOKOCHAT_RELAY_CONNECTOR_CONFIG: configPath
     }

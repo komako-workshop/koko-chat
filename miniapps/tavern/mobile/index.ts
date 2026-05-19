@@ -95,38 +95,33 @@ async function runRecommendation(
 ): Promise<void> {
   const store = useConversationStore.getState();
   try {
+    const localFallback = localFallbackForNonSearchInput(userText);
+    if (localFallback !== null) {
+      finalizePlaceholder(conversationId, placeholderId, { text: localFallback });
+      store.touch(conversationId, localFallback.slice(0, 120));
+      return;
+    }
+
     const result = await inferOnce({
       miniAppId: MINI_APP_ID,
-      prompt: userText,
+      prompt: buildRecommendationPrompt(userText),
       timeoutMs: INFER_TIMEOUT_MS
     });
     const assistantText = result.text;
     const parsed = parseTavernRecommendations(assistantText);
 
     if (!parsed.ok) {
-      // Two failure shapes to handle:
-      //
-      //   (a) The agent replied with prose only — typically because the
-      //       user said something off-topic or too short to search on.
-      //       Show the prose; do NOT surface the parser error to the user
-      //       (it is internal to the recommendation contract and not
-      //       actionable for them).
-      //
-      //   (b) The agent produced no text at all — likely an upstream tool
-      //       failure or model timeout. Show a short, plain-Chinese fallback
-      //       so the user knows the turn is over.
-      //
-      // In both cases we keep the parser error in console for debugging.
+      // Never surface arbitrary OpenClaw prose here. A fresh `tavern` agent
+      // can otherwise leak its first-run onboarding text into the product UI
+      // when it misses the structured recommendation contract.
       if (__DEV__) {
-        console.warn("[tavern] recommendations parse failed:", parsed.error);
+        console.warn("[tavern] recommendations parse failed:", parsed.error, assistantText.slice(0, 500));
       }
-      const fallback = assistantText.trim();
+      const fallback = "这次没有拿到可渲染的角色卡推荐。换个更具体的说法试试？比如题材、性格、关系或世界观。";
       finalizePlaceholder(conversationId, placeholderId, {
-        text: fallback.length > 0 ? fallback : "（这次没有给出推荐，再换个说法试试？）"
+        text: fallback
       });
-      if (fallback.length > 0) {
-        store.touch(conversationId, fallback.slice(0, 120));
-      }
+      store.touch(conversationId, fallback.slice(0, 120));
       return;
     }
 
@@ -158,6 +153,35 @@ async function runRecommendation(
       error: userMessage
     });
   }
+}
+
+function localFallbackForNonSearchInput(userText: string): string | null {
+  const normalized = userText
+    .trim()
+    .toLowerCase()
+    .replace(/[~～!！.。?？,，\s]/g, "");
+  if (normalized.length === 0) return "说说你想找什么样的角色卡？比如题材、性格、关系或世界观。";
+  if (/^(你好|你好啊|嗨|hi|hello|哈喽|在吗|start|\/start)$/.test(normalized)) {
+    return "我可以帮你从 Character Tavern 找角色卡。说说你想要什么样的？比如侦探、校园、治愈、病娇、室友。";
+  }
+  if (/^(谢谢|谢啦|好的|好|晚安|拜拜|再见)$/.test(normalized)) {
+    return "好呀。想继续找角色卡时，直接告诉我题材、性格或关系就行。";
+  }
+  return null;
+}
+
+function buildRecommendationPrompt(userText: string): string {
+  return [
+    "KokoChat Tavern recommendation request.",
+    "You are serving the KokoChat Tavern mini-app, not starting a new OpenClaw companion onboarding.",
+    "Do not ask the user to name you, define your identity, choose your vibe, or pick an emoji.",
+    "Follow the kokochat-tavern-search skill contract.",
+    "If the request is concrete enough, search Character Tavern and return exactly one koko.tavern.recommendations fenced block.",
+    "If the request is too vague to search, ask one short Chinese clarification question and do not mention OpenClaw setup.",
+    "",
+    "User request:",
+    userText
+  ].join("\n");
 }
 
 /**

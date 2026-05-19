@@ -11,6 +11,7 @@
     "app:dev": "pnpm --filter @koko/app dev",
     "relay:start": "pnpm --filter @koko/relay start",
     "openclaw:install": "node scripts/install-openclaw-support.mjs",
+    "regression:openclaw": "node scripts/regression-openclaw-kokochat.mjs",
     "protocol:build": "pnpm --filter @koko/protocol build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
