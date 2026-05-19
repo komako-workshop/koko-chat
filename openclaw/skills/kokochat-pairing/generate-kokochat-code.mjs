@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { randomBytes } from "node:crypto";
-import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir, platform } from "node:os";
+import { fileURLToPath } from "node:url";
 
 const DEFAULT_SCOPES = [
   "operator.read",
@@ -17,12 +18,14 @@ const input = process.env.KOKOCHAT_PAIRING_REQUEST || argInput || readStdin();
 
 const request = parsePairingRequest(input);
 const stateDir = process.env.OPENCLAW_CONFIG_DIR ?? process.env.OPENCLAW_HOME ?? join(homedir(), ".openclaw");
-const gatewayUrl = resolveGatewayUrl(stateDir);
 const deviceToken = approveDevice(stateDir, request);
+const relay = prepareRelayConnector(stateDir, request);
+const gatewayUrl = relay?.gatewayUrl ?? resolveGatewayUrl(stateDir);
 const setupCode = encodeJson({
   url: gatewayUrl,
   deviceToken,
-  deviceId: request.deviceId
+  deviceId: request.deviceId,
+  ...(relay ? { relay: { id: relay.relayId, mode: "gateway-tunnel" } } : {})
 });
 
 process.stdout.write(`${setupCode}\n`);
@@ -230,6 +233,87 @@ function resolveGatewayUrl(root) {
   }
   const host = process.env.OPENCLAW_PUBLIC_HOST || localLanIp() || "127.0.0.1";
   return `ws://${host}:${port}`;
+}
+
+function prepareRelayConnector(root, request) {
+  const rawRelayUrl = process.env.KOKOCHAT_RELAY_URL;
+  if (!rawRelayUrl) {
+    return null;
+  }
+  const relayUrl = normalizeWsUrl(rawRelayUrl).replace(/\/+$/, "");
+  if (!/^wss?:\/\//.test(relayUrl)) {
+    throw new Error("KOKOCHAT_RELAY_URL must start with ws:// or wss://");
+  }
+
+  const relayId = randomBytes(18).toString("base64url");
+  const relaySecret = randomBytes(32).toString("base64url");
+  const gatewayUrl = relayGatewayUrl(relayUrl, relayId, relaySecret);
+  const localGatewayUrl = resolveLocalGatewayUrl(root);
+  const configPath = writeRelayConnectorConfig(root, {
+    relayUrl,
+    relayId,
+    relaySecret,
+    gatewayUrl: localGatewayUrl
+  });
+  startRelayConnector(root, relayId, configPath);
+  return { relayId, gatewayUrl };
+}
+
+function resolveLocalGatewayUrl(root) {
+  if (process.env.KOKOCHAT_LOCAL_GATEWAY_URL) {
+    return normalizeWsUrl(process.env.KOKOCHAT_LOCAL_GATEWAY_URL);
+  }
+  const config = readJsonObject(join(root, "openclaw.json"));
+  const port = Number(config.gateway?.port) || 18789;
+  return `ws://127.0.0.1:${port}`;
+}
+
+function relayGatewayUrl(relayUrl, relayId, relaySecret) {
+  return `${relayUrl}/v1/gateway/${encodeURIComponent(relayId)}?secret=${encodeURIComponent(relaySecret)}`;
+}
+
+function writeRelayConnectorConfig(root, config) {
+  const dir = join(root, "kokochat-relay");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const file = join(dir, `${config.relayId}.json`);
+  writeJsonAtomic(file, config);
+  chmodSync(file, 0o600);
+  return file;
+}
+
+function startRelayConnector(root, relayId, configPath) {
+  const connector = fileURLToPath(new URL("../../relay/kokochat-relay-connector.mjs", import.meta.url));
+  if (!existsSync(connector)) {
+    throw new Error(`KokoChat relay connector is missing: ${connector}`);
+  }
+
+  const pidFile = join(root, "kokochat-relay", `${relayId}.pid`);
+  stopExistingConnector(pidFile);
+  const child = spawn(process.execPath, [connector, "--config", configPath], {
+    detached: true,
+    stdio: "ignore",
+    env: {
+      ...process.env,
+      KOKOCHAT_RELAY_CONNECTOR_CONFIG: configPath
+    }
+  });
+  child.unref();
+  writeFileSync(pidFile, `${child.pid}\n`, { mode: 0o600 });
+}
+
+function stopExistingConnector(pidFile) {
+  if (!existsSync(pidFile)) {
+    return;
+  }
+  const pid = Number(readFileSync(pidFile, "utf8").trim());
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return;
+  }
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    // The previous connector is already gone.
+  }
 }
 
 function normalizeWsUrl(url) {

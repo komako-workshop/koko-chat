@@ -57,6 +57,7 @@ const SKILLS = [
     verifyAgent: "tavern-roleplay"
   }
 ];
+const RELAY_SOURCE = join(REPO_ROOT, "openclaw", "relay");
 
 main();
 
@@ -69,6 +70,7 @@ function main() {
   const defaultAgent = agentsBefore.find((agent) => agent.isDefault === true);
   const defaultWorkspace = defaultAgent?.workspace ?? join(openclawHome, "workspace");
   const defaultVerifyAgent = defaultAgent?.id ?? "main";
+  installRelayConnector(defaultWorkspace);
 
   for (const desired of REQUIRED_AGENTS) {
     const current = agents.get(desired.id);
@@ -167,6 +169,9 @@ function ensureSkillSources() {
       throw new Error(`missing skill source: ${skill.source}`);
     }
   }
+  if (!existsSync(RELAY_SOURCE) || !statSync(RELAY_SOURCE).isDirectory()) {
+    throw new Error(`missing relay connector source: ${RELAY_SOURCE}`);
+  }
 }
 
 function listAgents() {
@@ -264,6 +269,15 @@ function installSkill(skill, workspace) {
   mkdirSync(dirname(target), { recursive: true });
   rmSync(target, { recursive: true, force: true });
   cpSync(skill.source, target, { recursive: true });
+}
+
+function installRelayConnector(defaultWorkspace) {
+  const target = join(defaultWorkspace, "relay");
+  log(`relay connector: ${target}`);
+  if (dryRun) return;
+  mkdirSync(dirname(target), { recursive: true });
+  rmSync(target, { recursive: true, force: true });
+  cpSync(RELAY_SOURCE, target, { recursive: true });
 }
 
 function verifySkill(skillId, agentId) {

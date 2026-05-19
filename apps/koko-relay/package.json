@@ -1,0 +1,15 @@
+{
+  "name": "@koko/relay",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test-relay.mjs",
+    "typecheck": "node --check server.mjs && node --check test-relay.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.20.0"
+  }
+}

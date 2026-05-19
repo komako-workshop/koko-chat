@@ -90,6 +90,14 @@ fi
 node "$KOKOCHAT_REPO/scripts/install-openclaw-support.mjs"
 ```
 
+如果你要让手机离开同一局域网后也能继续使用，给 OpenClaw 机器设置官方或自托管 relay 地址后再生成连接码:
+
+```bash
+export KOKOCHAT_RELAY_URL=ws://<relay-host>:8787
+```
+
+设置后，`kokochat-pairing` 会在 OpenClaw 机器上启动一个本地 connector。手机连 relay，connector 再连本机 OpenClaw Gateway；relay 只转发 WebSocket 帧，不直接连接你的 Gateway。
+
 如果你在开发这个仓库，也可以在仓库根目录运行:
 
 ```bash
