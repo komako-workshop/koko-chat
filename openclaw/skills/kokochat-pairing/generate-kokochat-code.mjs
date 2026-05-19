@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { randomBytes } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir, platform } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,7 @@ const DEFAULT_SCOPES = [
   "operator.approvals",
   "operator.talk.secrets"
 ];
+const RELAY_STATE_FILE = "relay.json";
 
 const argInput = process.argv.slice(2).join(" ");
 const input = process.env.KOKOCHAT_PAIRING_REQUEST || argInput || readStdin();
@@ -245,8 +246,7 @@ function prepareRelayConnector(root, request) {
     throw new Error("KOKOCHAT_RELAY_URL must start with ws:// or wss://");
   }
 
-  const relayId = randomBytes(18).toString("base64url");
-  const relaySecret = randomBytes(32).toString("base64url");
+  const { relayId, relaySecret } = loadOrCreateRelayCredentials(root, relayUrl);
   const gatewayUrl = relayGatewayUrl(relayUrl, relayId, relaySecret);
   const localGatewayUrl = resolveLocalGatewayUrl(root);
   const configPath = writeRelayConnectorConfig(root, {
@@ -257,6 +257,33 @@ function prepareRelayConnector(root, request) {
   });
   startRelayConnector(root, relayId, configPath);
   return { relayId, gatewayUrl };
+}
+
+function loadOrCreateRelayCredentials(root, relayUrl) {
+  const dir = join(root, "kokochat-relay");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const statePath = join(dir, RELAY_STATE_FILE);
+  const existing = readJsonObject(statePath);
+  if (
+    existing.relayUrl === relayUrl &&
+    isRelayId(existing.relayId) &&
+    isRelaySecret(existing.relaySecret)
+  ) {
+    return {
+      relayId: existing.relayId,
+      relaySecret: existing.relaySecret
+    };
+  }
+
+  const next = {
+    relayUrl,
+    relayId: randomBytes(18).toString("base64url"),
+    relaySecret: randomBytes(32).toString("base64url"),
+    createdAtMs: Date.now()
+  };
+  writeJsonAtomic(statePath, next);
+  chmodSync(statePath, 0o600);
+  return next;
 }
 
 function resolveLocalGatewayUrl(root) {
@@ -288,6 +315,10 @@ function startRelayConnector(root, relayId, configPath) {
   }
 
   const pidFile = join(root, "kokochat-relay", `${relayId}.pid`);
+  stopOtherRelayConnectors(root, relayId);
+  if (isPidAlive(pidFile)) {
+    return;
+  }
   stopExistingConnector(pidFile);
   const child = spawn(process.execPath, [connector, "--config", configPath], {
     detached: true,
@@ -299,6 +330,38 @@ function startRelayConnector(root, relayId, configPath) {
   });
   child.unref();
   writeFileSync(pidFile, `${child.pid}\n`, { mode: 0o600 });
+}
+
+function stopOtherRelayConnectors(root, relayId) {
+  const dir = join(root, "kokochat-relay");
+  let entries;
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.endsWith(".pid") || entry === `${relayId}.pid`) {
+      continue;
+    }
+    stopExistingConnector(join(dir, entry));
+  }
+}
+
+function isPidAlive(pidFile) {
+  if (!existsSync(pidFile)) {
+    return false;
+  }
+  const pid = Number(readFileSync(pidFile, "utf8").trim());
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function stopExistingConnector(pidFile) {
@@ -352,4 +415,12 @@ function localLanIp() {
 
 function encodeJson(value) {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+
+function isRelayId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{16,160}$/.test(value);
+}
+
+function isRelaySecret(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{32,256}$/.test(value);
 }
