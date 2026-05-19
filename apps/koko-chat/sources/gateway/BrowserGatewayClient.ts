@@ -29,6 +29,8 @@ import {
   buildConnectParams
 } from "@koko/openclaw-client/protocol";
 
+import { kokoGatewayClientMetadata } from "@/gateway/clientMetadata";
+
 /** Options accepted by {@link BrowserGatewayClient}. */
 export interface BrowserGatewayClientOptions {
   /** Full ws:// or wss:// URL. */
@@ -77,18 +79,6 @@ const noopLogger: Logger = {
   info: () => undefined,
   warn: () => undefined,
   error: () => undefined
-};
-
-const defaultClient: GatewayClientMetadata = {
-  // OpenClaw Gateway enforces an allowlist on client.id / client.mode.
-  // "webchat" + "webchat" is the pair used by browser-based webchat clients
-  // and triggers Gateway's `isWebchat === true` path, which enables silent
-  // local pairing without manual `openclaw devices approve` for loopback
-  // browser connections. See server.impl shouldAllowSilentLocalPairing.
-  id: "webchat",
-  version: "0.0.1",
-  platform: "web",
-  mode: "webchat"
 };
 
 /** Browser/RN-compatible Gateway client. Minimal: open, handshake, call, on. */
@@ -191,7 +181,7 @@ export class BrowserGatewayClient {
     this.connectNonce = challenge.nonce;
 
     const clientMeta: GatewayClientMetadata = {
-      ...defaultClient,
+      ...kokoGatewayClientMetadata(),
       ...this.options.client
     };
 

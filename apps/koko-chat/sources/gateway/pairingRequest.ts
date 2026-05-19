@@ -6,18 +6,12 @@ import {
   type GatewayClientMetadata
 } from "@koko/openclaw-client/protocol";
 
+import { kokoGatewayClientMetadata } from "@/gateway/clientMetadata";
 import { loadOrCreateDeviceSeed } from "@/gateway/identityStorage";
 
 const PAIRING_REQUEST_TYPE = "kokochat.pairingRequest";
 const KOKOCHAT_OPENCLAW_INSTALL_URL =
   "https://github.com/komako-workshop/koko-chat#openclaw-setup";
-
-const pairingClient: GatewayClientMetadata = {
-  id: "webchat",
-  version: "0.0.1",
-  platform: "web",
-  mode: "webchat"
-};
 
 export interface KokoChatPairingRequest {
   type: typeof PAIRING_REQUEST_TYPE;
@@ -43,7 +37,7 @@ export async function buildKokoChatPairingRequest(): Promise<KokoChatPairingRequ
     role: DEFAULT_ROLE,
     scopes: [...DEFAULT_SCOPES],
     client: {
-      ...pairingClient,
+      ...kokoGatewayClientMetadata(),
       displayName: "KokoChat"
     }
   };

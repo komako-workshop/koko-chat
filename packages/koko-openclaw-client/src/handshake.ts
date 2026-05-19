@@ -20,8 +20,9 @@ export const DEFAULT_SCOPES = [
   "operator.talk.secrets"
 ] as const;
 
-/** Protocol version requested by this client. */
-export const GATEWAY_PROTOCOL_VERSION = 3;
+/** Gateway protocol range requested by this client. */
+export const GATEWAY_PROTOCOL_MIN_VERSION = 3;
+export const GATEWAY_PROTOCOL_MAX_VERSION = 4;
 
 /** Payload accepted from `connect.challenge`. */
 export interface ConnectChallengePayload extends JsonRecord {
@@ -128,8 +129,8 @@ export async function buildConnectParams(args: BuildConnectParamsArgs): Promise<
       auth,
       device,
       client: args.client,
-      minProtocol: GATEWAY_PROTOCOL_VERSION,
-      maxProtocol: GATEWAY_PROTOCOL_VERSION
+      minProtocol: GATEWAY_PROTOCOL_MIN_VERSION,
+      maxProtocol: GATEWAY_PROTOCOL_MAX_VERSION
     }
   };
 }

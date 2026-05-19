@@ -37,6 +37,8 @@ describe("GatewayClient handshake", () => {
     });
 
     expect(built.params.auth).toEqual({ deviceToken: "device-token-1" });
+    expect(built.params.minProtocol).toBe(3);
+    expect(built.params.maxProtocol).toBe(4);
 
     const payload = buildSignaturePayload({
       deviceId: built.device.id,
