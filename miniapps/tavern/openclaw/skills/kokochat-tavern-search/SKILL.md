@@ -52,11 +52,21 @@ turns should be plain prose.
 
 ## How To Run The Search
 
+Do **not** inspect, show, cat, sed, grep, list, or otherwise read this
+`SKILL.md` file before searching. These instructions are already in your
+context. The Tavern exec policy only allows the search command below; a
+combined operation like `show SKILL.md → run search-cards.mjs` will be denied.
+
 There is exactly one way to fetch candidates. Use the `exec` tool to run:
 
 ```bash
 node ~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs '<json>'
 ```
+
+The `exec` command must be one single command line beginning with `node
+~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs`.
+Do not include shell chains, pipes, redirections, or any preflight file-reading
+commands.
 
 The `tavern` agent's workspace is fixed at `~/.openclaw/agents/tavern/workspace`,
 so this absolute path is stable for the Tavern mini-app. Do not try to discover

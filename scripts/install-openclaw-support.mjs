@@ -75,9 +75,13 @@ const AGENT_DEFINITIONS = {
       "",
       "For concrete roleplay-card recommendation requests, run exactly this local search tool first:",
       "",
+      "Do not inspect, show, cat, sed, grep, list, or otherwise read the skill files before searching. The skill text is already injected into your context. The exec approval allowlist only permits the search command below; a combined operation like `show SKILL.md → run search-cards.mjs` will be denied.",
+      "",
       "```bash",
-      "~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs '<json>'",
+      "node ~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs '<json>'",
       "```",
+      "",
+      "When calling the `exec` tool, the command must be one single command line beginning with `node ~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs`. Do not use shell chains, pipes, redirections, or preflight file-reading commands.",
       "",
       "Use an English keyword `query`, `limit: 20`, and `includeNsfw: true` only when the user explicitly asks for adult/NSFW content. If the request is only a greeting or filler, reply briefly in Chinese without a fenced block.",
       "",
@@ -118,6 +122,7 @@ const AGENT_DEFINITIONS = {
         timeoutSec: 120
       }
     },
+    execAutoAllowSkills: true,
     execAllowlist: [
       {
         skillId: "kokochat-tavern-search",
@@ -443,6 +448,9 @@ function configureExecApprovals(workspaceByAgent) {
     agent.security = "allowlist";
     agent.ask = "off";
     agent.askFallback = "allowlist";
+    if (AGENT_DEFINITIONS[agentId]?.execAutoAllowSkills === true) {
+      agent.autoAllowSkills = true;
+    }
     agent.allowlist = mergeExecAllowlist(agent.allowlist, patterns);
   }
 
