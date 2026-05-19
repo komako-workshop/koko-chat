@@ -422,15 +422,23 @@ function configureExecApprovals(workspaceByAgent) {
     for (const item of definition.execAllowlist) {
       const pattern = join(workspace, "skills", item.skillId, item.relativePath);
       const current = entriesByAgent.get(agentId) ?? [];
-      current.push(pattern);
+      current.push({ pattern });
+      current.push({
+        pattern: "node",
+        argPattern: buildScriptArgPattern(pattern)
+      });
       entriesByAgent.set(agentId, current);
     }
   }
   if (entriesByAgent.size === 0) return;
 
   log(`exec approvals: ${approvalsPath}`);
-  for (const [agentId, patterns] of entriesByAgent) {
-    log(`exec allowlist ${agentId}: ${patterns.join(", ")}`);
+  for (const [agentId, entries] of entriesByAgent) {
+    log(
+      `exec allowlist ${agentId}: ${entries
+        .map((entry) => entry.argPattern ? `${entry.pattern} ${entry.argPattern}` : entry.pattern)
+        .join(", ")}`
+    );
   }
   if (dryRun) return;
 
@@ -442,7 +450,7 @@ function configureExecApprovals(workspaceByAgent) {
   const agents = isRecord(approvals.agents) ? approvals.agents : {};
   approvals.agents = agents;
 
-  for (const [agentId, patterns] of entriesByAgent) {
+  for (const [agentId, entries] of entriesByAgent) {
     const agent = isRecord(agents[agentId]) ? agents[agentId] : {};
     agents[agentId] = agent;
     agent.security = "allowlist";
@@ -451,7 +459,7 @@ function configureExecApprovals(workspaceByAgent) {
     if (AGENT_DEFINITIONS[agentId]?.execAutoAllowSkills === true) {
       agent.autoAllowSkills = true;
     }
-    agent.allowlist = mergeExecAllowlist(agent.allowlist, patterns);
+    agent.allowlist = mergeExecAllowlist(agent.allowlist, entries);
   }
 
   writeFileSync(approvalsPath, `${JSON.stringify(approvals, null, 2)}\n`);
@@ -512,20 +520,40 @@ function mergeToolConfig(current, required) {
   return merged;
 }
 
-function mergeExecAllowlist(current, patterns) {
+function mergeExecAllowlist(current, entries) {
   const merged = Array.isArray(current)
     ? current.filter((value) => isRecord(value) && typeof value.pattern === "string")
     : [];
-  const seen = new Set(merged.map((value) => value.pattern));
-  for (const pattern of patterns) {
-    if (seen.has(pattern)) continue;
-    seen.add(pattern);
+  const seen = new Set(
+    merged.map((value) => execAllowlistKey(value.pattern, value.argPattern))
+  );
+  for (const entry of entries) {
+    const pattern = entry.pattern;
+    const argPattern = typeof entry.argPattern === "string" ? entry.argPattern : undefined;
+    const key = execAllowlistKey(pattern, argPattern);
+    if (seen.has(key)) continue;
+    seen.add(key);
     merged.push({
-      id: stableId(`kokochat:${pattern}`),
-      pattern
+      id: stableId(`kokochat:${key}`),
+      pattern,
+      ...(argPattern === undefined ? {} : { argPattern })
     });
   }
   return merged;
+}
+
+function buildScriptArgPattern(scriptPath) {
+  const variants = [scriptPath];
+  const home = homedir();
+  if (scriptPath.startsWith(`${home}/`)) {
+    variants.push(`~${scriptPath.slice(home.length)}`);
+  }
+  const alternatives = variants.map(escapeRegExp).join("|");
+  return `(?:^|\\s)(?:${alternatives})(?:\\s|$)`;
+}
+
+function execAllowlistKey(pattern, argPattern) {
+  return `${pattern}\0${typeof argPattern === "string" ? argPattern : ""}`;
 }
 
 function stableId(value) {
