@@ -6,7 +6,7 @@ Character Tavern character cards through a chat-driven recommendation loop.
 ## Files
 
 - `index.ts` — registers the mini-app, the outbound builder, and the
-  recommendations block renderer.
+  agent-response transformer plus the single-card block renderer.
 - `parseRecommendations.ts` — strict parser/validator for the
   `koko.tavern.recommendations` fenced block produced by the OpenClaw skill.
 - `RecommendationsBlock.tsx` — UI for the validated recommendation list.
@@ -22,13 +22,13 @@ Character Tavern character cards through a chat-driven recommendation loop.
 ```text
 KokoChat (this folder)        OpenClaw (~/.openclaw/agents/tavern/...)
 ─────────────────────         ──────────────────────────────────────────
-user input + UI         ─►    inferOnce -> tavern agent
+user input + UI         ─►    persistent tavern agent session
                                   └─► kokochat-tavern-search skill
                                           └─► bin/search-cards.mjs
                                                   └─► character-tavern.com
-recommendations block   ◄─    fenced block in assistant reply
+agent response           ◄─    fenced recommendations block
 parse + validate
-render character cards
+expand into chat bubbles + character cards
 ```
 
 KokoChat stays UI-shaped. Searching, fetching, parsing the upstream catalog,

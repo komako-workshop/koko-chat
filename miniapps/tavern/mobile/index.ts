@@ -1,12 +1,12 @@
 import type { ImageSourcePropType } from "react-native";
 
+import { registerAgentResponseTransformer } from "@/runtime/agentResponses";
 import { registerMiniApp } from "@/runtime/miniApps";
 import { registerSharedBlockRenderer } from "@/runtime/messageBlocks";
 import {
   registerOutboundMessageBuilder,
   type OutboundMessageBuilder
 } from "@/runtime/outboundMessages";
-import { inferOnce } from "@/runtime/openclaw";
 import { useConversationStore, type ChatMessage } from "@/state/conversations";
 
 import {
@@ -20,8 +20,8 @@ import { TavernCardBlock, isTavernRecommendationCard } from "./RecommendationsBl
  *
  * Product loop:
  *   1. User describes the kind of roleplay character they want.
- *   2. Mini-app forwards the message to the `tavern` OpenClaw agent via
- *      `inferOnce`, with the mini-app id steering session/agent routing.
+ *   2. Mini-app forwards a KokoChat-specific prompt to the conversation's
+ *      persistent `tavern` OpenClaw agent session.
  *   3. The `tavern` agent calls its `kokochat-tavern-search` skill, which
  *      hits Character Tavern's catalog endpoint and returns normalized hits.
  *   4. The agent replies with a single `koko.tavern.recommendations` fenced
@@ -47,128 +47,15 @@ const CARD_BLOCK_TYPE = "koko.tavern.card";
 // Character Tavern's own mascot artwork. Surfaces in the chat list / launcher
 // so users immediately associate the row with the upstream catalog.
 const tavernAvatar = require("./assets/character-tavern-logo.png") as ImageSourcePropType;
-// 1 hour. A normal Tavern turn (search-cards tool call + 3-5 card
-// translation + reason writing) usually completes within 30-90s, but agent
-// runs that involve a retry, a slow upstream, or longer prompt windows can
-// occasionally push past several minutes. The host's per-request RPC timeout
-// is also 1 hour, so this matches the cap rather than under-cutting it.
-const INFER_TIMEOUT_MS = 3_600_000;
 
 let registered = false;
 
-const tavernOutboundBuilder: OutboundMessageBuilder = async ({ conversation, visibleText }) => {
-  // The host appends the user's own message into the store *after* this
-  // builder resolves. If we schedule the placeholder synchronously here, it
-  // ends up sitting above the user's message in the chat list. Defer the
-  // placeholder push to the next macrotask so the host's synchronous user
-  // message append (which happens right after `await buildOutboundMessage`)
-  // lands first. The visible effect is "user bubble first, then a streaming
-  // agent placeholder", matching every other chat surface's read order.
-  setTimeout(() => schedulePlaceholderAndReply(conversation.id, visibleText), 0);
+const tavernOutboundBuilder: OutboundMessageBuilder = async ({ visibleText }) => {
   return {
     visibleText,
-    gatewayText: visibleText,
-    // The `tavern` agent is reached via inferOnce below; the host should not
-    // also forward this message to the conversation's bound session.
-    localOnly: true
+    gatewayText: buildRecommendationPrompt(visibleText)
   };
 };
-
-function schedulePlaceholderAndReply(conversationId: string, userText: string): void {
-  const placeholderId = `tavern-pending-${Date.now()}`;
-  useConversationStore.getState().setMessages(conversationId, (prev) => [
-    ...prev,
-    {
-      id: placeholderId,
-      role: "agent",
-      text: "",
-      streaming: true
-    }
-  ]);
-  void runRecommendation(conversationId, placeholderId, userText);
-}
-
-async function runRecommendation(
-  conversationId: string,
-  placeholderId: string,
-  userText: string
-): Promise<void> {
-  const store = useConversationStore.getState();
-  try {
-    const localFallback = localFallbackForNonSearchInput(userText);
-    if (localFallback !== null) {
-      finalizePlaceholder(conversationId, placeholderId, { text: localFallback });
-      store.touch(conversationId, localFallback.slice(0, 120));
-      return;
-    }
-
-    const result = await inferOnce({
-      miniAppId: MINI_APP_ID,
-      prompt: buildRecommendationPrompt(userText),
-      timeoutMs: INFER_TIMEOUT_MS
-    });
-    const assistantText = result.text;
-    const parsed = parseTavernRecommendations(assistantText);
-
-    if (!parsed.ok) {
-      // Never surface arbitrary OpenClaw prose here. A fresh `tavern` agent
-      // can otherwise leak its first-run onboarding text into the product UI
-      // when it misses the structured recommendation contract.
-      if (__DEV__) {
-        console.warn("[tavern] recommendations parse failed:", parsed.error, assistantText.slice(0, 500));
-      }
-      const fallback = "这次没有拿到可渲染的角色卡推荐。换个更具体的说法试试？比如题材、性格、关系或世界观。";
-      finalizePlaceholder(conversationId, placeholderId, {
-        text: fallback
-      });
-      store.touch(conversationId, fallback.slice(0, 120));
-      return;
-    }
-
-    expandItemsIntoMessages(conversationId, placeholderId, parsed.value.items);
-
-    const cards = parsed.value.items.filter(
-      (item): item is Extract<TavernRecommendationItem, { kind: "card" }> => item.kind === "card"
-    );
-    const previewNames = cards
-      .slice(0, 2)
-      .map((item) => item.card.nameZh)
-      .join("、");
-    const preview = previewNames.length > 0
-      ? `推荐了 ${cards.length} 张：${previewNames}`
-      : `推荐了 ${cards.length} 张`;
-    store.touch(conversationId, preview);
-  } catch (error) {
-    // Surface a short, actionable Chinese message to the user. Keep the raw
-    // error in the dev console for debugging.
-    const raw = error instanceof Error ? error.message : String(error);
-    if (__DEV__) {
-      console.warn("[tavern] inferOnce failed:", raw);
-    }
-    const userMessage = isTimeout(raw)
-      ? "推荐这次跑得有点久，超时了。再发一次试试？"
-      : "推荐失败了，稍后再试一次吧。";
-    finalizePlaceholder(conversationId, placeholderId, {
-      text: "",
-      error: userMessage
-    });
-  }
-}
-
-function localFallbackForNonSearchInput(userText: string): string | null {
-  const normalized = userText
-    .trim()
-    .toLowerCase()
-    .replace(/[~～!！.。?？,，\s]/g, "");
-  if (normalized.length === 0) return "说说你想找什么样的角色卡？比如题材、性格、关系或世界观。";
-  if (/^(你好|你好啊|嗨|hi|hello|哈喽|在吗|start|\/start)$/.test(normalized)) {
-    return "我可以帮你从 Character Tavern 找角色卡。说说你想要什么样的？比如侦探、校园、治愈、病娇、室友。";
-  }
-  if (/^(谢谢|谢啦|好的|好|晚安|拜拜|再见)$/.test(normalized)) {
-    return "好呀。想继续找角色卡时，直接告诉我题材、性格或关系就行。";
-  }
-  return null;
-}
 
 function buildRecommendationPrompt(userText: string): string {
   return [
@@ -185,16 +72,14 @@ function buildRecommendationPrompt(userText: string): string {
 }
 
 /**
- * Expand a parsed items[] into a stream of agent messages, replacing the
- * single streaming placeholder. All synthesized messages share one runId so
- * the chat UI groups them (collapsed avatars on continuation rows, etc).
+ * Expand a parsed items[] into a stream of agent messages. All synthesized
+ * messages share the OpenClaw runId so the chat UI groups them (collapsed
+ * avatars on continuation rows, etc).
  */
-function expandItemsIntoMessages(
-  conversationId: string,
-  placeholderId: string,
+function buildRecommendationMessages(
+  runId: string,
   items: TavernRecommendationItem[]
-): void {
-  const runId = `tavern-${Date.now()}`;
+): ChatMessage[] {
   const messages: ChatMessage[] = items.map((item, idx) => {
     const id = `${runId}-${idx}`;
     if (item.kind === "text") {
@@ -222,52 +107,38 @@ function expandItemsIntoMessages(
     };
   });
 
-  useConversationStore.getState().setMessages(conversationId, (prev) => {
-    const idx = prev.findIndex((m) => m.id === placeholderId);
-    if (idx < 0) {
-      // Placeholder was already removed somehow; just append.
-      return [...prev, ...messages];
-    }
-    const next = [...prev];
-    next.splice(idx, 1, ...messages);
-    return next;
-  });
+  return messages;
 }
 
-function isTimeout(message: string): boolean {
-  return /timed?\s*out|timeout/i.test(message);
-}
-
-interface FinalizePatch {
+function transformTavernAgentResponse({
+  runId,
+  text
+}: {
+  runId: string;
   text: string;
-  error?: string;
+}): { messages: ChatMessage[]; preview?: string } | null {
+  const parsed = parseTavernRecommendations(text);
+  if (!parsed.ok) return null;
+
+  const cards = parsed.value.items.filter(
+    (item): item is Extract<TavernRecommendationItem, { kind: "card" }> => item.kind === "card"
+  );
+  const previewNames = cards
+    .slice(0, 2)
+    .map((item) => item.card.nameZh)
+    .join("、");
+  const preview = previewNames.length > 0
+    ? `推荐了 ${cards.length} 张：${previewNames}`
+    : `推荐了 ${cards.length} 张`;
+
+  return {
+    messages: buildRecommendationMessages(runId, parsed.value.items),
+    preview
+  };
 }
 
-/**
- * Replace the streaming placeholder in-place with a single final message
- * (used for failure / fallback paths). Successful recommendations go
- * through `expandItemsIntoMessages` instead.
- */
-function finalizePlaceholder(
-  conversationId: string,
-  placeholderId: string,
-  patch: FinalizePatch
-): void {
-  useConversationStore.getState().setMessages(conversationId, (prev) => {
-    const idx = prev.findIndex((m) => m.id === placeholderId);
-    if (idx < 0) return prev;
-    const existing = prev[idx];
-    if (existing === undefined) return prev;
-    const next = [...prev];
-    const updated: ChatMessage = {
-      ...existing,
-      text: patch.text,
-      streaming: false,
-      ...(patch.error !== undefined ? { error: patch.error } : {})
-    };
-    next[idx] = updated;
-    return next;
-  });
+function isTavernRecommendationStream({ text }: { text: string }): boolean {
+  return /```[ \t]*koko\.tavern\.recommendations\b/.test(text);
 }
 
 export function registerTavernMiniApp(): void {
@@ -284,7 +155,7 @@ export function registerTavernMiniApp(): void {
     openclaw: {
       defaultAgentId: "tavern",
       requiredSkills: ["kokochat-tavern-search"],
-      requiredCoreTools: ["exec"],
+      requiredCoreTools: ["exec", "process"],
       localSkillDirs: ["miniapps/tavern/openclaw/skills/kokochat-tavern-search"]
     },
     onCreate: () =>
@@ -296,6 +167,9 @@ export function registerTavernMiniApp(): void {
   });
 
   registerOutboundMessageBuilder(MINI_APP_ID, tavernOutboundBuilder);
+  registerAgentResponseTransformer(MINI_APP_ID, transformTavernAgentResponse, {
+    shouldDeferStreamingText: isTavernRecommendationStream
+  });
   registerSharedBlockRenderer(
     CARD_BLOCK_TYPE,
     isTavernRecommendationCard,

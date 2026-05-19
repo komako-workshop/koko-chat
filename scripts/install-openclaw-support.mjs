@@ -115,7 +115,7 @@ const AGENT_DEFINITIONS = {
     ].join("\n"),
     tools: {
       profile: "minimal",
-      alsoAllow: ["exec"],
+      alsoAllow: ["exec", "process"],
       exec: {
         security: "allowlist",
         ask: "off",

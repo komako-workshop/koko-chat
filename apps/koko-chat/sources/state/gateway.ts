@@ -21,6 +21,10 @@ import {
   clearDeviceIdentity
 } from "@/gateway/identityStorage";
 import type { OpenClawSetup } from "@/gateway/setupCode";
+import {
+  shouldDeferAgentResponseText,
+  transformAgentResponse
+} from "@/runtime/agentResponses";
 import { buildOutboundMessage, isFirstUserTurn } from "@/runtime/outboundMessages";
 import { getMiniAppDescriptor } from "@/runtime/miniApps";
 import { parseMessageBoundaries } from "@/runtime/messageBoundary";
@@ -161,8 +165,52 @@ function applySingleBubbleDelta(
   done: boolean,
   fullText: string
 ): void {
+  let transformedPreview: string | undefined;
   useConversationStore.getState().setMessages(conversationId, (prev) => {
     const idx = prev.findIndex((m) => m.runId === event.runId && m.role === "agent");
+    const transformed = typeof event.runId === "string" && done
+      ? buildTransformedAgentMessages(conversationId, event.runId, fullText)
+      : null;
+    if (transformed !== null) {
+      transformedPreview = transformed.preview;
+      if (idx < 0) return [...prev, ...transformed.messages];
+      const next = [...prev];
+      let insertAt = idx;
+      for (let i = next.length - 1; i >= 0; i -= 1) {
+        const message = next[i];
+        if (message?.role === "agent" && message.runId === event.runId) {
+          insertAt = Math.min(insertAt, i);
+          next.splice(i, 1);
+        }
+      }
+      next.splice(insertAt, 0, ...transformed.messages);
+      return next;
+    }
+
+    const runIdForDefer = typeof event.runId === "string" && !done ? event.runId : null;
+    if (
+      runIdForDefer !== null &&
+      shouldDeferStreamingAgentText(conversationId, runIdForDefer, fullText)
+    ) {
+      if (idx < 0) {
+        return [
+          ...prev,
+          {
+            id: newMessageId(),
+            role: "agent",
+            text: "",
+            runId: runIdForDefer,
+            streaming: true
+          }
+        ];
+      }
+      const existing = prev[idx];
+      if (existing === undefined) return prev;
+      const next = [...prev];
+      next[idx] = { ...existing, text: "", streaming: true };
+      return next;
+    }
+
     if (idx < 0) {
       return [
         ...prev,
@@ -184,8 +232,30 @@ function applySingleBubbleDelta(
   if (done) {
     useConversationStore
       .getState()
-      .touch(conversationId, previewFromText(fullText));
+      .touch(conversationId, transformedPreview ?? previewFromText(fullText));
   }
+}
+
+function buildTransformedAgentMessages(
+  conversationId: string,
+  runId: string,
+  fullText: string
+): { messages: ChatMessage[]; preview?: string } | null {
+  const conversation = useConversationStore.getState().list.find((m) => m.id === conversationId);
+  if (conversation === undefined) return null;
+  const result = transformAgentResponse({ conversation, runId, text: fullText });
+  if (result === null || result.messages.length === 0) return null;
+  return result;
+}
+
+function shouldDeferStreamingAgentText(
+  conversationId: string,
+  runId: string,
+  fullText: string
+): boolean {
+  const conversation = useConversationStore.getState().list.find((m) => m.id === conversationId);
+  if (conversation === undefined) return false;
+  return shouldDeferAgentResponseText({ conversation, runId, text: fullText });
 }
 
 function applyMultiBubbleDelta(
