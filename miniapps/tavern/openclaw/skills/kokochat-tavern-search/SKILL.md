@@ -60,13 +60,17 @@ combined operation like `show SKILL.md → run search-cards.mjs` will be denied.
 There is exactly one way to fetch candidates. Use the `exec` tool to run:
 
 ```bash
-node ~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs '<json>'
+~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs '<json>'
 ```
 
-The `exec` command must be one single command line beginning with `node
-~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs`.
+The `exec` command must be one single command line beginning with
+`~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs`
+or with the exact absolute search command shown in the Tavern agent's
+`AGENTS.md`.
 Do not include shell chains, pipes, redirections, or any preflight file-reading
 commands.
+Do not send visible prose before this tool call. Internal search notes, query
+plans, and tool-routing explanations must stay hidden.
 
 The `tavern` agent's workspace is fixed at `~/.openclaw/agents/tavern/workspace`,
 so this absolute path is stable for the Tavern mini-app. Do not try to discover
@@ -253,7 +257,7 @@ User:
 You run:
 
 ```bash
-node ~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs \
+~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs \
   '{"query":"detective female mystery noir","tags":["detective"],"limit":20}'
 ```
 

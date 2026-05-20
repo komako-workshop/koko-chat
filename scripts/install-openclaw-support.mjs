@@ -78,10 +78,11 @@ const AGENT_DEFINITIONS = {
       "Do not inspect, show, cat, sed, grep, list, or otherwise read the skill files before searching. The skill text is already injected into your context. The exec approval allowlist only permits the search command below; a combined operation like `show SKILL.md → run search-cards.mjs` will be denied.",
       "",
       "```bash",
-      "node ~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs '<json>'",
+      "{{TAVERN_SEARCH_BIN}} '<json>'",
       "```",
       "",
-      "When calling the `exec` tool, the command must be one single command line beginning with `node ~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs`. Do not use shell chains, pipes, redirections, or preflight file-reading commands.",
+      "When calling the `exec` tool, the command must be one single command line beginning with `{{TAVERN_SEARCH_BIN}}`. Do not use shell chains, pipes, redirections, or preflight file-reading commands.",
+      "Do not send visible prose before this tool call. Internal search notes, query plans, and tool-routing explanations must stay hidden.",
       "",
       "Use an English keyword `query`, `limit: 20`, and `includeNsfw: true` only when the user explicitly asks for adult/NSFW content. If the request is only a greeting or filler, reply briefly in Chinese without a fenced block.",
       "",
@@ -364,8 +365,19 @@ function installAgentDefinitions(workspaceByAgent) {
     log(`agent instructions ${agentId}: ${target}`);
     if (dryRun) continue;
     mkdirSync(workspace, { recursive: true });
-    upsertManagedBlock(target, `KOKOCHAT:${agentId}`, definition.instructions);
+    upsertManagedBlock(target, `KOKOCHAT:${agentId}`, renderAgentInstructions(agentId, definition, workspace));
   }
+}
+
+function renderAgentInstructions(agentId, definition, workspace) {
+  let instructions = definition.instructions;
+  if (agentId === "tavern") {
+    instructions = instructions.replaceAll(
+      "{{TAVERN_SEARCH_BIN}}",
+      join(workspace, "skills", "kokochat-tavern-search", "bin", "search-cards.mjs")
+    );
+  }
+  return instructions;
 }
 
 function upsertManagedBlock(path, marker, body) {
@@ -423,10 +435,12 @@ function configureExecApprovals(workspaceByAgent) {
       const pattern = join(workspace, "skills", item.skillId, item.relativePath);
       const current = entriesByAgent.get(agentId) ?? [];
       current.push({ pattern });
-      current.push({
-        pattern: "node",
-        argPattern: buildScriptArgPattern(pattern)
-      });
+      for (const nodePattern of nodeExecutablePatterns()) {
+        current.push({
+          pattern: nodePattern,
+          argPattern: buildScriptArgPattern(pattern)
+        });
+      }
       entriesByAgent.set(agentId, current);
     }
   }
@@ -550,6 +564,18 @@ function buildScriptArgPattern(scriptPath) {
   }
   const alternatives = variants.map(escapeRegExp).join("|");
   return `(?:^|\\s)(?:${alternatives})(?:\\s|$)`;
+}
+
+function nodeExecutablePatterns() {
+  const candidates = ["node", process.execPath];
+  const discovered = spawnSync("sh", ["-lc", "command -v node"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+  if (discovered.status === 0) {
+    candidates.push(discovered.stdout.trim());
+  }
+  return [...new Set(candidates.filter((value) => typeof value === "string" && value.length > 0))];
 }
 
 function execAllowlistKey(pattern, argPattern) {
