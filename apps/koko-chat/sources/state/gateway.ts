@@ -186,27 +186,38 @@ function applySingleBubbleDelta(
 ): void {
   let transformedPreview: string | undefined;
   useConversationStore.getState().setMessages(conversationId, (prev) => {
-    const idx = prev.findIndex((m) => m.runId === event.runId && m.role === "agent");
-    const transformed = typeof event.runId === "string" && done
-      ? buildTransformedAgentMessages(conversationId, event.runId, fullText)
+    const eventRunId = typeof event.runId === "string" ? event.runId : undefined;
+    const idx = eventRunId !== undefined
+      ? prev.findIndex((m) => m.runId === eventRunId && m.role === "agent")
+      : findLastPendingAgentIndex(prev);
+    const fallbackRunId = idx >= 0 ? prev[idx]?.runId : undefined;
+    const transformRunId = done
+      ? eventRunId ?? fallbackRunId ?? `run-${newMessageId()}`
+      : undefined;
+    const transformed = transformRunId !== undefined && done
+      ? buildTransformedAgentMessages(conversationId, transformRunId, fullText)
       : null;
     if (transformed !== null) {
       transformedPreview = transformed.preview;
       if (idx < 0) return [...prev, ...transformed.messages];
       const next = [...prev];
       let insertAt = idx;
-      for (let i = next.length - 1; i >= 0; i -= 1) {
-        const message = next[i];
-        if (message?.role === "agent" && message.runId === event.runId) {
-          insertAt = Math.min(insertAt, i);
-          next.splice(i, 1);
+      if (eventRunId !== undefined) {
+        for (let i = next.length - 1; i >= 0; i -= 1) {
+          const message = next[i];
+          if (message?.role === "agent" && message.runId === eventRunId) {
+            insertAt = Math.min(insertAt, i);
+            next.splice(i, 1);
+          }
         }
+      } else {
+        next.splice(idx, 1);
       }
       next.splice(insertAt, 0, ...transformed.messages);
       return next;
     }
 
-    const runIdForDefer = typeof event.runId === "string" && !done ? event.runId : null;
+    const runIdForDefer = !done ? eventRunId ?? `pending-${conversationId}` : null;
     if (
       runIdForDefer !== null &&
       shouldDeferStreamingAgentText(conversationId, runIdForDefer, fullText)
@@ -218,7 +229,7 @@ function applySingleBubbleDelta(
             id: newMessageId(),
             role: "agent",
             text: "",
-            runId: runIdForDefer,
+            ...(eventRunId !== undefined ? { runId: eventRunId } : {}),
             streaming: true
           }
         ];
