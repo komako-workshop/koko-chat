@@ -269,8 +269,14 @@ function parseCard(value: unknown, index: number): ReadResult<TavernRecommendati
   const matchTags = readStringArray(value.matchTags, `${where}.matchTags`);
   if (matchTags.error !== undefined) return { error: matchTags.error };
 
-  const safety = readSafety(value.safety, `${where}.safety`);
-  if (safety.error !== undefined) return { error: safety.error };
+  const safety = normalizeSafety(value.safety, [
+    name.value,
+    nameZh.value,
+    tagline.value,
+    taglineZh.value,
+    ...tags.value,
+    ...matchTags.value
+  ]);
 
   return {
     value: {
@@ -282,7 +288,7 @@ function parseCard(value: unknown, index: number): ReadResult<TavernRecommendati
       taglineZh: taglineZh.value,
       tags: tags.value.slice(0, 24),
       matchTags: matchTags.value.slice(0, MAX_MATCH_TAGS),
-      safety: safety.value
+      safety
     }
   };
 }
@@ -311,14 +317,25 @@ function readStringArray(value: unknown, name: string): ReadResult<string[]> | R
   return { value: out };
 }
 
-function readSafety(
+function normalizeSafety(
   value: unknown,
-  name: string
-): ReadResult<TavernRecommendationCard["safety"]> | ReadError {
-  if (value === "sfw" || value === "nsfw" || value === "unknown") {
-    return { value };
+  signals: string[]
+): TavernRecommendationCard["safety"] {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "sfw" || normalized === "nsfw" || normalized === "unknown") {
+      return normalized;
+    }
   }
-  return { error: `${name} 期望 sfw / nsfw / unknown，得到 ${String(value)}` };
+  return inferSafety(signals);
+}
+
+function inferSafety(signals: string[]): TavernRecommendationCard["safety"] {
+  const haystack = signals.join(" ").toLowerCase();
+  if (/\b(nsfw|adult|smut|erotic|hentai|porn|fetish|kinky|femdom)\b/.test(haystack)) {
+    return "nsfw";
+  }
+  return "unknown";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

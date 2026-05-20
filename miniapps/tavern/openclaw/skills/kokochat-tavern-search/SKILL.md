@@ -292,6 +292,9 @@ Then you reply exactly one fenced block (no prose around it):
 ````
 
 (The example shows only one card for brevity. A real turn must include 3–5.)
+Every card object must include `safety` with exactly one of `sfw`, `nsfw`, or
+`unknown`. Never omit `safety`, even when the source candidate does not provide
+an explicit rating.
 
 ## Things You Must Not Do
 

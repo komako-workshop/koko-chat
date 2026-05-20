@@ -143,6 +143,30 @@ test("v2 rejects empty text bubble", () => {
   assert(!result.ok, "expected failure");
 });
 
+test("v2 tolerates missing card safety and infers when possible", () => {
+  const nsfwCard = makeCard("a");
+  delete nsfwCard.safety;
+  nsfwCard.tags = ["femdom", "kinky"];
+  const unknownCard = makeCard("b");
+  delete unknownCard.safety;
+  const text = wrap({
+    version: 2,
+    query: "x",
+    items: [
+      { kind: "card", card: nsfwCard },
+      { kind: "card", card: unknownCard },
+      { kind: "card", card: makeCard("c") }
+    ]
+  });
+  const result = parseTavernRecommendations(text);
+  assert(result.ok, `expected ok, got error: ${result.ok ? "" : result.error}`);
+  if (result.ok) {
+    const cards = result.value.items.filter((it) => it.kind === "card");
+    assertEq(cards[0].card.safety, "nsfw", "missing safety inferred from tags");
+    assertEq(cards[1].card.safety, "unknown", "missing safety falls back to unknown");
+  }
+});
+
 // ---------- v1 compatibility (legacy agent build) ----------
 
 const v1Happy = [

@@ -112,7 +112,7 @@ const AGENT_DEFINITIONS = {
       "}",
       "```",
       "",
-      "Return 3-5 `kind: \"card\"` items. Copy `pageUrl`, `imageUrl`, `name`, `tagline`, and `tags` from the search tool output. Do not invent cards. Do not use top-level `recommendations`, `cards`, `title`, `url`, `reason`, `why`, or `source` as the final schema."
+      "Return 3-5 `kind: \"card\"` items. Copy `pageUrl`, `imageUrl`, `name`, `tagline`, and `tags` from the search tool output. Do not invent cards. Every card object must include `safety` with exactly `sfw`, `nsfw`, or `unknown`; never omit it. Do not use top-level `recommendations`, `cards`, `title`, `url`, `reason`, `why`, or `source` as the final schema."
     ].join("\n"),
     tools: {
       profile: "minimal",
