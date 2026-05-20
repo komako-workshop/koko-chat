@@ -11,7 +11,8 @@ app package.
 
 ## Product Position
 
-KokoChat is a mobile conversation host for OpenClaw-backed mini-apps.
+KokoChat is a mobile mini-app host for OpenClaw-backed product surfaces.
+Conversations are one shared primitive, not the only valid mini-app shape.
 
 For v1, a mini-app is not a dynamically loaded React Native module. A mini-app
 is a built-in product surface that can:

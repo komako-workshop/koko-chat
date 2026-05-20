@@ -15,9 +15,9 @@
     "noEmit": true,
     "lib": ["es2022", "dom"],
     "types": [],
-    // The Tavern Roleplay mini-app currently runs inside the KokoChat host
+    // The Tavern Roleplay mode currently runs inside the KokoChat host
     // package. Declaring the host's path alias here so this folder can
-    // typecheck on its own. When this mini-app moves to its own repository,
+    // typecheck on its own. If this mode later moves to its own package,
     // these paths become a thin published interface and the alias goes away.
     "paths": {
       "@/*": ["../../../apps/koko-chat/sources/*"]

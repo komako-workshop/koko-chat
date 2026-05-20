@@ -1,6 +1,6 @@
 # KokoChat
 
-> Chat-first 的移动 App,容纳多个 AI mini-app。底层蹭用户已经配好的 OpenClaw(Codex / Claude Code 订阅)做能力供给。By Komako.
+> Mini-app-first 的移动 App,容纳多个 AI 小程序和对话 surface。底层蹭用户已经配好的 OpenClaw(Codex / Claude Code 订阅)做能力供给。By Komako.
 
 ## 这是什么
 
@@ -12,17 +12,16 @@ KokoChat 是基于 OpenClaw 的移动端 agent 开源平台。
 
 ## 怎么用
 
-跟 ChatGPT / Character.AI 这种"一个聊天界面"的形态不同,KokoChat 想长成"多个 AI 小程序同时活在一个聊天 App 里"的样子。
+跟 ChatGPT / Character.AI 这种"一个聊天界面"的形态不同,KokoChat 想长成"多个 AI 小程序共用一套本地运行时"的样子。
 
-* **主聊天里有一个常驻的 AI 小搭子 Koko**:你说话不需要明确"我想用哪个功能",Koko 听懂你的意图,该召唤哪个 mini-app 就召唤哪个。
-* **每个具体场景是一个独立 mini-app**:有自己的 chat surface、UI 页面、本地存储、OpenClaw 一侧的 skill / agent。可以是工具、可以是娱乐、可以是长会话型的玩法。
+* **Koko 是内置 AI 小搭子,但不是唯一入口**:主聊天可以召唤 mini-app,launcher / 独立页面 / 自定义 chat surface 也都是合法入口。
+* **每个具体场景是一个独立 mini-app**:有自己的入口、surface、UI 页面、本地存储、OpenClaw 一侧的 skill / agent。可以是工具、可以是娱乐、可以是长会话型的玩法。
 * **mini-app 是会越来越多的**。第一版只内置一个,后面会逐步加。开发者 / 用户也可以自己写。
 * **数据在你手里**:聊天记录、角色卡、笔记 source、persona——全部留在你的手机和你的 OpenClaw 机器上,不上传任何云。
 
 当前内置的 mini-app:
 
-* **酒馆**(`miniapps/tavern`):从 character-tavern.com 推荐 / 浏览 AI 角色卡。预置 440 张中文译名 / 中文 tagline 的二次元向卡片,从广场进入秒开聊天。
-* **酒馆角色聊天**(`miniapps/tavern-roleplay`):点角色卡进入的角色扮演会话。SillyTavern V2 卡完整 binding、`{{user}}/{{char}}` 替换、persona 设置一次全局生效。
+* **酒馆**(`miniapps/tavern`):从 character-tavern.com 推荐 / 浏览 AI 角色卡。预置 440 张中文译名 / 中文 tagline 的二次元向卡片,从广场进入秒开聊天；角色聊天由隐藏的 `tavern-roleplay` conversation mode 承接。
 
 下一步:打算做 Notebook 形态(基于一组用户信任的资料的 scoped chat,参考 NotebookLM 但 agent 主动 bootstrap 资料、用户做减法)、学习/陪读类、digest 类。
 
@@ -30,8 +29,8 @@ KokoChat 是基于 OpenClaw 的移动端 agent 开源平台。
 
 KokoChat 的几条不会动摇的设计判断:
 
-1. **Chat-first**——主对话是产品的家,不是入口跳板。所有 mini-app 都从主对话被召唤出来。
-2. **Mini-app 容器,不是 chatbot wrapper**——每个 mini-app 拥有自己的 surface 和数据,host 只管聊天 UI / 路由 / 持久化。
+1. **Mini-app-first, conversation-native**——KokoChat 是 mini-app 容器。Conversation 是共享原语,不是所有 mini-app 的唯一形态。
+2. **Mini-app 容器,不是 chatbot wrapper**——每个 mini-app 拥有自己的入口、surface 和数据,host 提供 OpenClaw 连接、本地存储、路由壳和可复用聊天组件。
 3. **借 OpenClaw 启动期借势,但不绑死身份**——OpenClaw 是当前的 capability provider,以后可以换、可以加,产品身份不锁。
 4. **不卖 token、不卖订阅**——AI 能力来自你已有的 Codex / Claude Code 等订阅,KokoChat 只是把它移动化。
 5. **用户自治**——数据在你手机 + 你的 OpenClaw 服务器,KokoChat 没有云端账号体系,也没打算做。
@@ -40,12 +39,12 @@ KokoChat 的几条不会动摇的设计判断:
 
 迭代中。当前主干能跑:
 
-- **App**(`apps/koko-chat`):Expo / RN,在 iOS 真机/模拟器/Web 跑,WebSocket 直连用户 OpenClaw 服务器上的 Gateway。
-- **Mini-app runtime**(`apps/koko-chat/sources/runtime`):`inferOnce` + 长会话原语,fenced block 协议,scoped storage,mini-app 注册表。
+- **App**(`apps/koko-chat`):Expo / RN,在 iOS 真机/模拟器/Web 跑,默认通过 KokoChat relay 连接用户 OpenClaw 机器上的 Gateway。
+- **Mini-app runtime**(`apps/koko-chat/sources/runtime`):`inferOnce` + 长会话原语,fenced block 协议,scoped storage,mini-app / conversation mode 注册表。
 - **内置 mini-apps**:
   - `miniapps/tavern` —— 酒馆助手(角色卡推荐)
-  - `miniapps/tavern-roleplay` —— 从 Tavern 卡片进入的角色扮演
-- **协议层**(`packages/koko-protocol`):envelope / pairing / libsodium 加密(预留给未来 relay 路径)。
+  - `miniapps/tavern-roleplay` —— 酒馆的隐藏角色聊天 mode,从 Tavern 卡片进入
+- **协议层**(`packages/koko-protocol`):envelope / pairing / libsodium 加密。
 - **OpenClaw 客户端**(`packages/koko-openclaw-client`):Gateway Protocol v3,Node + RN 双入口。
 
 ## Repo Layout
@@ -58,7 +57,7 @@ apps/
   koko-chat/             KokoChat 移动 App(Expo / RN)
 miniapps/
   tavern/                酒馆角色卡 mini-app + 对应的 OpenClaw skill 源
-  tavern-roleplay/       角色扮演 mini-app
+  tavern-roleplay/       酒馆隐藏角色聊天 mode
 openclaw/                给用户机器上 OpenClaw 用的 skill 源 + dist patch 说明
 docs/                    mini-app runtime / skills 设计文档
 .brand/                  品牌/吉祥物探索资产(生成图被 .gitignore 屏蔽)
@@ -69,7 +68,7 @@ docs/                    mini-app runtime / skills 设计文档
 新人按顺序:
 
 1. [`IDEA.md`](./IDEA.md) — 产品为何存在、不做什么、旧仓库踩过的坑
-2. [`DECISIONS.md`](./DECISIONS.md) — 不可逆的工程决定(Gateway 直连、sessionKey、block envelope 等)
+2. [`DECISIONS.md`](./DECISIONS.md) — 不可逆的工程决定(relay / Gateway、sessionKey、block envelope 等)
 3. [`docs/mini-app-runtime.md`](./docs/mini-app-runtime.md) — 内置 mini-app 怎么写
 4. [`miniapps/tavern/mobile/README.md`](./miniapps/tavern/mobile/README.md) — 最完整的 mini-app 范例
 
@@ -90,13 +89,13 @@ fi
 node "$KOKOCHAT_REPO/scripts/install-openclaw-support.mjs"
 ```
 
-如果你要让手机离开同一局域网后也能继续使用，给 OpenClaw 机器设置官方或自托管 relay 地址后再生成连接码:
+KokoChat 默认走官方 relay。手机不需要和 OpenClaw 服务器在同一局域网，OpenClaw Gateway 也不需要暴露 LAN 端口。`kokochat-pairing` 会在 OpenClaw 机器上启动一个本地 connector；手机连 relay，connector 再连本机 OpenClaw Gateway；relay 只转发 WebSocket 帧，不直接连接你的 Gateway。
+
+如果你要改用自托管 relay，在生成连接码前设置:
 
 ```bash
 export KOKOCHAT_RELAY_URL=ws://<relay-host>:8787
 ```
-
-设置后，`kokochat-pairing` 会在 OpenClaw 机器上启动一个本地 connector。手机连 relay，connector 再连本机 OpenClaw Gateway；relay 只转发 WebSocket 帧，不直接连接你的 Gateway。
 
 如果你在开发这个仓库，也可以在仓库根目录运行:
 

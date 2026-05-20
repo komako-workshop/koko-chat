@@ -19,12 +19,30 @@
 
 import { router } from "expo-router";
 
+import { getConversationModeSurface } from "@/runtime/conversationModes";
+import { useConversationStore } from "@/state/conversations";
+
 /**
- * Push the chat screen for a specific conversation. Used by mini-apps that
- * create conversations programmatically (e.g. tavern-roleplay opens a
- * roleplay chat when the user taps a recommendation card).
+ * Open the registered surface for a specific conversation. Most modes use the
+ * host's standard chat screen, but a mini-app can route its own conversations
+ * to a custom surface by registering a route-backed conversation mode.
  */
 export function openConversation(conversationId: string): void {
+  const conversation = useConversationStore
+    .getState()
+    .list.find((item) => item.id === conversationId);
+  if (conversation === undefined) {
+    router.push({ pathname: "/chat/[id]", params: { id: conversationId } });
+    return;
+  }
+  const surface = getConversationModeSurface(conversation.mode);
+  if (surface.kind === "route") {
+    router.push({
+      pathname: surface.pathname as never,
+      params: { id: conversationId }
+    });
+    return;
+  }
   router.push({ pathname: "/chat/[id]", params: { id: conversationId } });
 }
 

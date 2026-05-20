@@ -28,6 +28,7 @@ import { KokoStickerBlock } from "./KokoStickerBlock";
 import {
   KOKO_STICKER_BLOCK_TYPE,
   isKokoStickerBlockData,
+  normalizeKokoStickerId,
   type KokoStickerId
 } from "./stickers";
 
@@ -156,6 +157,16 @@ export function registerKokoMiniApp(): void {
     defaultTitle: () => "Koko",
     openclaw: { defaultAgentId: "koko" },
     splitAgentMessages: true,
+    messageBoundaries: {
+      sticker: {
+        blockType: KOKO_STICKER_BLOCK_TYPE,
+        preview: "Koko 表情",
+        dataForId: (id) => {
+          const stickerId = normalizeKokoStickerId(id);
+          return stickerId === null ? null : { id: stickerId };
+        }
+      }
+    },
     onCreate: createKokoConversation
   });
 

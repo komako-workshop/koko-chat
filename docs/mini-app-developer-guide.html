@@ -45,7 +45,7 @@
       <section id="flow">
         <h2>推荐开发流程</h2>
         <div class="flow">
-          <div class="step"><b>1. 复制 example 模板</b><br><code>apps/koko-chat/sources/miniapps/example/</code></div>
+          <div class="step"><b>1. 新建 mini-app 目录</b><br><code>miniapps/&lt;id&gt;/mobile/</code>，轻量内置能力也可以放在 <code>apps/koko-chat/sources/miniapps/&lt;id&gt;/</code>。</div>
           <div class="step"><b>2. 注册 mini-app descriptor</b><br>声明 <code>id</code>、<code>displayName</code>、<code>openclaw.defaultAgentId</code>、<code>requiredSkills</code>、<code>requiredCoreTools</code>。</div>
           <div class="step"><b>3. 选 OpenClaw 能力集</b><br>先从 core tools 中选最小集合，再加本地 skill 文件夹。</div>
           <div class="step"><b>4. 写 UI / outbound / blocks</b><br>KokoChat 端负责用户体验和结果渲染。</div>
@@ -129,7 +129,7 @@ const settings = storage.getJson("settings");</code></pre><p>所有 key 都在 m
   CharacterCardRenderer
 );</code></pre><p>从 agent 文本里提取 fenced block 时使用共享工具：<code>extractFencedBlock(text, "koko.tavern.recommendations")</code>。它只负责提取 body，不负责 JSON parse 或 schema 校验。</p></section>
 
-      <section id="files"><h2>文件索引</h2><table><tr><th>文件</th><th>用途</th></tr><tr><td><code>docs/mini-app-runtime.md</code></td><td>Runtime API 细节</td></tr><tr><td><code>docs/mini-app-skills.md</code></td><td>OpenClaw skills 集成</td></tr><tr><td><code>docs/openclaw-core-tools-for-mini-apps.md</code></td><td>Core tools 选择说明</td></tr><tr><td><code>docs/openclaw-skills-catalog.html</code></td><td>本机 skills/tools 清单</td></tr><tr><td><code>sources/runtime/openclaw.ts</code></td><td><code>inferOnce</code> / agent session</td></tr><tr><td><code>sources/runtime/miniApps.ts</code></td><td>mini-app registry</td></tr><tr><td><code>sources/runtime/miniAppStorage.ts</code></td><td>namespaced storage</td></tr><tr><td><code>sources/miniapps/example/</code></td><td>最小模板</td></tr></table></section>
+      <section id="files"><h2>文件索引</h2><table><tr><th>文件</th><th>用途</th></tr><tr><td><code>docs/mini-app-runtime.md</code></td><td>Runtime API 细节</td></tr><tr><td><code>docs/mini-app-skills.md</code></td><td>OpenClaw skills 集成</td></tr><tr><td><code>docs/openclaw-core-tools-for-mini-apps.md</code></td><td>Core tools 选择说明</td></tr><tr><td><code>docs/openclaw-skills-catalog.html</code></td><td>本机 skills/tools 清单</td></tr><tr><td><code>sources/runtime/openclaw.ts</code></td><td><code>inferOnce</code> / agent session</td></tr><tr><td><code>sources/runtime/miniApps.ts</code></td><td>mini-app registry</td></tr><tr><td><code>sources/runtime/miniAppStorage.ts</code></td><td>namespaced storage</td></tr><tr><td><code>miniapps/&lt;id&gt;/mobile/</code></td><td>产品型小程序代码</td></tr><tr><td><code>sources/miniapps/koko/</code></td><td>Koko 内置小程序</td></tr></table></section>
 
       <section id="handoff"><h2>给开发窗口的话</h2><div class="card"><p>Tavern 小程序直接走 agent + skill 架构，不做 prompt-only demo。注册 descriptor 时声明 <code>id: "tavern"</code>、<code>openclaw.defaultAgentId: "tavern"</code>、<code>requiredSkills: ["kokochat-tavern-search"]</code>、<code>requiredCoreTools: ["web_search", "web_fetch"]</code>、<code>localSkillDirs: ["miniapps/tavern/openclaw/skills/kokochat-tavern-search"]</code>。调用时使用 <code>inferOnce({ miniAppId: "tavern", prompt })</code>，不要显式传 <code>agentId: "main"</code>。KokoChat 端只收集用户需求、调用 tavern agent、解析/校验结构化结果并渲染角色卡；搜索 character-tavern.com、抓取、解析、归一化都属于 <code>kokochat-tavern-search</code> skill/tool。</p></div></section>
     </main>

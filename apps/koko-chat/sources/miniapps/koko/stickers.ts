@@ -108,15 +108,37 @@ export const KOKO_STICKERS: Record<KokoStickerId, KokoSticker> = {
 
 const stickerIdSet = new Set<string>(KOKO_STICKER_IDS);
 
+const stickerAliases: Record<string, KokoStickerId> = {
+  hello: "hi",
+  hey: "hi",
+  wave: "hi",
+  waving: "hi",
+  ok: "got-it",
+  okay: "got-it",
+  gotit: "got-it",
+  "got-it": "got-it",
+  think: "thinking",
+  smile: "happy",
+  smiling: "happy",
+  goodnight: "night",
+  "good-night": "night"
+};
+
 export function isKokoStickerId(value: unknown): value is KokoStickerId {
   return typeof value === "string" && stickerIdSet.has(value);
+}
+
+export function normalizeKokoStickerId(value: unknown): KokoStickerId | null {
+  if (typeof value !== "string") return null;
+  const id = value.trim().toLowerCase();
+  if (isKokoStickerId(id)) return id;
+  return stickerAliases[id] ?? null;
 }
 
 export function parseKokoStickerToken(value: string): KokoStickerId | null {
   const match = /^\[sticker:([a-z0-9-]+)\]$/i.exec(value.trim());
   if (match === null) return null;
-  const id = match[1]?.toLowerCase();
-  return isKokoStickerId(id) ? id : null;
+  return normalizeKokoStickerId(match[1]);
 }
 
 export function isKokoStickerBlockData(value: unknown): value is KokoStickerBlockData {

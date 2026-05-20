@@ -1,9 +1,29 @@
 import type { ImageSourcePropType } from "react-native";
 
 import type { ConversationMeta } from "@/state/conversations";
+import {
+  getConversationModeDefaultTitle,
+  getConversationModeDescriptor,
+  getConversationModeListGlyph,
+  getConversationModeListImage,
+  getConversationModeOpenClawRequirements,
+  getConversationModeOwnerMiniAppId,
+  registerConversationMode,
+  resolveConversationModeAgentId,
+  warnUnknownConversationMode,
+  type ConversationModeMessageBoundaryConfig,
+  type ConversationModeOpenClawConfig
+} from "@/runtime/conversationModes";
+
+export type MiniAppMessageBoundaryConfig = ConversationModeMessageBoundaryConfig;
+
+export type MiniAppLaunchTarget =
+  | { kind: "route"; pathname: string }
+  | { kind: "conversation"; mode?: string }
+  | { kind: "action"; run: () => void | Promise<void> };
 
 export interface MiniAppDescriptor {
-  /** Stable mini-app id. Also used as ConversationMeta.mode. */
+  /** Stable mini-app id. Product namespace, not necessarily a conversation mode. */
   id: string;
   /** Human-readable name shown in launchers and developer tools. */
   displayName: string;
@@ -17,17 +37,13 @@ export interface MiniAppDescriptor {
   defaultTitle?: (createdAt: number) => string;
   /** Reuse one conversation for launcher opens instead of creating a new row. */
   singletonSessionScope?: string;
-  /** OpenClaw-side requirements and defaults for this mini-app. */
-  openclaw?: {
-    /** Defaults to the mini-app id unless overridden. */
-    defaultAgentId?: string;
-    /** Skills expected to be visible to this mini-app's agent. */
-    requiredSkills?: string[];
-    /** Core OpenClaw tools this mini-app agent is expected to use. */
-    requiredCoreTools?: string[];
-    /** Local skill folders shipped with this mini-app package / repository. */
-    localSkillDirs?: string[];
-  };
+  /**
+   * Launcher behavior. If omitted, the app launches a conversation whose mode
+   * matches the mini-app id. Route launches let a mini-app own its first screen.
+   */
+  launch?: MiniAppLaunchTarget;
+  /** OpenClaw-side requirements and defaults for the default conversation mode. */
+  openclaw?: ConversationModeOpenClawConfig;
   /** Optional custom create behavior for the + menu. */
   onCreate?: () => ConversationMeta | Promise<ConversationMeta>;
   /**
@@ -38,10 +54,15 @@ export interface MiniAppDescriptor {
    * Defaults to false (single-bubble, ChatGPT-style).
    */
   splitAgentMessages?: boolean;
+  /**
+   * Optional parsing adapters for mini-apps that use the host message-boundary
+   * convention. The host owns the generic `<msg>` parser; each mini-app owns
+   * how parsed tokens become typed blocks.
+   */
+  messageBoundaries?: MiniAppMessageBoundaryConfig;
 }
 
 const miniApps = new Map<string, MiniAppDescriptor>();
-const warnedUnknownIds = new Set<string>();
 
 export function registerMiniApp(descriptor: MiniAppDescriptor): void {
   const id = normalizeMiniAppId(descriptor.id);
@@ -53,6 +74,7 @@ export function registerMiniApp(descriptor: MiniAppDescriptor): void {
     console.warn(`[koko] replacing mini-app descriptor: ${id}`);
   }
   miniApps.set(id, { ...descriptor, id });
+  registerDefaultConversationMode({ ...descriptor, id });
 }
 
 export function getMiniAppDescriptor(id: string): MiniAppDescriptor | undefined {
@@ -68,28 +90,19 @@ export function getLauncherMiniApps(): MiniAppDescriptor[] {
 }
 
 export function getDefaultConversationTitle(mode: string, createdAt: number): string {
-  const descriptor = getMiniAppDescriptor(mode);
-  return descriptor?.defaultTitle?.(createdAt) ?? `${descriptor?.displayName ?? "Chat"} ${formatTime(createdAt)}`;
+  return getConversationModeDefaultTitle(mode, createdAt);
 }
 
 export function getMiniAppListGlyph(mode: string): string | undefined {
-  return getMiniAppDescriptor(mode)?.listGlyph;
+  return getConversationModeListGlyph(mode) ?? getOwnerMiniAppDescriptor(mode)?.listGlyph;
 }
 
 export function getMiniAppListImage(mode: string): ImageSourcePropType | undefined {
-  return getMiniAppDescriptor(mode)?.listImage;
+  return getConversationModeListImage(mode) ?? getOwnerMiniAppDescriptor(mode)?.listImage;
 }
 
 export function resolveMiniAppAgentId(miniAppId: string, explicitAgentId?: string): string {
-  if (explicitAgentId !== undefined && explicitAgentId.trim().length > 0) {
-    return normalizeAgentId(explicitAgentId);
-  }
-  const id = normalizeMiniAppId(miniAppId);
-  const descriptorAgentId = getMiniAppDescriptor(id)?.openclaw?.defaultAgentId;
-  if (descriptorAgentId !== undefined && descriptorAgentId.trim().length > 0) {
-    return normalizeAgentId(descriptorAgentId);
-  }
-  return normalizeAgentId(id);
+  return resolveConversationModeAgentId(miniAppId, explicitAgentId);
 }
 
 export interface MiniAppOpenClawRequirements {
@@ -100,47 +113,38 @@ export interface MiniAppOpenClawRequirements {
 }
 
 export function getMiniAppOpenClawRequirements(miniAppId: string): MiniAppOpenClawRequirements {
-  const descriptor = getMiniAppDescriptor(miniAppId);
-  return {
-    agentId: resolveMiniAppAgentId(miniAppId),
-    requiredSkills: uniqueStrings(descriptor?.openclaw?.requiredSkills),
-    requiredCoreTools: uniqueStrings(descriptor?.openclaw?.requiredCoreTools),
-    localSkillDirs: uniqueStrings(descriptor?.openclaw?.localSkillDirs)
-  };
+  return getConversationModeOpenClawRequirements(miniAppId);
 }
 
 export function warnUnknownMiniAppId(mode: string): void {
-  if (!__DEV__) return;
-  if (miniApps.has(mode) || warnedUnknownIds.has(mode)) return;
-  warnedUnknownIds.add(mode);
-  console.warn(`[koko] conversation references unregistered mini-app id: ${mode}`);
+  warnUnknownConversationMode(mode);
 }
 
 function normalizeMiniAppId(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function normalizeAgentId(value: string): string {
-  const normalized = value.trim().toLowerCase();
-  return normalized.length > 0 ? normalized : "main";
+function getOwnerMiniAppDescriptor(mode: string): MiniAppDescriptor | undefined {
+  const ownerId = getConversationModeOwnerMiniAppId(mode);
+  return ownerId === undefined ? undefined : getMiniAppDescriptor(ownerId);
 }
 
-function uniqueStrings(values: string[] | undefined): string[] {
-  if (values === undefined) return [];
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const value of values) {
-    const normalized = value.trim();
-    if (normalized.length === 0 || seen.has(normalized)) continue;
-    seen.add(normalized);
-    out.push(normalized);
-  }
-  return out;
-}
-
-function formatTime(timestamp: number): string {
-  const d = new Date(timestamp);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
+function registerDefaultConversationMode(descriptor: MiniAppDescriptor): void {
+  if (getConversationModeDescriptor(descriptor.id) !== undefined) return;
+  registerConversationMode({
+    id: descriptor.id,
+    ownerMiniAppId: descriptor.id,
+    displayName: descriptor.displayName,
+    ...(descriptor.listGlyph !== undefined ? { listGlyph: descriptor.listGlyph } : {}),
+    ...(descriptor.listImage !== undefined ? { listImage: descriptor.listImage } : {}),
+    ...(descriptor.defaultTitle !== undefined ? { defaultTitle: descriptor.defaultTitle } : {}),
+    surface: { kind: "standard-chat" },
+    ...(descriptor.openclaw !== undefined ? { openclaw: descriptor.openclaw } : {}),
+    ...(descriptor.splitAgentMessages !== undefined
+      ? { splitAgentMessages: descriptor.splitAgentMessages }
+      : {}),
+    ...(descriptor.messageBoundaries !== undefined
+      ? { messageBoundaries: descriptor.messageBoundaries }
+      : {})
+  });
 }

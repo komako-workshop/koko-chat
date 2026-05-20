@@ -22,6 +22,7 @@ import {
   getMiniAppListImage,
   type MiniAppDescriptor
 } from "@/runtime/miniApps";
+import { openConversation } from "@/runtime/navigation";
 import { buildSessionKey, useConversationStore, type ConversationMeta } from "@/state/conversations";
 import { KokoColors, KokoRadius } from "@/theme/koko";
 
@@ -72,19 +73,30 @@ export default function ChatsTabScreen(): React.ReactElement {
   }
 
   async function createFromLauncher(app: MiniAppDescriptor): Promise<void> {
+    const launch = app.launch ?? { kind: "conversation" as const };
+    if (launch.kind === "route") {
+      router.push(launch.pathname as never);
+      return;
+    }
+    if (launch.kind === "action") {
+      await launch.run();
+      return;
+    }
+
+    const mode = launch.mode ?? app.id;
     let meta: ConversationMeta;
     if (app.onCreate !== undefined) {
       meta = await app.onCreate();
     } else if (app.singletonSessionScope !== undefined) {
-      const sessionKey = buildSessionKey(app.id, app.singletonSessionScope);
+      const sessionKey = buildSessionKey(mode, app.singletonSessionScope);
       meta = conversations.find((item) => item.sessionKey === sessionKey) ?? createConversation({
-        mode: app.id,
+        mode,
         sessionScope: app.singletonSessionScope
       });
     } else {
-      meta = createConversation({ mode: app.id });
+      meta = createConversation({ mode });
     }
-    router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
+    openConversation(meta.id);
   }
 
   function promptRename(conversation: ConversationMeta): void {
@@ -118,7 +130,7 @@ export default function ChatsTabScreen(): React.ReactElement {
       <ConversationRow
         item={item}
         isLast={isLast}
-        onPress={() => router.push({ pathname: "/chat/[id]", params: { id: item.id } })}
+        onPress={() => openConversation(item.id)}
         onLongPress={() => promptRename(item)}
         onTogglePin={() => togglePin(item.id)}
         onDelete={() => confirmDelete(item)}

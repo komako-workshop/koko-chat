@@ -94,11 +94,11 @@ Field meaning:
 
 Default rule:
 
-- every mini-app defaults to an OpenClaw agent with the same id as the
-  mini-app.
+- every conversation mode defaults to an OpenClaw agent with the same id as the
+  mode.
 - KokoChat's home assistant is `koko` and uses OpenClaw agent `koko`; it is
   intentionally separate from the user's existing OpenClaw `main` assistant.
-- `openclaw.defaultAgentId` overrides that default.
+- `openclaw.defaultAgentId` on the conversation mode overrides that default.
 - an explicit `agentId` passed to `inferOnce` or `createAgentSession` wins.
 
 Examples:

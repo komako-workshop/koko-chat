@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { randomBytes } from "node:crypto";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { homedir, platform } from "node:os";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const REQUIRED_SCOPES = [
@@ -20,6 +20,7 @@ const DEFAULT_SCOPES = [
   ...REQUIRED_SCOPES
 ];
 const RELAY_STATE_FILE = "relay.json";
+const DEFAULT_RELAY_URL = "ws://47.84.141.40:8787";
 
 const argInput = process.argv.slice(2).join(" ");
 const input = process.env.KOKOCHAT_PAIRING_REQUEST || argInput || readStdin();
@@ -29,12 +30,11 @@ const stateDir = process.env.OPENCLAW_CONFIG_DIR ?? process.env.OPENCLAW_HOME ??
 const openclawEnv = readEnvFile(join(stateDir, "openclaw.env"));
 const deviceToken = approveDevice(stateDir, request);
 const relay = prepareRelayConnector(stateDir, request);
-const gatewayUrl = relay?.gatewayUrl ?? resolveGatewayUrl(stateDir);
 const setupCode = encodeJson({
-  url: gatewayUrl,
+  url: relay.gatewayUrl,
   deviceToken,
   deviceId: request.deviceId,
-  ...(relay ? { relay: { id: relay.relayId, mode: "gateway-tunnel" } } : {})
+  relay: { id: relay.relayId, mode: "gateway-tunnel" }
 });
 
 process.stdout.write(`${setupCode}\n`);
@@ -259,33 +259,8 @@ function envValue(key) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function resolveGatewayUrl(root) {
-  const explicitGatewayUrl = envValue("KOKOCHAT_GATEWAY_URL");
-  if (explicitGatewayUrl) {
-    return normalizeWsUrl(explicitGatewayUrl);
-  }
-  const publicUrl = envValue("OPENCLAW_PUBLIC_URL");
-  if (publicUrl) {
-    return normalizeWsUrl(publicUrl);
-  }
-
-  const config = readJsonObject(join(root, "openclaw.json"));
-  const port = Number(config.gateway?.port) || 18789;
-  const origin = config.gateway?.controlUi?.allowedOrigins?.find(
-    (value) => typeof value === "string" && !isLoopbackUrl(value)
-  );
-  if (origin) {
-    return normalizeWsUrl(origin);
-  }
-  const host = envValue("OPENCLAW_PUBLIC_HOST") || localLanIp() || "127.0.0.1";
-  return `ws://${host}:${port}`;
-}
-
 function prepareRelayConnector(root, request) {
-  const rawRelayUrl = envValue("KOKOCHAT_RELAY_URL");
-  if (!rawRelayUrl) {
-    return null;
-  }
+  const rawRelayUrl = envValue("KOKOCHAT_RELAY_URL") ?? DEFAULT_RELAY_URL;
   const relayUrl = normalizeWsUrl(rawRelayUrl).replace(/\/+$/, "");
   if (!/^wss?:\/\//.test(relayUrl)) {
     throw new Error("KOKOCHAT_RELAY_URL must start with ws:// or wss://");
@@ -355,6 +330,9 @@ function writeRelayConnectorConfig(root, config) {
 }
 
 function startRelayConnector(root, relayId, configPath) {
+  if (process.env.NODE_ENV === "test" && process.env.KOKOCHAT_SKIP_RELAY_CONNECTOR_START === "1") {
+    return;
+  }
   const connector = fileURLToPath(new URL("../../relay/kokochat-relay-connector.mjs", import.meta.url));
   if (!existsSync(connector)) {
     throw new Error(`KokoChat relay connector is missing: ${connector}`);
@@ -428,36 +406,6 @@ function stopExistingConnector(pidFile) {
 
 function normalizeWsUrl(url) {
   return String(url).replace(/^http:/, "ws:").replace(/^https:/, "wss:");
-}
-
-function isLoopbackUrl(url) {
-  try {
-    const host = new URL(url).hostname;
-    return host === "localhost" || host === "127.0.0.1" || host === "::1";
-  } catch {
-    return false;
-  }
-}
-
-function localLanIp() {
-  if (platform() === "darwin") {
-    for (const iface of ["en0", "en1"]) {
-      try {
-        const ip = execFileSync("ipconfig", ["getifaddr", iface], { encoding: "utf8" }).trim();
-        if (ip) {
-          return ip;
-        }
-      } catch {
-        // Try the next interface.
-      }
-    }
-  }
-  try {
-    const out = execFileSync("hostname", ["-I"], { encoding: "utf8" }).trim();
-    return out.split(/\s+/).find(Boolean);
-  } catch {
-    return undefined;
-  }
 }
 
 function encodeJson(value) {

@@ -1,6 +1,6 @@
 # KokoChat — Idea & Direction
 
-> KokoChat 是一个 chat-first 的移动端 app，最终长成“能装很多 skill + GUI mini-app”的容器。
+> KokoChat 是一个 mini-app-first 的移动端 app，最终长成“能装很多 skill + GUI surface”的容器。
 > 起步阶段对接 OpenClaw 作为底层 agent / capability provider，但产品身份不绑死 OpenClaw。
 > 出品方是 Komako（B 站 ID @komako, AI 应用方向 creator）。
 
@@ -16,8 +16,8 @@
 更完整一点：
 
 - 它是一个 **移动端 app**（React Native / Expo）
-- 它对外是 **chat-first**：用户进来就是聊天界面
-- 但它内部是一个 **mini-app 容器**：每个具体场景（推荐文章、做笔记、规划旅行、陪读一本书、听播客、digest 等）都是一个 mini-app
+- 它对外是 **mini-app-first**：用户进来看到的是多个 AI surface,其中聊天是最重要的原语之一
+- 它内部是一个 **mini-app 容器**：每个具体场景（推荐文章、做笔记、规划旅行、陪读一本书、听播客、digest 等）都是一个 mini-app
 - mini-app = `skill (语义) + GUI (展示) + store (持久化) + worker (后台)` 的组合
 - 所有 mini-app 共享同一个底层 agent / capability provider（当前是 OpenClaw）
 - 主对话仍然是“家”，mini-app 是被主对话召唤出来的视图
@@ -31,7 +31,7 @@
 
 它是：
 
-> 一个 **chat-first 的 mini-app 容器**，第一阶段在 OpenClaw 上跑，是 OpenClaw 移动端事实上的入口。
+> 一个 **mini-app-first 的 AI surface 容器**，第一阶段在 OpenClaw 上跑，是 OpenClaw 移动端事实上的入口。
 
 ---
 
@@ -160,12 +160,13 @@ GitHub：
 
 ### 主对话的位置
 
-主对话仍然是 KokoChat 的“家”。
-所有 mini-app 都从主对话被召唤出来：
+主对话是 KokoChat 的一个重要入口,但不是唯一入口,也不是所有
+mini-app 的必经入口。mini-app 可以从主对话被召唤,也可以从 launcher、
+独立页面、tab 或自己的 chat surface 进入：
 
-- 主对话识别意图 → emit fenced block / intent
-- KokoChat host 路由给对应 mini-app
-- mini-app 自己的页面/store/worker 接管
+- 主对话识别意图 → emit fenced block / intent → 路由给对应 mini-app
+- launcher / 页面入口 → 直接打开 mini-app 自己的 surface
+- mini-app 自己的页面/store/worker 接管后续体验
 
 ### 对接 OpenClaw 的方式
 

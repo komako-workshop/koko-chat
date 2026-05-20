@@ -2,7 +2,7 @@
   "name": "@koko/miniapp-tavern-roleplay-mobile",
   "version": "0.0.1",
   "private": true,
-  "description": "KokoChat Tavern Roleplay mini-app · React Native surface (与具体角色卡聊天).",
+  "description": "KokoChat Tavern hidden roleplay mode · React Native surface (与具体角色卡聊天).",
   "main": "index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",

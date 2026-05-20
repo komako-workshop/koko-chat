@@ -25,8 +25,11 @@ import {
   shouldDeferAgentResponseText,
   transformAgentResponse
 } from "@/runtime/agentResponses";
+import {
+  getConversationModeDescriptor,
+  type ConversationModeMessageBoundaryConfig
+} from "@/runtime/conversationModes";
 import { buildOutboundMessage, isFirstUserTurn } from "@/runtime/outboundMessages";
-import { getMiniAppDescriptor } from "@/runtime/miniApps";
 import { parseMessageBoundaries } from "@/runtime/messageBoundary";
 import {
   buildSessionRestoreMessage,
@@ -48,7 +51,6 @@ export interface ChatEventPayload extends JsonRecord {
 
 export type { ChatMessage };
 
-const KOKO_STICKER_BLOCK_TYPE = "koko.sticker";
 const REMOTE_SESSION_HISTORY_TIMEOUT_MS = 8_000;
 const PENDING_SESSION_SYNC_HISTORY_LIMIT = 12;
 const PENDING_SESSION_SYNC_MAX_CHARS = 80_000;
@@ -121,7 +123,7 @@ function conversationIdForSessionKey(sessionKey: string | undefined): string | n
 function shouldSplitAgentMessages(conversationId: string): boolean {
   const conv = useConversationStore.getState().list.find((m) => m.id === conversationId);
   if (conv === undefined) return false;
-  return getMiniAppDescriptor(conv.mode)?.splitAgentMessages === true;
+  return getConversationModeDescriptor(conv.mode)?.splitAgentMessages === true;
 }
 
 function applyDelta(
@@ -412,6 +414,12 @@ function applyMultiBubbleDelta(
   done: boolean
 ): void {
   const segments = parseMessageBoundaries(fullText, done);
+  const conversation = useConversationStore
+    .getState()
+    .list.find((meta) => meta.id === conversationId);
+  const boundaryConfig = conversation !== undefined
+    ? getConversationModeDescriptor(conversation.mode)?.messageBoundaries
+    : undefined;
 
   useConversationStore.getState().setMessages(conversationId, (prev) => {
     // Replace every message previously emitted under this runId. The parser
@@ -428,6 +436,19 @@ function applyMultiBubbleDelta(
 
     const newMessages: ChatMessage[] = segments.map((seg) => {
       if (seg.kind === "sticker" && seg.stickerId !== undefined) {
+        const sticker = boundaryConfig?.sticker;
+        const data = sticker?.dataForId !== undefined
+          ? sticker.dataForId(seg.stickerId)
+          : { id: seg.stickerId };
+        if (sticker === undefined || data === null) {
+          return {
+            id: `${runId}-msg-${seg.index}`,
+            role: "agent",
+            text: seg.text,
+            runId,
+            streaming: false
+          };
+        }
         return {
           id: `${runId}-msg-${seg.index}`,
           role: "agent",
@@ -436,9 +457,9 @@ function applyMultiBubbleDelta(
           streaming: false,
           blocks: [
             {
-              type: KOKO_STICKER_BLOCK_TYPE,
+              type: sticker.blockType,
               version: 1,
-              data: { id: seg.stickerId }
+              data
             }
           ]
         };
@@ -460,15 +481,18 @@ function applyMultiBubbleDelta(
     const lastSegment = segments[segments.length - 1];
     useConversationStore
       .getState()
-      .touch(conversationId, previewFromSegment(lastSegment));
+      .touch(conversationId, previewFromSegment(lastSegment, boundaryConfig));
   }
 }
 
 function previewFromSegment(
-  segment: ReturnType<typeof parseMessageBoundaries>[number] | undefined
+  segment: ReturnType<typeof parseMessageBoundaries>[number] | undefined,
+  boundaryConfig: ConversationModeMessageBoundaryConfig | undefined
 ): string | undefined {
   if (segment === undefined) return undefined;
-  if (segment.kind === "sticker") return "Koko 表情";
+  if (segment.kind === "sticker") {
+    return boundaryConfig?.sticker?.preview ?? previewFromText(segment.text);
+  }
   return previewFromText(segment.text);
 }
 

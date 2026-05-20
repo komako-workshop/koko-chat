@@ -12,6 +12,10 @@ real Gateway device: the phone generates a device identity locally, sends this
 OpenClaw a pairing request, and this skill approves that device with operator
 scopes before returning a connection code.
 
+Generated KokoChat connection codes must use the KokoChat relay tunnel. Do not
+return LAN, public Gateway, or `openclaw qr` direct Gateway URLs for normal
+KokoChat pairing.
+
 Do not return the shared `gateway.auth.token` for KokoChat. Shared-token
 device-less clients may connect without `operator.write`; KokoChat needs a
 device token tied to its public key. Newer KokoChat builds also request

@@ -29,8 +29,8 @@ import { TavernCardBlock, isTavernRecommendationCard } from "./RecommendationsBl
  *      character cards (IM-style stream).
  *   5. KokoChat parses + validates the block and expands `items` into
  *      multiple agent messages: text → plain bubble, card → single-card
- *      `koko.tavern.card` block. Tapping a card hands off to the
- *      `tavern-roleplay` mini-app.
+ *      `koko.tavern.card` block. Tapping a card opens the hidden
+ *      `tavern-roleplay` conversation mode inside the Tavern product.
  *
  * The mini-app intentionally owns no scraping logic, no prompt about the
  * Character Tavern API, and no per-card detail fetching: that all lives in

@@ -1,4 +1,4 @@
-import { registerMiniApp } from "@/runtime/miniApps";
+import { registerConversationMode } from "@/runtime/conversationModes";
 import { getMiniAppStorage } from "@/runtime/miniAppStorage";
 import { openConversation } from "@/runtime/navigation";
 import {
@@ -19,7 +19,7 @@ import { resolvePersonaName } from "@/state/tavernPersona";
 import { applyTavernMacros } from "../../tavern/mobile/macros";
 
 /**
- * Tavern Roleplay mini-app: 用一张 Character Tavern 角色卡开启一场长会话。
+ * Tavern Roleplay mode: 酒馆产品里的角色聊天子模式。
  *
  * Product loop:
  *   1. User taps a recommended card in the Tavern (酒馆助手) conversation.
@@ -28,16 +28,16 @@ import { applyTavernMacros } from "../../tavern/mobile/macros";
  *   3. This module fetches the full SillyTavern-shape card via the
  *      `kokochat-tavern-search` skill's `fetch-card` bin, translates the
  *      `first_mes` into Chinese with `inferOnce`, creates a conversation in
- *      `tavern-roleplay` mode and pre-seeds the chat with the localized
- *      opening line as the first agent message.
+ *      hidden `tavern-roleplay` mode and pre-seeds the chat with the
+ *      localized opening line as the first agent message.
  *   4. When the user sends their first message, this mini-app's outbound
  *      builder prepends the full card JSON inline so the bound OpenClaw
  *      `tavern-roleplay` agent picks it up. From the second turn on the
  *      builder is transparent and the host's default chat.send carries the
  *      conversation forward.
  *
- * The mini-app is intentionally *not* shown in the launcher: the only entry
- * point is tapping a recommended card.
+ * This mode is intentionally *not* shown in the launcher: the only entry
+ * point is tapping a recommended card from the Tavern product.
  */
 
 const MINI_APP_ID = "tavern-roleplay";
@@ -501,29 +501,20 @@ export function registerTavernRoleplayMiniApp(): void {
   if (registered) return;
   registered = true;
 
-  registerMiniApp({
+  registerConversationMode({
     id: MINI_APP_ID,
+    ownerMiniAppId: "tavern",
     displayName: "酒馆角色聊天",
     listGlyph: "🎭",
-    // The launcher should not show this mini-app: the only legitimate way in
-    // is tapping a recommended card. Showing it would let users open an empty
-    // roleplay conversation with no bound character.
-    showInLauncher: false,
     defaultTitle: () => "酒馆角色",
+    surface: { kind: "standard-chat" },
     openclaw: {
       defaultAgentId: "tavern-roleplay",
       requiredSkills: ["kokochat-tavern-roleplay"],
       requiredCoreTools: ["exec"],
       localSkillDirs: ["miniapps/tavern/openclaw/skills/kokochat-tavern-roleplay"]
-    },
-    onCreate: () => {
-      // The mini-app does not expose a generic "new conversation" entry; the
-      // launcher is hidden and direct creation requires a bound card. Throw a
-      // visible error so anything that misuses the registry surface fails
-      // loudly during development.
-      throw new Error("tavern-roleplay sessions are created via startTavernRoleplaySession(card)");
     }
-  } as Parameters<typeof registerMiniApp>[0]);
+  });
 
   registerOutboundMessageBuilder(MINI_APP_ID, tavernRoleplayOutboundBuilder);
   registerSessionRestoreBuilder(MINI_APP_ID, tavernRoleplaySessionRestoreBuilder);

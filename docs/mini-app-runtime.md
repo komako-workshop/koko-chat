@@ -13,37 +13,55 @@ choices. This file is for actually shipping a mini-app.
 
 ## Mental Model
 
-KokoChat is a mobile conversation host backed by OpenClaw.
+KokoChat is a mobile mini-app host backed by OpenClaw. Conversations are a
+shared runtime primitive, not the only surface a mini-app can own.
 
 For v1 every mini-app is built into the KokoChat app package. You write its UI
-and logic in the same codebase. The host gives you four things:
+and logic in the same codebase. The host gives you these things:
 
-- **Conversations.** A standard list row + chat screen pair. Every visible
-  conversation is a `ConversationMeta` with a `mode` that names your mini-app.
+- **Mini-app registration.** A product namespace, launcher entry, and optional
+  route/action launch target.
+- **Conversation modes.** Optional chat-backed modes. Every conversation is a
+  `ConversationMeta` with a `mode`; that mode can open the standard chat
+  surface or a custom route owned by the mini-app.
 - **OpenClaw runtime primitives.** Two helpers: `inferOnce` for short calls and
   agent-session helpers for long-lived chats. They live in
   `sources/runtime/openclaw.ts`.
-- **Outbound message hook.** A way to rewrite or skip what the user sends from
-  inside your mode's chat screen.
+- **Outbound message hook.** A way to rewrite or skip what the user sends from a
+  conversation mode that uses a chat surface.
 - **Message blocks.** A way to render structured cards inside any conversation.
 
 You write:
 
-- a `mode` value
-- conversation entry points (creating conversations, navigating to them)
-- whatever UI you want inside that conversation
+- a mini-app id and launch target
+- any route surfaces / pages your product needs
+- conversation modes when your product needs chat-backed sessions
 - prompt construction for OpenClaw
 - namespaced storage via `getMiniAppStorage(miniAppId)` if you need it
 
 You do not write:
 
-- the conversation list, the chat screen frame, the input bar
 - the Gateway connection or device pairing
 - direct OpenClaw RPC calls (use the runtime helpers)
+
+You may write your own chat surface. If the standard host chat works for your
+mode, register the mode with the default `standard-chat` surface and only supply
+the outbound / response hooks you need.
 
 ## Runtime API
 
 All helpers live in `@/runtime/openclaw`.
+
+### Choosing An OpenClaw Primitive
+
+Mini-apps should pick the narrowest primitive that matches the product shape:
+
+- Use the normal chat pipeline plus an outbound builder for user-facing,
+  streaming conversations attached to a KokoChat thread.
+- Use `inferOnce` for short background work where the result is consumed by
+  your mini-app UI instead of shown as a live chat turn.
+- Use the lower-level agent session helpers when your mini-app needs custom
+  session creation, explicit waits, history reads, aborts, or cleanup.
 
 ### inferOnce
 
@@ -51,7 +69,7 @@ All helpers live in `@/runtime/openclaw`.
 import { inferOnce } from "@/runtime/openclaw";
 
 const result = await inferOnce({
-  miniAppId: "example",
+  miniAppId: "my-miniapp",
   prompt:
     "请用一句话总结下面这段内容，输出 JSON: {\"summary\":\"\"}"
 });
@@ -99,9 +117,9 @@ import {
 } from "@/runtime/openclaw";
 
 const session = await createAgentSession({
-  miniAppId: "example",
+  miniAppId: "my-miniapp",
   scope: "main",
-  label: "Example chat"
+  label: "My Mini-App chat"
 });
 
 const send = await sendAgentMessage({
@@ -134,10 +152,10 @@ Use `buildKokoChatSessionKey` to derive keys. Do not invent your own format.
 
 ```ts
 const key = buildKokoChatSessionKey({
-  miniAppId: "example",
+  miniAppId: "my-miniapp",
   scope: "main"
 });
-// agent:main:kokochat:example:main
+// agent:my-miniapp:kokochat:my-miniapp:main
 ```
 
 Convention:
@@ -161,11 +179,11 @@ import { useConversationStore } from "@/state/conversations";
 import { router } from "expo-router";
 
 const meta = useConversationStore.getState().create({
-  mode: "example",
-  title: "Example chat",
+  mode: "my-miniapp",
+  title: "My Mini-App chat",
   listSnapshot: {
-    title: "Example chat",
-    subtitle: "Hello OpenClaw"
+    title: "My Mini-App chat",
+    subtitle: "Hello from my mini-app"
   }
 });
 router.push({ pathname: "/chat/[id]", params: { id: meta.id } });
@@ -185,7 +203,7 @@ Use the host-provided namespaced storage instead of writing raw MMKV keys:
 ```ts
 import { getMiniAppStorage } from "@/runtime/miniAppStorage";
 
-const storage = getMiniAppStorage("example");
+const storage = getMiniAppStorage("my-miniapp");
 storage.setJson("draft", { text: "hello" });
 const draft = storage.getJson<{ text: string }>("draft");
 ```
@@ -206,7 +224,7 @@ builder once:
 ```ts
 import { registerOutboundMessageBuilder } from "@/runtime/outboundMessages";
 
-registerOutboundMessageBuilder("example", async ({ visibleText, conversation }) => {
+registerOutboundMessageBuilder("my-miniapp", async ({ visibleText, conversation }) => {
   return {
     visibleText,
     gatewayText: visibleText,
@@ -250,7 +268,7 @@ function isExampleCardData(data: unknown): data is ExampleCardData {
 }
 
 registerSharedBlockRenderer(
-  "koko.example.card",
+  "koko.my-miniapp.card",
   isExampleCardData,
   ExampleCardRenderer
 );
@@ -265,7 +283,7 @@ Then put a block on a `ChatMessage`:
   text: "Here is a card",
   blocks: [
     {
-      type: "koko.example.card",
+      type: "koko.my-miniapp.card",
       version: 1,
       data: { /* your data */ }
     }
@@ -283,7 +301,7 @@ Block types are global. Pick a clear namespace like
 For structured agent output, use fenced blocks and the shared extractor:
 
 ```ts
-const found = extractFencedBlock(agentText, "koko.example.card");
+const found = extractFencedBlock(agentText, "koko.my-miniapp.card");
 if (found !== null) {
   const parsed = JSON.parse(found.body);
   // validate parsed, then turn it into MessageBlock[]
@@ -295,31 +313,47 @@ do not parse JSON or validate data. Keep schema validation in your mini-app.
 
 ## Mini-App Registration
 
-A mini-app is a folder under `sources/miniapps/<id>/` with an `index.ts` that
-exports a single registration function:
+A mini-app is a folder with an `index.ts` that exports a single registration
+function. Built-in host mini-apps can live under `sources/miniapps/<id>/`;
+larger product mini-apps can live under the repo-level `miniapps/<id>/mobile/`
+folder and be imported by the host registration aggregator.
+
+For a simple chat-shaped product, `registerMiniApp()` also registers a default
+conversation mode with the same id, so existing v1-style mini-apps stay small:
 
 ```ts
-// sources/miniapps/example/index.ts
+// miniapps/my-miniapp/mobile/index.ts
 import { registerMiniApp } from "@/runtime/miniApps";
 
 let registered = false;
-export function registerExampleMiniApp(): void {
+export function registerMyMiniApp(): void {
   if (registered) return;
   registered = true;
 
   registerMiniApp({
-    id: "example",
-    displayName: "Example",
+    id: "my-miniapp",
+    displayName: "My Mini-App",
     showInLauncher: true,
-    listGlyph: "Ex",
-    defaultTitle: (createdAt) => `Example ${formatTime(createdAt)}`,
+    listGlyph: "M",
+    launch: { kind: "conversation" },
+    defaultTitle: (createdAt) => `My Mini-App ${formatTime(createdAt)}`,
     openclaw: {
       // Optional. If omitted, mini-apps default to agentId === id.
-      // Example overrides to main so it works on a stock OpenClaw install.
-      defaultAgentId: "main",
+      defaultAgentId: "my-miniapp",
       requiredSkills: [],
       requiredCoreTools: [],
       localSkillDirs: []
+    },
+    splitAgentMessages: true,
+    // Optional: if splitAgentMessages is true and your agent emits exact
+    // `[sticker:id]` messages, declare how those ids become typed blocks.
+    // Without this adapter, sticker tokens render as plain text.
+    messageBoundaries: {
+      sticker: {
+        blockType: "koko.my-miniapp.sticker",
+        preview: "My sticker",
+        dataForId: (id) => id === "hello" ? { id } : null
+      }
     }
   });
 
@@ -327,13 +361,40 @@ export function registerExampleMiniApp(): void {
 }
 ```
 
+For a mini-app with its own first screen, launch a route instead:
+
+```ts
+registerMiniApp({
+  id: "my-miniapp",
+  displayName: "My Mini-App",
+  showInLauncher: true,
+  listGlyph: "M",
+  launch: { kind: "route", pathname: "/my-miniapp" }
+});
+```
+
+If that product also owns child chat sessions, register those as conversation
+modes rather than pretending every child mode is a launcher-visible mini-app:
+
+```ts
+import { registerConversationMode } from "@/runtime/conversationModes";
+
+registerConversationMode({
+  id: "my-miniapp-session",
+  ownerMiniAppId: "my-miniapp",
+  displayName: "My Mini-App Session",
+  surface: { kind: "standard-chat" },
+  openclaw: { defaultAgentId: "my-miniapp" }
+});
+```
+
 Then add it to `sources/miniapps/index.ts`:
 
 ```ts
-import { registerExampleMiniApp } from "./example";
+import { registerMyMiniApp } from "../../../../miniapps/my-miniapp/mobile";
 
 export function registerMiniApps(): void {
-  registerExampleMiniApp();
+  registerMyMiniApp();
 }
 ```
 
@@ -341,23 +402,24 @@ Rules:
 
 - Registration must be idempotent.
 - Do not import any UI from this `index.ts` file. Keep registration cheap.
-- Conversation `mode` is a runtime string. Normal mini-apps should not need to
+- `showInLauncher: true` makes the mini-app appear in the `+` launcher. The
+  launcher follows `launch`: it may open a route, create/open a conversation, or
+  run an action.
+- Conversation modes are runtime strings. Normal mini-apps should not need to
   edit `sources/state/conversations.ts`.
-- `showInLauncher: true` makes the mini-app appear in the conversation-list `+`
-  menu. No app-menu edit is needed.
 
 ## Agent IDs And Skills
 
-Each mini-app should normally use its own OpenClaw agent id. This prevents
-product-specific prompts, tool use, and transcripts from polluting unrelated
-agents. KokoChat's home assistant is `koko`, separate from the user's OpenClaw
-`main` assistant.
+Each conversation mode should normally use its own OpenClaw agent id. This
+prevents product-specific prompts, tool use, and transcripts from polluting
+unrelated agents. KokoChat's home assistant is `koko`, separate from the user's
+OpenClaw `main` assistant.
 
 Default agent rule:
 
-- every mini-app uses `agentId === miniAppId` by default.
+- every conversation mode uses `agentId === modeId` by default.
 - KokoChat home mode is `koko`, so it uses OpenClaw agent `koko`.
-- `descriptor.openclaw.defaultAgentId` overrides the default.
+- `openclaw.defaultAgentId` on the conversation mode overrides the default.
 - an explicit `agentId` passed to `inferOnce` / `createAgentSession` wins over
   everything else.
 
@@ -421,7 +483,8 @@ See `docs/mini-app-skills.md` and
 | Block renderer registry     | `sources/runtime/messageBlocks.tsx`    |
 | Conversation store          | `sources/state/conversations.ts`       |
 | Gateway client + chat IO    | `sources/state/gateway.ts`             |
-| Example mini-app            | `sources/miniapps/example/`            |
+| Built-in Koko mini-app      | `sources/miniapps/koko/`               |
+| Larger product mini-apps    | `miniapps/<id>/mobile/`                |
 
 ## Self-Test
 

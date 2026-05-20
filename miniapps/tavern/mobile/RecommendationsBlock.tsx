@@ -39,10 +39,10 @@ const CARD_WIDTH_MAX = 380;
  * is exactly `TavernRecommendationCard` — there's no `reason` field; the
  * "why" lives in the preceding text bubble, in the agent's own voice.
  *
- * Tap behaviour: hand off to the `tavern-roleplay` mini-app, which fetches
- * the full Character Tavern card, translates the opening line to Chinese,
- * and creates a new conversation bound to that character. The user is
- * routed into the new conversation automatically.
+ * Tap behaviour: open the hidden `tavern-roleplay` mode, which fetches the
+ * full Character Tavern card, translates the opening line to Chinese, and
+ * creates a new conversation bound to that character. The user is routed into
+ * the new conversation automatically.
  */
 export const TavernCardBlock: BlockRenderer<TavernRecommendationCard> = ({ block }) => {
   return <RecommendationRow card={block.data} />;

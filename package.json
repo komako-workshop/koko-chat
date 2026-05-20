@@ -2,7 +2,7 @@
   "name": "koko-chat",
   "version": "0.0.0",
   "private": true,
-  "description": "KokoChat — a chat-first mobile container for many AI mini-apps. Built on OpenClaw. By Komako.",
+  "description": "KokoChat — a mini-app-first mobile container for AI surfaces. Built on OpenClaw. By Komako.",
   "packageManager": "pnpm@10.33.2",
   "engines": {
     "node": ">=20.0.0"
@@ -12,6 +12,7 @@
     "relay:start": "pnpm --filter @koko/relay start",
     "openclaw:install": "node scripts/install-openclaw-support.mjs",
     "regression:openclaw": "node scripts/regression-openclaw-kokochat.mjs",
+    "test:pairing-relay": "node scripts/test-kokochat-pairing-relay.mjs",
     "protocol:build": "pnpm --filter @koko/protocol build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
