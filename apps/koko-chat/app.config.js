@@ -56,6 +56,11 @@ const config = {
     // straight into Chat against the local OpenClaw Gateway.
     devGatewayUrl: process.env.KOKO_DEV_GATEWAY_URL ?? null,
     devGatewayToken: process.env.KOKO_DEV_GATEWAY_TOKEN ?? null,
+    // Optional single-mini-app demo mode. When set (e.g. "deeply"), the host
+    // boots straight into that mini-app's surface instead of showing the
+    // launcher, and renders a phone-sized frame on web for layout sanity.
+    // Wired up by `pnpm deeply:web` / scripts/dev-start.mjs.
+    demoApp: process.env.KOKO_DEMO_APP ?? null,
     eas: {
       projectId: "e0f1a3d6-5d11-417b-b49f-a8da8891fb5e"
     }

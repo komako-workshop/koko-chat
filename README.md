@@ -21,9 +21,10 @@ KokoChat 是基于 OpenClaw 的移动端 agent 开源平台。
 
 当前内置的 mini-app:
 
-* **酒馆**(`miniapps/tavern`):从 character-tavern.com 推荐 / 浏览 AI 角色卡。预置 440 张中文译名 / 中文 tagline 的二次元向卡片,从广场进入秒开聊天；角色聊天由隐藏的 `tavern-roleplay` conversation mode 承接。
+* **酒馆**(`miniapps/tavern`):从 character-tavern.com 推荐 / 浏览 AI 角色卡。预置 440 张中文译名 / 中文 tagline 的二次元向卡片,从广场进入秒开聊天;角色聊天由隐藏的 `tavern-roleplay` conversation mode 承接。
+* **Deeply**(`miniapps/deeply`):AI 课程化深度学习。在「知识探索」chat 里聊兴趣→点「推荐课程」出几张课题卡→任意一张展开成「按目录推进」的课程讲解(自动生成大纲、一节一轮、底部好奇点 chip、右上目录跳转)。整套交互对齐 deeply.plus 原版,但跑在用户自己的 OpenClaw agent 上。
 
-下一步:打算做 Notebook 形态(基于一组用户信任的资料的 scoped chat,参考 NotebookLM 但 agent 主动 bootstrap 资料、用户做减法)、学习/陪读类、digest 类。
+下一步:打算做 Notebook 形态(基于一组用户信任的资料的 scoped chat,参考 NotebookLM 但 agent 主动 bootstrap 资料、用户做减法)、digest 类。
 
 ## 设计原则
 
@@ -44,6 +45,7 @@ KokoChat 的几条不会动摇的设计判断:
 - **内置 mini-apps**:
   - `miniapps/tavern` —— 酒馆助手(角色卡推荐)
   - `miniapps/tavern-roleplay` —— 酒馆的隐藏角色聊天 mode,从 Tavern 卡片进入
+  - `miniapps/deeply` —— Deeply 知识探索 + 课程讲解;自家 chat surface,不复用 host 共享聊天页
 - **协议层**(`packages/koko-protocol`):envelope / pairing / libsodium 加密。
 - **OpenClaw 客户端**(`packages/koko-openclaw-client`):Gateway Protocol v3,Node + RN 双入口。
 
@@ -58,6 +60,7 @@ apps/
 miniapps/
   tavern/                酒馆角色卡 mini-app + 对应的 OpenClaw skill 源
   tavern-roleplay/       酒馆隐藏角色聊天 mode
+  deeply/                Deeply 学习 mini-app(knowledge explore + 课程讲解)
 openclaw/                给用户机器上 OpenClaw 用的 skill 源 + dist patch 说明
 docs/                    mini-app runtime / skills 设计文档
 .brand/                  品牌/吉祥物探索资产(生成图被 .gitignore 屏蔽)
@@ -140,6 +143,12 @@ node scripts/install-openclaw-support.mjs --dry-run
 ```bash
 pnpm install
 pnpm app:dev      # apps/koko-chat 启 expo start --host lan,自动读取 gateway token
+```
+
+只想单独调 Deeply mini-app(在电脑浏览器,只显示 Deeply,带手机框比例):
+
+```bash
+pnpm deeply:web   # 内部:KOKO_DEMO_APP=deeply expo start --web,localhost:8081 直接进 /deeply
 ```
 
 全 workspace 检查:

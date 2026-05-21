@@ -63,6 +63,10 @@ function readGatewayToken() {
 }
 
 function main() {
+  // Pass through any extra args after `--`.
+  const passthrough = process.argv.slice(2);
+  const isWeb = passthrough.includes("--web");
+
   const lanIp = detectLanIp();
   if (lanIp === null) {
     console.warn("[koko-dev] could not detect LAN IP; expo will use defaults");
@@ -70,9 +74,15 @@ function main() {
     console.log(`[koko-dev] detected LAN IP: ${lanIp}`);
   }
 
+  // For web targets we open the bundle in a desktop browser on the same host
+  // as the Gateway, so loopback is the most reliable address. LAN IP would
+  // also work when the gateway binds 0.0.0.0, but loopback dodges any
+  // browser-side host policies and works even when LAN IP is unstable.
+  const gatewayHost = isWeb ? "127.0.0.1" : lanIp;
+
   const env = { ...process.env };
-  if (lanIp !== null) {
-    env.KOKO_DEV_GATEWAY_URL = `ws://${lanIp}:18789`;
+  if (gatewayHost !== null) {
+    env.KOKO_DEV_GATEWAY_URL = `ws://${gatewayHost}:18789`;
     const gatewayToken = readGatewayToken();
     if (gatewayToken !== null) {
       env.KOKO_DEV_GATEWAY_TOKEN = gatewayToken;
@@ -84,8 +94,10 @@ function main() {
     }
   }
 
-  // Pass through any extra args after `--`.
-  const passthrough = process.argv.slice(2);
+  if (env.KOKO_DEMO_APP) {
+    console.log(`[koko-dev] demo mode: ${env.KOKO_DEMO_APP} (skips launcher)`);
+  }
+
   const args = ["expo", "start", "--host", "lan", "--clear", ...passthrough];
 
   console.log(`[koko-dev] exec: pnpm exec ${args.join(" ")}`);

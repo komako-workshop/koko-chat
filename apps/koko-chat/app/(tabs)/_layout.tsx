@@ -1,7 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import Constants from "expo-constants";
+import { Redirect, Tabs } from "expo-router";
 
 import { KokoColors } from "@/theme/koko";
+
+/**
+ * Single-mini-app demo mode. Set by `pnpm deeply:web` -> KOKO_DEMO_APP=deeply
+ * -> app.config.js extra.demoApp. When present, the tab layer is bypassed
+ * entirely and the demo mini-app's route owns the whole screen.
+ */
+const DEMO_APP = ((): string | null => {
+  const raw = Constants.expoConfig?.extra?.demoApp;
+  return typeof raw === "string" && raw.length > 0 ? raw : null;
+})();
 
 /**
  * Bottom tab layout.
@@ -14,6 +25,9 @@ import { KokoColors } from "@/theme/koko";
  * as the active tint.
  */
 export default function TabsLayout(): React.ReactElement {
+  if (DEMO_APP === "deeply") {
+    return <Redirect href="/deeply" />;
+  }
   return (
     <Tabs
       screenOptions={{

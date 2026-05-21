@@ -10,6 +10,7 @@
     "ios": "expo start --ios",
     "android": "expo start --android",
     "web": "expo start --web",
+    "deeply:web": "KOKO_DEMO_APP=deeply node scripts/dev-start.mjs -- --web",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
   },

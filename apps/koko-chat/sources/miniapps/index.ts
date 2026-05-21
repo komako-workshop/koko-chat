@@ -1,4 +1,5 @@
 import { registerKokoMiniApp } from "./koko";
+import { registerDeeplyMiniApp } from "../../../../miniapps/deeply/mobile";
 import { registerTavernMiniApp } from "../../../../miniapps/tavern/mobile";
 import { registerTavernRoleplayMiniApp } from "../../../../miniapps/tavern-roleplay/mobile";
 
@@ -10,6 +11,7 @@ import { registerTavernRoleplayMiniApp } from "../../../../miniapps/tavern-rolep
  */
 export function registerMiniApps(): void {
   registerKokoMiniApp();
+  registerDeeplyMiniApp();
   registerTavernMiniApp();
   registerTavernRoleplayMiniApp();
 }

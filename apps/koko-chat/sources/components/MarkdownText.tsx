@@ -21,16 +21,29 @@ interface MarkdownTextProps {
   color?: string;
   /** Optional trailing element appended to the last text node (e.g. streaming cursor). */
   trailing?: React.ReactNode;
+  /**
+   * Multiply default body / heading / list font sizes by this value.
+   * Useful for "long-form reader" surfaces (e.g. Deeply course screen)
+   * where users want a bigger, calmer reading experience. Defaults to 1.
+   * Inline code keeps its monospace size since it's rarely the focal element.
+   */
+  scale?: number;
 }
 
-export function MarkdownText({ text, color, trailing }: MarkdownTextProps): React.ReactElement | null {
+export function MarkdownText({
+  text,
+  color,
+  trailing,
+  scale = 1
+}: MarkdownTextProps): React.ReactElement | null {
   if (text.length === 0 && trailing === undefined) return null;
   const baseColor = color ?? KokoColors.ink;
   const blocks = parseBlocks(text);
+  const bodyScaled = scaledBodyStyle(scale);
 
   if (blocks.length === 0) {
     return (
-      <Text style={[styles.body, { color: baseColor }]}>
+      <Text style={[styles.body, bodyScaled, { color: baseColor }]}>
         {trailing}
       </Text>
     );
@@ -49,11 +62,26 @@ export function MarkdownText({ text, color, trailing }: MarkdownTextProps): Reac
             trailing={blockTrailing}
             isFirst={index === 0}
             isLast={isLast}
+            scale={scale}
           />
         );
       })}
     </View>
   );
+}
+
+function scaledBodyStyle(scale: number): TextStyle {
+  if (scale === 1) return {};
+  return {
+    fontSize: 16 * scale,
+    lineHeight: 26 * scale
+  };
+}
+
+function scaledHeadingStyle(level: 1 | 2 | 3, scale: number): TextStyle {
+  if (scale === 1) return {};
+  const base = level === 1 ? 19 : level === 2 ? 17 : 16;
+  return { fontSize: base * scale, lineHeight: base * 1.4 * scale };
 }
 
 // ---- Block model -----------------------------------------------------------
@@ -148,18 +176,20 @@ interface BlockViewProps {
   trailing?: React.ReactNode;
   isFirst: boolean;
   isLast: boolean;
+  scale: number;
 }
 
-function BlockView({ block, color, trailing, isFirst, isLast }: BlockViewProps): React.ReactElement {
+function BlockView({ block, color, trailing, isFirst, isLast, scale }: BlockViewProps): React.ReactElement {
   // Spacing between paragraphs. Set generously because the chat surface
   // also renders long-form roleplay first_mes blocks where 5+ paragraphs
   // run back to back; tighter spacing leaves the text feeling like one
   // dense slab with no place for the eye to rest.
   const topGap = isFirst ? 0 : 14;
+  const bodyScaled = scaledBodyStyle(scale);
 
   if (block.type === "paragraph") {
     return (
-      <Text style={[styles.body, { color, marginTop: topGap }]}>
+      <Text style={[styles.body, bodyScaled, { color, marginTop: topGap }]}>
         {renderInline(block.content, color)}
         {trailing}
       </Text>
@@ -169,8 +199,16 @@ function BlockView({ block, color, trailing, isFirst, isLast }: BlockViewProps):
   if (block.type === "heading") {
     const headingStyle =
       block.level === 1 ? styles.heading1 : block.level === 2 ? styles.heading2 : styles.heading3;
+    const headingScaled = scaledHeadingStyle(block.level, scale);
     return (
-      <Text style={[styles.body, headingStyle, { color, marginTop: isFirst ? 0 : 8 }]}>
+      <Text
+        style={[
+          styles.body,
+          headingStyle,
+          headingScaled,
+          { color, marginTop: isFirst ? 0 : 8 }
+        ]}
+      >
         {renderInline(block.content, color)}
         {trailing}
       </Text>
@@ -189,7 +227,7 @@ function BlockView({ block, color, trailing, isFirst, isLast }: BlockViewProps):
         return (
           <Text
             key={idx}
-            style={[styles.body, styles.listLine, { color }]}
+            style={[styles.body, bodyScaled, styles.listLine, { color }]}
           >
             <Text style={styles.listMarker}>{item.marker} </Text>
             {renderInline(item.text, color)}

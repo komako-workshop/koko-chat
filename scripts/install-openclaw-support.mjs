@@ -24,6 +24,7 @@ let openclawBin = "openclaw";
 
 const REQUIRED_AGENTS = [
   { id: "koko", workspace: join(openclawHome, "agents", "koko", "workspace") },
+  { id: "deeply", workspace: join(openclawHome, "agents", "deeply", "workspace") },
   { id: "tavern", workspace: join(openclawHome, "agents", "tavern", "workspace") },
   {
     id: "tavern-roleplay",

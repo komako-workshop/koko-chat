@@ -1,0 +1,21 @@
+{
+  "name": "@koko/miniapp-deeply-mobile",
+  "version": "0.0.1",
+  "private": true,
+  "description": "KokoChat Deeply mini-app · 知识探索 + 按目录推进的深度学习对话.",
+  "main": "index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.17",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "typescript": "^5.9.0"
+  }
+}
