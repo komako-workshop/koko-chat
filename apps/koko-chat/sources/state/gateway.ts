@@ -23,7 +23,8 @@ import {
 import type { OpenClawSetup } from "@/gateway/setupCode";
 import {
   shouldDeferAgentResponseText,
-  transformAgentResponse
+  transformAgentResponse,
+  transformStreamingDisplayText
 } from "@/runtime/agentResponses";
 import {
   getConversationModeDescriptor,
@@ -67,8 +68,22 @@ interface GatewayState {
   syncPendingConversations: () => Promise<void>;
   disconnect: () => Promise<void>;
   forgetIdentity: () => Promise<void>;
-  sendUserMessage: (conversationId: string, text: string) => Promise<void>;
+  prepareFileAttachments: (files: File[]) => Promise<OpenClawChatAttachment[]>;
+  sendUserMessage: (
+    conversationId: string,
+    text: string,
+    options?: {
+      attachments?: OpenClawChatAttachment[];
+    }
+  ) => Promise<void>;
   resetError: () => void;
+}
+
+export interface OpenClawChatAttachment {
+  name: string;
+  content: string;
+  encoding: "base64";
+  mimeType?: string;
 }
 
 interface PendingConversationSyncTarget {
@@ -89,12 +104,46 @@ function newMessageId(): string {
   return `msg-${Date.now()}-${nextMessageId++}`;
 }
 
+async function fileToAttachment(file: File): Promise<OpenClawChatAttachment> {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return {
+    name: file.name,
+    content: btoa(binary),
+    encoding: "base64",
+    ...(file.type.length > 0 ? { mimeType: file.type } : {})
+  };
+}
+
+/**
+ * KokoChat paragraph sentinel marker。OpenClaw wire 层把 tool-using agent
+ * 的多段 commentary prose 合并成单个 text block,合并时 strip 段尾的
+ * `\n\n`,导致客户端 markdown renderer 看到所有 prose 段粘成一坨。
+ *
+ * 修法:协议层面我们让 agent prompt(SKILL.md / kickoff prompt)在每段
+ * prose 末尾显式打这个 sentinel,wire 合并后 marker 仍然保留;客户端
+ * 在 extractText 时把 marker 替换为真正的 `\n\n` 段落分隔符,marker 本
+ * 身被 strip,用户看不到。
+ *
+ * Marker 是 ASCII-safe 之外的 4 个固定字符,实际 prose 里不可能自然出现。
+ */
+const KOKO_PARAGRAPH_MARKER = "〔KP〕";
+const KOKO_PARAGRAPH_MARKER_REGEX = /\s*〔KP〕\s*/g;
+
 function extractText(event: ChatEventPayload): string {
   const blocks = event.message?.content;
   if (!Array.isArray(blocks)) {
     return "";
   }
-  return blocks
+  // 多个 text block 用 `\n\n` 拼接 —— 一个 agent turn 里如果夹着 tool
+  // call,可能被拆成多个独立 text block。`.join("")` 会让段落粘成一团;
+  // 单段场景下没人 join,不会引入多余空白。
+  const raw = blocks
     .filter(
       (b): b is { type: string; text: string } =>
         b !== null &&
@@ -105,7 +154,18 @@ function extractText(event: ChatEventPayload): string {
         typeof (b as { text: unknown }).text === "string"
     )
     .map((b) => b.text)
-    .join("");
+    .filter((t) => t.length > 0)
+    .join("\n\n");
+  return applyParagraphMarker(raw);
+}
+
+/**
+ * Replace agent-emitted `〔KP〕` sentinels with `\n\n`,顺手 collapse 相邻
+ * 空白。Idempotent + safe for text that doesn't contain the marker.
+ */
+function applyParagraphMarker(text: string): string {
+  if (!text.includes(KOKO_PARAGRAPH_MARKER)) return text;
+  return text.replace(KOKO_PARAGRAPH_MARKER_REGEX, "\n\n").trim();
 }
 
 /**
@@ -241,13 +301,32 @@ function applySingleBubbleDelta(
       return next;
     }
 
+    // Streaming-only display transform:让 mini-app 把 streaming 期间用户能
+    // 看到的 text 替换掉(比如截掉 streaming 中的 raw fenced block JSON,
+    // 只显示前面的 prose narration)。final 时不走这里,transformer 已经
+    // 处理过 fullText。
+    let displayText = fullText;
+    if (!done) {
+      const conv = useConversationStore.getState().list.find((m) => m.id === conversationId);
+      if (conv !== undefined) {
+        const customDisplay = transformStreamingDisplayText({
+          conversation: conv,
+          runId: eventRunId ?? `streaming-${conversationId}`,
+          text: fullText
+        });
+        if (typeof customDisplay === "string") {
+          displayText = customDisplay;
+        }
+      }
+    }
+
     if (idx < 0) {
       return [
         ...prev,
         {
           id: newMessageId(),
           role: "agent",
-          text: fullText,
+          text: displayText,
           ...(typeof event.runId === "string" ? { runId: event.runId } : {}),
           streaming: !done
         }
@@ -256,7 +335,7 @@ function applySingleBubbleDelta(
     const existing = prev[idx];
     if (existing === undefined) return prev;
     const next = [...prev];
-    next[idx] = { ...existing, text: fullText, streaming: !done };
+    next[idx] = { ...existing, text: displayText, streaming: !done };
     return next;
   });
   if (done) {
@@ -715,12 +794,51 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
     // Subscribe to chat events before connect so we don't miss the first delta.
     client.on("chat", (payload: JsonRecord) => {
+      // Dev instrumentation: pipe raw chat events to a local listener so we
+      // can debug wire format offline. Best-effort; failure is silent and
+      // never blocks normal processing. The listener (`scripts/koko-event-dump-server.mjs`)
+      // only listens on 127.0.0.1:9999 and is meant for development.
+      if (typeof __DEV__ === "undefined" || __DEV__ === true) {
+        try {
+          void fetch("http://127.0.0.1:9999/event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: "wire", receivedAt: Date.now(), payload })
+          }).catch(() => undefined);
+        } catch {
+          /* ignore */
+        }
+      }
       const event = payload as unknown as ChatEventPayload;
       const conversationId = conversationIdForSessionKey(event.sessionKey);
       if (conversationId === null) return;
       if (event.state === "delta") applyDelta(conversationId, event, false);
-      else if (event.state === "final") applyDelta(conversationId, event, true);
-      else if (event.state === "error") applyError(conversationId, event);
+      else if (event.state === "final") {
+        applyDelta(conversationId, event, true);
+        // Dev: also fetch chat.history right after final to see if raw blocks
+        // retain `\n\n` paragraph boundaries that the streaming `chat` event
+        // wire seems to strip. If they do, host can rebuild text from history.
+        if (typeof __DEV__ === "undefined" || __DEV__ === true) {
+          const sessionKey = typeof event.sessionKey === "string" ? event.sessionKey : null;
+          if (sessionKey !== null) {
+            void client
+              .call("chat.history", { sessionKey, limit: 1, maxChars: 32_000 })
+              .then((historyPayload) => {
+                void fetch("http://127.0.0.1:9999/event", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    kind: "history",
+                    receivedAt: Date.now(),
+                    sessionKey,
+                    payload: historyPayload
+                  })
+                }).catch(() => undefined);
+              })
+              .catch(() => undefined);
+          }
+        }
+      } else if (event.state === "error") applyError(conversationId, event);
     });
 
     try {
@@ -820,7 +938,11 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     clearDeviceIdentity();
   },
 
-  async sendUserMessage(conversationId, text) {
+  async prepareFileAttachments(files) {
+    return Promise.all(files.map((file) => fileToAttachment(file)));
+  },
+
+  async sendUserMessage(conversationId, text, options) {
     const { client } = get();
     if (client === null) {
       throw new Error("not connected");
@@ -886,6 +1008,9 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       await client.call("chat.send", {
         sessionKey: meta.sessionKey,
         message: messageToSend,
+        ...(options?.attachments !== undefined && options.attachments.length > 0
+          ? { attachments: options.attachments }
+          : {}),
         idempotencyKey
       });
     } catch (error) {

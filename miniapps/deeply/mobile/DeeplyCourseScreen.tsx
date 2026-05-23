@@ -40,7 +40,11 @@ import {
 import { inferCourseQuickReplies } from "./inferCourseQuickReplies";
 import type { DeeplyQuickReplyChip } from "./parseCourseQuickReplies";
 import { parseCourseSectionHeader } from "./parseCourseSectionHeader";
-import { buildContinueSectionUserText } from "./persona";
+import {
+  buildContinueSectionUserText,
+  buildMaterialKickoffVisibleText,
+  buildResearchKickoffVisibleText
+} from "./persona";
 
 interface QuickRepliesEntry {
   runId: string;
@@ -79,6 +83,13 @@ const DEEPLY_CONTINUE_BG = "#111111";
 const DEEPLY_CONTINUE_TEXT = "#FFFFFF";
 
 const EMPTY: ChatMessage[] = [];
+
+/**
+ * Module-level guard for the dev `?koko_auto_section=N` auto-firer.
+ * Persists across StrictMode unmount/remount so a single trigger only
+ * dispatches once per (conversation, section) pair.
+ */
+const autoSectionFired = new Set<string>();
 
 /**
  * 课程窗口的滚动位置快照,key 是 conversationId,跨组件实例存活。
@@ -511,6 +522,44 @@ export function DeeplyCourseScreen({
     }
   }, [conversationId, sendUserMessage]);
 
+  // Research / material kickoff:这两类 course conversation 刚创建时 messages
+  // 为空,自动 fire 第一条 user message 给 mainline session 触发 agent 准备。
+  // 用 ref guard 防止 StrictMode 双跑 / messages 短暂回退到 0 / re-render
+  // 导致重复 dispatch 同一条 kickoff。
+  const researchKickoffFiredRef = useRef(false);
+  useEffect(() => {
+    if (record === null) return;
+    if (record.kind !== "research" && record.kind !== "material") return;
+    if (conversationId === null) return;
+    if (!isConnected) return;
+    if (messages.length > 0) return;
+    if (researchKickoffFiredRef.current) return;
+    const label = record.kind === "material"
+      ? record.materialInput?.label
+      : record.researchTopic;
+    if (label === undefined || label.trim().length === 0) return;
+    researchKickoffFiredRef.current = true;
+    if (record.kind === "material") {
+      void sendUserMessage(
+        conversationId,
+        buildMaterialKickoffVisibleText({
+          label,
+          sections: record.sections
+        }),
+        {
+          attachments: record.materialInput?.attachments ?? []
+        }
+      );
+      return;
+    }
+    void dispatch(
+      buildResearchKickoffVisibleText({
+        topic: label,
+        sections: record.sections
+      })
+    );
+  }, [record, conversationId, isConnected, messages.length, dispatch, sendUserMessage]);
+
   const archiveConversation = useConversationStore((s) => s.archive);
   const handleArchive = useCallback(() => {
     if (conversationId === null) return;
@@ -541,6 +590,44 @@ export function DeeplyCourseScreen({
     if (!canContinue) return;
     await dispatch(buildContinueSectionUserText(expectedNextSection));
   }, [canContinue, dispatch, expectedNextSection]);
+
+  // Dev auto-trigger:agent 用 osascript 改 URL query 触发 mainline 讲解。
+  // 检测到 `?koko_auto_section=N` → 等 isConnected + bootstrap ready,
+  // 自动 dispatch "继续讲解第 N 节",一次性。
+  //
+  // 关键:expectedNextSection 是 advance progress 之后才更新,如果 query 写
+  // section=3 但 progress 在 currentSection=1,expectedNextSection=2,不 match。
+  // 改成"target 任意,只要 target >= 1 && target <= totalSections 就 fire",
+  // 不强求 strict next。
+  //
+  // 用 module-level Set 持久化已 fire 的 conversationId+section 组合,跨
+  // mount 不再重 fire(useRef 在 React 18 strict mode 会重置)。
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (conversationId === null) return;
+    if (!isConnected) return;
+    if (isLoadingBootstrap) return;
+    if (bootstrapError !== null) return;
+    if (totalSections <= 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const sectionRaw = params.get("koko_auto_section");
+    if (sectionRaw === null) return;
+    const target = Number(sectionRaw);
+    if (!Number.isFinite(target) || target <= 0) return;
+    if (target > totalSections) return;
+    const fireKey = `${conversationId}:${target}`;
+    if (autoSectionFired.has(fireKey)) return;
+    autoSectionFired.add(fireKey);
+    params.delete("koko_auto_section");
+    const qs = params.toString();
+    history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${qs.length > 0 ? `?${qs}` : ""}`
+    );
+    console.info("[koko-debug] auto-firing section", target);
+    void dispatch(buildContinueSectionUserText(target));
+  }, [conversationId, isConnected, isLoadingBootstrap, bootstrapError, totalSections, dispatch]);
 
   const handleQuickReply = useCallback(async (chip: DeeplyQuickReplyChip) => {
     if (inputLocked) return;

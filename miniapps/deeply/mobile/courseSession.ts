@@ -1,6 +1,7 @@
 import { getMiniAppStorage } from "@/runtime/miniAppStorage";
 import { openConversation } from "@/runtime/navigation";
 import { useConversationStore } from "@/state/conversations";
+import type { OpenClawChatAttachment } from "@/state/gateway";
 
 import { DEEPLY_MINI_APP_ID } from "./constants";
 import { initDeeplyCourseProgress } from "./courseProgress";
@@ -14,6 +15,10 @@ import type {
   DeeplyCardKind,
   DeeplyRecommendationCard
 } from "./parseRecommendations";
+import type {
+  DeeplyResearchOutline,
+  DeeplyResearchSource
+} from "./parseResearchOutline";
 
 export const DEEPLY_COURSE_MODE_ID = "deeply-course";
 const STORAGE = getMiniAppStorage(DEEPLY_MINI_APP_ID);
@@ -34,7 +39,7 @@ const STORAGE = getMiniAppStorage(DEEPLY_MINI_APP_ID);
  *      不通过 inferCourseOutline 单跑,而是 course surface 自动 fire 一条
  *      引导消息给 mainline session,由 agent 边搜边汇报后输出 outline。
  */
-export type DeeplyCourseSessionKind = "topic" | "research";
+export type DeeplyCourseSessionKind = "topic" | "research" | "material";
 
 export interface DeeplyCourseSessionRecord {
   schemaVersion: 1;
@@ -58,17 +63,50 @@ export interface DeeplyCourseSessionRecord {
    * 会把它注入到给 mainline session 的 research 引导消息里。
    */
   researchTopic?: string;
+  materialInput?: {
+    sourceKind: "url" | "file";
+    label: string;
+    url?: string;
+    attachments?: OpenClawChatAttachment[];
+  };
   parentConversationId?: string;
   startedAt: number;
 }
 
 const COURSE_RECORD_PREFIX = "course.";
 const COURSE_OUTLINE_PREFIX = "outline.";
+const COURSE_SOURCES_PREFIX = "sources.";
 
 export interface DeeplyCourseOutlineRecord {
   schemaVersion: 1;
   markdown: string;
-  sections: DeeplyOutlineSection[];
+  /**
+   * Research 课每节附带 sources(准备阶段挂的资料指针),普通课没有
+   * (sources 字段为空数组 / 不存在)。讲解 mainline prompt 直接从这里
+   * 读 per-section sources。
+   *
+   * 类型扩成 DeeplyOutlineSection & { sources? } —— 兼容老 schema 持久化的
+   * 数据(只有 index + title)+ 新 research schema(带 sources)。
+   */
+  sections: Array<DeeplyOutlineSection & {
+    sources?: Array<{
+      title: string;
+      url: string;
+      stance: "primary" | "counterpoint" | "background";
+      snippet: string;
+    }>;
+  }>;
+  generatedAt: number;
+}
+
+/**
+ * Research 课程专用:agent 在调研阶段拿到并 cite 的 sources。后续每节
+ * mainline 讲解时,把相关 sources 注入 prompt,让 agent 在讲解里 cite。
+ * 普通 topic 课程没这条 storage。
+ */
+export interface DeeplyCourseSourcesRecord {
+  schemaVersion: 1;
+  sources: DeeplyResearchSource[];
   generatedAt: number;
 }
 
@@ -151,6 +189,16 @@ export interface StartDeeplyResearchCourseInput {
   parentConversationId: string | null;
 }
 
+export interface StartDeeplyMaterialCourseInput {
+  label: string;
+  sourceKind: "url" | "file";
+  url?: string;
+  attachments?: OpenClawChatAttachment[];
+  sections: number;
+  sectionPreset: "light" | "standard" | "deep";
+  parentConversationId: string | null;
+}
+
 /**
  * 启动一个"深度调研"型 course conversation。
  *
@@ -221,6 +269,70 @@ export async function startDeeplyResearchCourse(
   // phase B 引入的 DeeplyCourseScreen 自动 fire research request 流程产生。
 }
 
+export async function startDeeplyMaterialCourse(
+  input: StartDeeplyMaterialCourseInput
+): Promise<void> {
+  const store = useConversationStore.getState();
+  const label = input.label.trim();
+  if (label.length === 0) {
+    throw new Error("material label is empty");
+  }
+  const meta = store.create({
+    mode: DEEPLY_COURSE_MODE_ID,
+    title: label,
+    sessionScope: `material:${slug(label)}:${Date.now().toString(36)}`,
+    ...(input.parentConversationId !== null
+      ? { parentConversationId: input.parentConversationId }
+      : {}),
+    artifactRef: {
+      type: "koko.deeply.course",
+      id: `material:${label}`,
+      miniAppId: DEEPLY_MINI_APP_ID
+    },
+    listSnapshot: {
+      title: label,
+      subtitle: input.sourceKind === "url" ? "基于链接 · 正在准备" : "基于文件 · 正在准备",
+      icon: "📎"
+    },
+    bootstrap: {
+      status: "loading",
+      hint:
+        input.sourceKind === "url"
+          ? "正在读取这份链接资料,准备把它拆成一门课。"
+          : "正在把你上传的文件交给 OpenClaw,准备拆成一门课。"
+    }
+  });
+
+  const record: DeeplyCourseSessionRecord = {
+    schemaVersion: 1,
+    kind: "material",
+    cardKind: "topic",
+    title: label,
+    subtitle: "",
+    reason: "",
+    introduction: "",
+    sections: input.sections,
+    sectionPreset: input.sectionPreset,
+    optionChoices: [],
+    researchTopic: label,
+    materialInput: {
+      sourceKind: input.sourceKind,
+      label,
+      ...(input.url !== undefined ? { url: input.url } : {}),
+      ...(input.attachments !== undefined && input.attachments.length > 0
+        ? { attachments: input.attachments }
+        : {})
+    },
+    ...(input.parentConversationId !== null
+      ? { parentConversationId: input.parentConversationId }
+      : {}),
+    startedAt: Date.now()
+  };
+  STORAGE.setJson(`${COURSE_RECORD_PREFIX}${meta.id}`, record);
+
+  openConversation(meta.id);
+}
+
 async function generateOutlineInBackground(
   conversationId: string,
   record: DeeplyCourseSessionRecord
@@ -264,6 +376,62 @@ export function loadDeeplyCourseOutline(
   return (
     STORAGE.getJson<DeeplyCourseOutlineRecord>(`${COURSE_OUTLINE_PREFIX}${conversationId}`) ?? null
   );
+}
+
+export function loadDeeplyCourseSources(
+  conversationId: string
+): DeeplyCourseSourcesRecord | null {
+  return (
+    STORAGE.getJson<DeeplyCourseSourcesRecord>(`${COURSE_SOURCES_PREFIX}${conversationId}`) ?? null
+  );
+}
+
+/**
+ * Research 路径 agent 最后吐出的 outline fenced block 被 transformer 解析后,
+ * 走这里落地:更新 record.introduction、写 outline + sources storage、
+ * 初始化 progress、把 bootstrap 切到 ready。
+ *
+ * 之后 DeeplyCourseScreen 就能正常按 mainline 流程跑(banner 消失、
+ * 显示 "开始第 1 节" chip、目录抽屉能用)。
+ */
+export function applyResearchOutlineToCourse(
+  conversationId: string,
+  outline: DeeplyResearchOutline
+): void {
+  const record = loadDeeplyCourseSessionRecord(conversationId);
+  if (record === null) {
+    console.warn(
+      "[deeply-course] applyResearchOutlineToCourse: no record",
+      conversationId
+    );
+    return;
+  }
+
+  const updatedRecord: DeeplyCourseSessionRecord = {
+    ...record,
+    introduction: outline.introduction,
+    // agent 可能根据课题自然结构上下浮动节数,这里以 agent 实际产出为准。
+    sections: outline.sections.length
+  };
+  STORAGE.setJson(`${COURSE_RECORD_PREFIX}${conversationId}`, updatedRecord);
+
+  const outlineRecord: DeeplyCourseOutlineRecord = {
+    schemaVersion: 1,
+    markdown: outline.outlineMarkdown,
+    sections: outline.sections,
+    generatedAt: Date.now()
+  };
+  STORAGE.setJson(`${COURSE_OUTLINE_PREFIX}${conversationId}`, outlineRecord);
+
+  const sourcesRecord: DeeplyCourseSourcesRecord = {
+    schemaVersion: 1,
+    sources: outline.sources,
+    generatedAt: Date.now()
+  };
+  STORAGE.setJson(`${COURSE_SOURCES_PREFIX}${conversationId}`, sourcesRecord);
+
+  initDeeplyCourseProgress(conversationId, outline.sections);
+  useConversationStore.getState().setBootstrap(conversationId, { status: "ready" });
 }
 
 /**

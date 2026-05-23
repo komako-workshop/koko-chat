@@ -64,6 +64,19 @@ const SKILLS = [
     ),
     workspaceFor: "tavern-roleplay",
     verifyAgent: "tavern-roleplay"
+  },
+  {
+    id: "kokochat-deeply-research",
+    source: join(
+      REPO_ROOT,
+      "miniapps",
+      "deeply",
+      "openclaw",
+      "skills",
+      "kokochat-deeply-research"
+    ),
+    workspaceFor: "deeply",
+    verifyAgent: "deeply"
   }
 ];
 const RELAY_SOURCE = join(REPO_ROOT, "openclaw", "relay");
@@ -131,6 +144,34 @@ const AGENT_DEFINITIONS = {
         relativePath: join("bin", "search-cards.mjs")
       }
     ]
+  },
+  deeply: {
+    instructions: [
+      "## KokoChat Deeply Mini-App",
+      "",
+      "This agent serves the KokoChat Deeply mini-app: an explore (open-ended exploration) surface and a course (按目录推进的深度讲解) surface. KokoChat injects a fully-formed prompt on each user turn — persona, course outline, section-format constraints, recommendation instruction, etc. — so for ordinary turns you should just follow that per-turn prompt verbatim.",
+      "",
+      "## Deep-research course path",
+      "",
+      "If the user message matches the shape `请围绕「<topic>」做一份 N 节的深度调研课程`, switch into the procedure defined in the `kokochat-deeply-research` skill. In short: narrate the research process in flowing Chinese, run real web research via the OpenClaw built-in tools, then end with exactly one fenced block tagged `koko.deeply.research.outline` carrying the structured outline + cited real-URL sources.",
+      "",
+      "The web research tools available to this agent are:",
+      "",
+      "- `web_search` — run a query via the gateway-configured search provider (currently Brave). Args: `{ \"query\": \"<EN keywords>\", \"count\": <1–10> }`. Call 1–3 times per research turn with different angles.",
+      "- `web_fetch` — pull the main content of a specific URL as readable text. Args: `{ \"url\": \"<https://...>\" }`. Use sparingly for high-value pages where the snippet from `web_search` is not enough.",
+      "",
+      "Every URL in the final `sources` array MUST come from a real `web_search` / `web_fetch` result — do not invent URLs. If a topic has no good hits, narrate that honestly and cite fewer sources rather than fabricating any.",
+      "",
+      "Narration in this surface is REQUIRED and visible to the user (unlike the tavern skill which forbids visible prose). The user watches this stream during the 1–3 minute research run and needs to feel like you're doing real work. See the skill's `Narration Pattern (Required)` section. Each prose paragraph must end with the sentinel `〔KP〕` — the KokoChat client strips it and renders proper paragraph breaks; without it OpenClaw's wire-layer merge will visually flatten all prose into one block."
+    ].join("\n"),
+    tools: {
+      // minimal + alsoAllow keeps the surface tight: agent only gets the two
+      // built-in web tools it actually needs, not the full coding-profile
+      // bundle (exec/process/file_write/etc). Course turn that triggers this
+      // path is purely network-driven research, no local execution.
+      profile: "minimal",
+      alsoAllow: ["web_search", "web_fetch"]
+    }
   }
 };
 

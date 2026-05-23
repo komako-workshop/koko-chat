@@ -12,12 +12,19 @@ import { deeplyAvatarChatBuddy, deeplyAvatarLearning } from "./avatars";
 import { DEEPLY_MINI_APP_ID } from "./constants";
 import {
   DEEPLY_COURSE_MODE_ID,
+  applyResearchOutlineToCourse,
   loadDeeplyCourseOutline,
-  loadDeeplyCourseSessionRecord
+  loadDeeplyCourseSessionRecord,
+  loadDeeplyCourseSources
 } from "./courseSession";
 import {
   buildCourseDialogPrompt,
   buildCourseMainlinePrompt,
+  buildMaterialKickoffPrompt,
+  buildResearchCourseSectionPrompt,
+  buildResearchKickoffPrompt,
+  parseDeeplyMaterialKickoff,
+  parseDeeplyResearchKickoff,
   parseMainlineUserText
 } from "./persona";
 import { getDeeplyCourseProgress } from "./courseProgress";
@@ -34,7 +41,13 @@ import {
   DEEPLY_RECOMMENDATIONS_BLOCK_TYPE,
   type DeeplyRecommendationItem
 } from "./parseRecommendations";
+import {
+  DEEPLY_RESEARCH_OUTLINE_BLOCK_TYPE,
+  isDeeplyResearchOutlineStream,
+  parseDeeplyResearchOutline
+} from "./parseResearchOutline";
 import { DeeplyRecommendationCard, isDeeplyRecommendationCard } from "./RecommendationCard";
+import { extractFencedBlock } from "@/runtime/messageBlocks";
 
 /**
  * Deeply mini-app · 注册入口
@@ -183,6 +196,92 @@ function isDeeplyRecommendationStream({ text }: { text: string }): boolean {
 }
 
 /**
+ * Course mode 的 response transformer。
+ *
+ * Research 路径:agent 在调研结束时输出一个 `koko.deeply.research.outline`
+ * fenced block。识别到就:
+ *   1. 把 fenced block 之前的 prose 留下来当 chat message 显示(narration)
+ *   2. 把 fenced block 自身**移除**(用户不需要看到 raw JSON)
+ *   3. 副作用:写 outline + sources storage、init progress、bootstrap → ready
+ *
+ * 没有 fenced block 时 return null,host 走默认 prose 渲染(普通讲解、对话)。
+ *
+ * **关键 UX:即使 parse 失败,也要剪掉 fenced block** —— 否则用户会看到
+ * 一坨 raw JSON 滚在 chat 里。失败时不写 storage、不切 bootstrap,但 chat
+ * 上显示 prose + 一条简短的人话错误,引导用户归档重开。
+ */
+function transformDeeplyCourseAgentResponse({
+  conversation,
+  runId,
+  text
+}: {
+  conversation: { id: string };
+  runId: string;
+  text: string;
+}): { messages: ChatMessage[]; preview?: string } | null {
+  const block = extractFencedBlock(text, DEEPLY_RESEARCH_OUTLINE_BLOCK_TYPE);
+  if (block === null) return null;
+
+  // 不管 parse 成不成功,fenced block 永远从可见 chat 文本里剪掉。
+  const prose = text.slice(0, block.start).trim();
+  const parsed = parseDeeplyResearchOutline(text);
+
+  if (!parsed.ok) {
+    console.warn("[deeply-course] research outline parse failed:", parsed.error);
+    const messages: ChatMessage[] = [];
+    if (prose.length > 0) {
+      messages.push({
+        id: `${runId}-prose`,
+        role: "agent",
+        text: prose,
+        runId,
+        streaming: false
+      } satisfies ChatMessage);
+    }
+    messages.push({
+      id: `${runId}-error`,
+      role: "agent",
+      text: `🚫 调研结果格式没能解析(${truncate(parsed.error, 80)})。
+你可以右上角归档这门课,然后回 Deeply 探索重新开一个 —— 同一题目重发,agent 通常二次就能 produce 正确结构。`,
+      runId,
+      streaming: false
+    } satisfies ChatMessage);
+    return {
+      messages,
+      preview: "调研结果格式错误"
+    };
+  }
+
+  applyResearchOutlineToCourse(conversation.id, parsed.value);
+
+  const messages: ChatMessage[] = [];
+  if (prose.length > 0) {
+    messages.push({
+      id: runId,
+      role: "agent",
+      text: prose,
+      runId,
+      streaming: false
+    } satisfies ChatMessage);
+  } else {
+    // 极少见:agent 把全部内容塞到了 fenced block 里没写 prose。
+    // 留一条简短确认消息,避免 chat 流里这一轮看起来什么都没说。
+    messages.push({
+      id: runId,
+      role: "agent",
+      text: `调研完成。课程目录已经准备好,你可以点下方「开始第 1 节」开始学。`,
+      runId,
+      streaming: false
+    } satisfies ChatMessage);
+  }
+  return { messages, preview: `调研完成:${parsed.value.courseTitle}` };
+}
+
+function truncate(value: string, max: number): string {
+  return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+}
+
+/**
  * 课程讲解 mode 的 outbound builder。
  *
  * 两条路径:
@@ -197,6 +296,32 @@ const deeplyCourseOutboundBuilder: OutboundMessageBuilder = async ({
   conversation,
   visibleText
 }) => {
+  // Research kickoff 比下面的 record/outline 加载更早处理 —— 这一轮
+  // outline 还没生成(它正是这一轮 agent 要产出的),所以不能被
+  // "outline null → 透传" 兜底吞掉。
+  const kickoff = parseDeeplyResearchKickoff(visibleText);
+  if (kickoff !== null) {
+    return {
+      visibleText,
+      gatewayText: buildResearchKickoffPrompt(kickoff)
+    };
+  }
+  const materialKickoff = parseDeeplyMaterialKickoff(visibleText);
+  if (materialKickoff !== null) {
+    const record = loadDeeplyCourseSessionRecord(conversation.id);
+    const material = record?.materialInput;
+    return {
+      visibleText,
+      gatewayText: buildMaterialKickoffPrompt({
+        label: material?.label ?? materialKickoff.label,
+        sections: materialKickoff.sections,
+        sourceKind: material?.sourceKind ?? "url",
+        ...(material?.url !== undefined ? { url: material.url } : {}),
+        ...(material?.attachments !== undefined ? { attachments: material.attachments } : {})
+      })
+    };
+  }
+
   const record = loadDeeplyCourseSessionRecord(conversation.id);
   const outline = loadDeeplyCourseOutline(conversation.id);
   if (record === null || outline === null) {
@@ -210,6 +335,38 @@ const deeplyCourseOutboundBuilder: OutboundMessageBuilder = async ({
     const progress = getDeeplyCourseProgress(conversation.id);
     const isFirstSection =
       progress.currentSection === 0 || progress.readSections.length === 0;
+
+    // Research 课:每节由 agent 临场基于 sources + web tools 创作内容,
+    // 走完全不同的 prompt(buildResearchCourseSectionPrompt)。
+    if (record.kind === "research") {
+      const sourcesRecord = loadDeeplyCourseSources(conversation.id);
+      // 从 per-section storage 拿到该节自己的 sources(优先);
+      // 兜底:整门课的 union sources。
+      const perSectionSources = (sectionMeta as {
+        sources?: ReadonlyArray<{
+          title: string;
+          url: string;
+          stance: "primary" | "counterpoint" | "background";
+          snippet: string;
+        }>;
+      } | undefined)?.sources ?? [];
+      const sectionSources = perSectionSources.length > 0
+        ? perSectionSources
+        : sourcesRecord?.sources ?? [];
+      return {
+        visibleText,
+        gatewayText: buildResearchCourseSectionPrompt({
+          courseTitle: record.title,
+          introduction: record.introduction,
+          section: mainlineSection,
+          sectionTitle,
+          sectionSources,
+          isFirstSection
+        })
+      };
+    }
+
+    // 普通课程:走预先定好的"核心隐喻 + 要点"展开。
     return {
       visibleText,
       gatewayText: buildCourseMainlinePrompt({
@@ -296,6 +453,19 @@ export function registerDeeplyMiniApp(): void {
   registerAgentResponseTransformer(DEEPLY_MINI_APP_ID, transformDeeplyAgentResponse, {
     shouldDeferStreamingText: isDeeplyRecommendationStream
   });
+  registerAgentResponseTransformer(DEEPLY_COURSE_MODE_ID, transformDeeplyCourseAgentResponse, {
+    // Streaming 期间,截掉 fence opener 之后的 raw JSON,只让 prose
+    // narration 可见。fence 开头标记是 ```koko.deeply.research.outline,
+    // 在用户屏幕上很丑,但 fence 之前的 prose(narration)需要持续 streaming
+    // 让用户感受到 agent 在干活。final 时不调这里,transformer 处理
+    // 完整 fullText,剪掉 fence 写 prose-only message。
+    streamingDisplayText: ({ text }) => {
+      const fenceIdx = text.indexOf("```" + DEEPLY_RESEARCH_OUTLINE_BLOCK_TYPE);
+      if (fenceIdx <= 0) return null;
+      return text.slice(0, fenceIdx).trimEnd();
+    }
+  });
+  void isDeeplyResearchOutlineStream;
   registerSharedBlockRenderer(
     DEEPLY_CARD_BLOCK_TYPE,
     isDeeplyRecommendationCard,

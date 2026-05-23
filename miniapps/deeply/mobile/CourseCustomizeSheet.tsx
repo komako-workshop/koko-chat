@@ -15,7 +15,11 @@ import {
   closeDeeplyCustomizeSheet,
   useDeeplyCustomizeSheetState
 } from "./customizeSheetStore";
-import { startDeeplyResearchCourse } from "./courseSession";
+import { useGatewayStore, type OpenClawChatAttachment } from "@/state/gateway";
+import {
+  startDeeplyMaterialCourse,
+  startDeeplyResearchCourse
+} from "./courseSession";
 
 const SHEET_BG = "#FFFFFF";
 const SHEET_BACKDROP = "rgba(17,17,17,0.45)";
@@ -31,6 +35,7 @@ const CARD_BORDER_ACTIVE = "#111111";
 const SHEET_TRANSLATE_INITIAL = 540;
 
 type SectionPreset = "light" | "standard" | "deep";
+type CustomizeMode = "research" | "material";
 
 const SECTION_PRESETS: { id: SectionPreset; label: string; sections: number; hint: string }[] = [
   { id: "light", label: "轻量", sections: 12, hint: "通勤路上能听完" },
@@ -74,7 +79,11 @@ function CourseCustomizeSheet({
   conversationId,
   onClose
 }: CourseCustomizeSheetProps): React.ReactElement {
+  const prepareFileAttachments = useGatewayStore((s) => s.prepareFileAttachments);
+  const [mode, setMode] = useState<CustomizeMode>("research");
   const [topic, setTopic] = useState("");
+  const [materialUrl, setMaterialUrl] = useState("");
+  const [materialFiles, setMaterialFiles] = useState<File[]>([]);
   const [sectionPreset, setSectionPreset] = useState<SectionPreset>("standard");
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +110,11 @@ function CourseCustomizeSheet({
   }, [anim, onClose]);
 
   const trimmed = topic.trim();
-  const canStart = trimmed.length >= 2 && !starting;
+  const materialUrlTrimmed = materialUrl.trim();
+  const hasMaterial = materialUrlTrimmed.length > 0 || materialFiles.length > 0;
+  const canStart =
+    !starting &&
+    (mode === "research" ? trimmed.length >= 2 : hasMaterial);
 
   const handleStart = useCallback(async () => {
     if (!canStart) return;
@@ -109,19 +122,63 @@ function CourseCustomizeSheet({
     setError(null);
     try {
       const preset = SECTION_PRESETS.find((p) => p.id === sectionPreset);
-      await startDeeplyResearchCourse({
-        topic: trimmed,
-        sectionPreset,
-        sections: preset?.sections ?? 24,
-        parentConversationId: conversationId
-      });
+      const sections = preset?.sections ?? 24;
+      if (mode === "research") {
+        await startDeeplyResearchCourse({
+          topic: trimmed,
+          sectionPreset,
+          sections,
+          parentConversationId: conversationId
+        });
+      } else {
+        let attachments: OpenClawChatAttachment[] = [];
+        if (materialFiles.length > 0) {
+          attachments = await prepareFileAttachments(materialFiles);
+        }
+        const label = materialUrlTrimmed.length > 0
+          ? materialUrlTrimmed
+          : materialFiles.map((f) => f.name).join("、");
+        await startDeeplyMaterialCourse({
+          label,
+          sourceKind: materialUrlTrimmed.length > 0 ? "url" : "file",
+          ...(materialUrlTrimmed.length > 0 ? { url: materialUrlTrimmed } : {}),
+          ...(attachments.length > 0 ? { attachments } : {}),
+          sectionPreset,
+          sections,
+          parentConversationId: conversationId
+        });
+      }
       handleClose();
     } catch (err) {
       console.error("[deeply] start research course failed", err);
       setError(err instanceof Error ? err.message : String(err));
       setStarting(false);
     }
-  }, [canStart, conversationId, handleClose, sectionPreset, trimmed]);
+  }, [
+    canStart,
+    conversationId,
+    handleClose,
+    materialFiles,
+    materialUrlTrimmed,
+    mode,
+    sectionPreset,
+    trimmed,
+    prepareFileAttachments
+  ]);
+
+  const handlePickFiles = useCallback(() => {
+    if (typeof document === "undefined") {
+      setError("当前移动端文件选择还没接 expo-document-picker；先用链接或 Web 端上传文件。");
+      return;
+    }
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.onchange = () => {
+      setMaterialFiles(Array.from(input.files ?? []));
+    };
+    input.click();
+  }, []);
 
   const backdropOpacity = anim.interpolate({
     inputRange: [0, 1],
@@ -167,32 +224,107 @@ function CourseCustomizeSheet({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          <View style={styles.modeGrid}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: mode === "research" }}
+              onPress={() => setMode("research")}
+              style={({ pressed }) => [
+                styles.modeCard,
+                mode === "research" && styles.modeCardActive,
+                pressed && styles.modeCardPressed
+              ]}
+            >
+              <Text style={styles.modeIcon}>🔍</Text>
+              <Text style={styles.modeTitle}>深度调研</Text>
+              <Text style={styles.modeSubtitle}>围绕主题搜资料定课</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: mode === "material" }}
+              onPress={() => setMode("material")}
+              style={({ pressed }) => [
+                styles.modeCard,
+                mode === "material" && styles.modeCardActive,
+                pressed && styles.modeCardPressed
+              ]}
+            >
+              <Text style={styles.modeIcon}>📎</Text>
+              <Text style={styles.modeTitle}>基于你的资料</Text>
+              <Text style={styles.modeSubtitle}>链接或本地文件</Text>
+            </Pressable>
+          </View>
+
           <View style={styles.activeCard}>
             <View style={styles.cardHeader}>
-              <Text style={styles.cardIcon}>🔍</Text>
+              <Text style={styles.cardIcon}>{mode === "research" ? "🔍" : "📎"}</Text>
               <View style={styles.cardHeaderText}>
-                <Text style={styles.cardTitle}>深度调研一个主题</Text>
+                <Text style={styles.cardTitle}>
+                  {mode === "research" ? "深度调研一个主题" : "基于你的资料"}
+                </Text>
                 <Text style={styles.cardSubtitle}>
-                  我会先去做调研,综合多方资料后再为你定一份带引用的课程
+                  {mode === "research"
+                    ? "我会先去做调研,综合多方资料后再为你定一份带引用的课程"
+                    : "贴一个链接,或选择本地文件,我会把它交给 OpenClaw 读成课程"}
                 </Text>
               </View>
             </View>
 
-            <View style={styles.formBlock}>
-              <Text style={styles.formLabel}>主题</Text>
-              <TextInput
-                value={topic}
-                onChangeText={setTopic}
-                placeholder="比如:GLP-1 减肥药的争议 / 中东冲突最近三个月的演变"
-                placeholderTextColor={SHEET_INK_MUTED}
-                editable={!starting}
-                multiline
-                style={styles.topicInput}
-              />
-              <Text style={styles.formHint}>
-                越具体越好。带时间范围 / 视角 / 想解决的问题,调研质量会高很多。
-              </Text>
-            </View>
+            {mode === "research" ? (
+              <View style={styles.formBlock}>
+                <Text style={styles.formLabel}>主题</Text>
+                <TextInput
+                  value={topic}
+                  onChangeText={setTopic}
+                  placeholder="比如:GLP-1 减肥药的争议 / 中东冲突最近三个月的演变"
+                  placeholderTextColor={SHEET_INK_MUTED}
+                  editable={!starting}
+                  multiline
+                  style={styles.topicInput}
+                />
+                <Text style={styles.formHint}>
+                  越具体越好。带时间范围 / 视角 / 想解决的问题,调研质量会高很多。
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.formBlock}>
+                <Text style={styles.formLabel}>资料链接</Text>
+                <TextInput
+                  value={materialUrl}
+                  onChangeText={setMaterialUrl}
+                  placeholder="https://example.com/article 或留空只上传文件"
+                  placeholderTextColor={SHEET_INK_MUTED}
+                  editable={!starting}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.topicInput}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handlePickFiles}
+                  disabled={starting}
+                  style={({ pressed }) => [
+                    styles.fileButton,
+                    pressed && styles.fileButtonPressed
+                  ]}
+                >
+                  <Text style={styles.fileButtonText}>
+                    {materialFiles.length === 0
+                      ? "选择本地文件"
+                      : `已选择 ${materialFiles.length} 个文件`}
+                  </Text>
+                </Pressable>
+                {materialFiles.length > 0 ? (
+                  <Text style={styles.formHint} numberOfLines={2}>
+                    {materialFiles.map((f) => f.name).join("、")}
+                  </Text>
+                ) : (
+                  <Text style={styles.formHint}>
+                    文件会先上传到 OpenClaw Gateway,agent 会拿到 MEDIA 路径后读取/解析。
+                  </Text>
+                )}
+              </View>
+            )}
 
             <View style={styles.formBlock}>
               <Text style={styles.formLabel}>讲多长</Text>
@@ -246,16 +378,6 @@ function CourseCustomizeSheet({
               </Text>
             </View>
           </View>
-          <View style={styles.ghostCard}>
-            <Text style={styles.ghostIcon}>🧩</Text>
-            <View style={styles.ghostBody}>
-              <Text style={styles.ghostTitle}>解开一个困惑</Text>
-              <Text style={styles.ghostSubtitle}>
-                描述卡点,出一份针对性短课(5-8 节)
-              </Text>
-            </View>
-          </View>
-
           {error !== null ? (
             <Text style={styles.errorBody}>启动失败:{error}</Text>
           ) : null}
@@ -264,7 +386,7 @@ function CourseCustomizeSheet({
         <View style={styles.footer}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="开始调研"
+            accessibilityLabel={mode === "research" ? "开始调研" : "开始读取资料"}
             disabled={!canStart}
             onPress={() => void handleStart()}
             style={({ pressed }) => [
@@ -276,7 +398,9 @@ function CourseCustomizeSheet({
             {starting ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Text style={styles.startButtonText}>开始调研</Text>
+              <Text style={styles.startButtonText}>
+                {mode === "research" ? "开始调研" : "开始读取资料"}
+              </Text>
             )}
           </Pressable>
         </View>
@@ -359,6 +483,43 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 16
   },
+  modeGrid: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12
+  },
+  modeCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#FFFFFF"
+  },
+  modeCardActive: {
+    borderColor: CARD_BORDER_ACTIVE,
+    backgroundColor: "#FAFAF8"
+  },
+  modeCardPressed: {
+    opacity: 0.75
+  },
+  modeIcon: {
+    fontSize: 18,
+    lineHeight: 22,
+    marginBottom: 6
+  },
+  modeTitle: {
+    color: SHEET_INK,
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  modeSubtitle: {
+    marginTop: 2,
+    color: SHEET_INK_MUTED,
+    fontSize: 11,
+    lineHeight: 16
+  },
   activeCard: {
     borderWidth: 1.5,
     borderColor: CARD_BORDER_ACTIVE,
@@ -417,6 +578,21 @@ const styles = StyleSheet.create({
     color: SHEET_INK_MUTED,
     fontSize: 12,
     lineHeight: 18
+  },
+  fileButton: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    backgroundColor: SHEET_CHIP_BG_ACTIVE,
+    paddingHorizontal: 14,
+    paddingVertical: 10
+  },
+  fileButtonPressed: {
+    opacity: 0.8
+  },
+  fileButtonText: {
+    color: SHEET_CHIP_TEXT_ACTIVE,
+    fontSize: 13,
+    fontWeight: "700"
   },
   chipRow: {
     flexDirection: "row",

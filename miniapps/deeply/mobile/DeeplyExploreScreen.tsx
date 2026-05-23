@@ -26,6 +26,10 @@ import {
 import { deeplyAvatarChatBuddy } from "./avatars";
 import { BlinkingCursor, DeeplyPulse } from "./DeeplyPulse";
 import { DEEPLY_MINI_APP_ID } from "./constants";
+import {
+  startDeeplyMaterialCourse,
+  startDeeplyResearchCourse
+} from "./courseSession";
 import { DeeplyCourseSheetMount } from "./CourseDetailSheet";
 import { DeeplyCustomizeSheetMount } from "./CourseCustomizeSheet";
 import { openDeeplyCustomizeSheet } from "./customizeSheetStore";
@@ -100,6 +104,66 @@ export function DeeplyExploreScreen({
     }, 16);
     return () => clearTimeout(t);
   }, [messages.length]);
+
+  // Dev auto-trigger:agent 用 osascript 改 URL hash 触发 kickoff 用。
+  // 支持:
+  //   - `koko_run_research_topic`
+  //   - `koko_run_material_url`
+  // 等 gateway connected 后自动 start course → 清 query param。
+  // 只在 web + 已连接时跑,一次性,刷掉 query 后不会再触发。
+  const autoRunFiredRef = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (autoRunFiredRef.current) return;
+    if (!isConnected) return;
+    if (conversationId === null) return;
+    const params = new URLSearchParams(window.location.search);
+    const topic = params.get("koko_run_research_topic");
+    const sectionsRaw = params.get("koko_run_research_sections");
+    if (topic !== null && topic.length > 0) {
+      const sections = Number(sectionsRaw);
+      if (!Number.isFinite(sections) || sections <= 0) return;
+      autoRunFiredRef.current = true;
+      params.delete("koko_run_research_topic");
+      params.delete("koko_run_research_sections");
+      const qs = params.toString();
+      history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${qs.length > 0 ? `?${qs}` : ""}`
+      );
+      void startDeeplyResearchCourse({
+        topic,
+        sections,
+        sectionPreset: "standard",
+        parentConversationId: conversationId
+      });
+      return;
+    }
+
+    const materialUrl = params.get("koko_run_material_url");
+    const materialSectionsRaw = params.get("koko_run_material_sections");
+    if (materialUrl === null || materialUrl.length === 0) return;
+    const sections = Number(materialSectionsRaw);
+    if (!Number.isFinite(sections) || sections <= 0) return;
+    autoRunFiredRef.current = true;
+    params.delete("koko_run_material_url");
+    params.delete("koko_run_material_sections");
+    const qs = params.toString();
+    history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${qs.length > 0 ? `?${qs}` : ""}`
+    );
+    void startDeeplyMaterialCourse({
+      label: materialUrl,
+      sourceKind: "url",
+      url: materialUrl,
+      sections,
+      sectionPreset: "standard",
+      parentConversationId: conversationId
+    });
+  }, [isConnected, conversationId]);
 
   async function dispatch(text: string): Promise<void> {
     const trimmed = text.trim();

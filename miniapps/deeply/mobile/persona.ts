@@ -331,6 +331,338 @@ export function buildContinueSectionUserText(section: number): string {
   return `继续讲解第${section}节`;
 }
 
+/**
+ * Research 课程专用的 mainline 讲解 prompt。跟普通课程的关键区别:
+ *
+ *   - 普通课程:agent 收到 "讲解第 N 节" → 完全靠 training data + outline
+ *     里准备好的"核心隐喻 + 要点"展开。无外部工具。
+ *
+ *   - Research 课程:**准备阶段**只给出 N 节标题 + 每节关联的 source 指针,
+ *     不写"要点"。**讲解阶段**(这个函数生成的 prompt),agent 看到当前节
+ *     标题 + 该节 sources + 整门课的 introduction,**鼓励它再次调
+ *     web_search / web_fetch 临场基于真实材料创作内容**,而不是回退到
+ *     training data 的泛通论。
+ *
+ * 这样研报课程的每一节都是当下重新调研的产物,而不是 outline 时已经决定
+ * 好的成品,适合时效性强 / training data 没覆盖的主题(2026 年的 AI 投资、
+ * 上周的地缘事件、刚发表的论文之类)。
+ */
+export function buildResearchCourseSectionPrompt(input: {
+  courseTitle: string;
+  introduction: string;
+  section: number;
+  sectionTitle: string;
+  sectionSources: ReadonlyArray<{
+    title: string;
+    url: string;
+    stance: "primary" | "counterpoint" | "background";
+    snippet: string;
+  }>;
+  isFirstSection: boolean;
+}): string {
+  const firstSectionLine = input.isFirstSection
+    ? "这是这门课的第一节,你可以用 1-2 句作为整门课的开场,再切入本节内容。"
+    : "前面已经讲过若干节,直接从本节切入即可,不要重复整门课的开场。";
+
+  const sourcesBlock = input.sectionSources.length === 0
+    ? "(本节准备阶段没有挂资料指针 —— 你可以现场用 web_search 找几条再讲。)"
+    : input.sectionSources
+        .map((s) => {
+          const stanceTag = s.stance === "primary"
+            ? "主流"
+            : s.stance === "counterpoint"
+              ? "反对"
+              : "背景";
+          return `- [${stanceTag}] [${s.title}](${s.url})\n  调研笔记:${s.snippet}`;
+        })
+        .join("\n");
+
+  return `<deeply_course_persona>
+${DEEPLY_COURSE_PERSONA_DOC}
+</deeply_course_persona>
+
+<course_meta>
+- 课程标题:${input.courseTitle}
+- 课程介绍:${input.introduction}
+</course_meta>
+
+[系统注入 · 你在讲解一门"深度调研"型课程,跟普通讲书课不同]
+
+这门课是**研报模式**:准备阶段已经把每节标题和资料指针定好了,**本节的具体讲解内容由你这一轮临场创作**,而不是从准备好的"核心隐喻 / 要点"展开。你**可以并且鼓励**在讲解前用 web_search / web_fetch 再补几下,确保用到的是最新的、跟用户问题最相关的材料。
+
+# 本节准备阶段挂的资料
+
+<section_sources index="${input.section}" title="${input.sectionTitle}">
+${sourcesBlock}
+</section_sources>
+
+# 工具
+
+你这一轮有两个工具:
+
+- \`web_search({ query, count })\` —— 推荐在讲解前用 1-2 次。query 用英文关键词。**特别推荐**:针对本节标题做一次更聚焦的搜索,看看有没有比准备阶段更新或者更对题的资料。
+- \`web_fetch({ url })\` —— 推荐挑准备阶段挂的 1-2 个 primary source(或者刚 search 到的最有价值的一条)抓正文,这样你讲解时引用的是真实段落,而不是 snippet 一句话。
+
+工具调用之间和工具调用之后,要有中文 prose narration(每段末尾打 \`〔KP〕\` sentinel) —— 用户能看到你 fetch 资料、读资料、综合的过程,这是研报课程的核心体验。
+
+# 格式要求(严格遵守)
+
+你的回复**第一行必须且只能是**:
+
+## 第${input.section}节:${input.sectionTitle}
+
+之后再开始讲解。
+
+- 第一行前不允许有任何其它文字、空行、emoji、引号、编号。
+- 必须用中文冒号 ":"。
+- ${firstSectionLine}
+
+# 讲解风格
+
+- 遵守"诠释者人设":一次只讲透一个洞见,留白等用户消化,排版讲究呼吸感(短段落 / 引用 / 列表)。
+- 讲到具体观点 / 数据 / 实验时,**自然地引用 sources**:用 markdown 链接形式 \`[来源标题](url)\`,1-3 次,不要堆砌。引用要来自上面 \`section_sources\` 或者你刚 web_search / web_fetch 拿到的真实 url,不要编造别的 url。
+- 讲完本节内容后只附:**1-2 句收尾凝缩** + **一句承接下一节** 即可。**不要列"好奇点 / 延伸问题 / 你可以问…"等候选追问列表** —— 界面会自动出快捷回复 chip。
+- 整段 markdown 正文不要用三反引号代码块,不要主动输出任何 \`\`\`koko.deeply.*\`\`\` fenced block。
+
+# 段落分隔(同 kickoff,强制)
+
+OpenClaw wire 层会把多 tool call 之间的 prose 合并成一个 text block,会 strip 段尾 \`\\n\\n\`,导致客户端看到一坨连续文字。**修法:每段中文 prose(包括讲解正文中的段落)末尾打一个 \`〔KP〕\` sentinel**。客户端会替换为段落分隔符,marker 不显示。
+
+[用户消息]
+继续讲解第${input.section}节。
+`;
+}
+
+/**
+ * 深度调研课程 kickoff 的固定话。客户端在 DeeplyCourseScreen 首次进入
+ * research kind 课程时自动 dispatch 这条作为第一条 user message,
+ * outbound builder + AGENTS.md (deeply agent) + kokochat-deeply-research
+ * skill 三处都按这个 regex 识别 research 路径。
+ *
+ * 故意保持人话格式 —— 它也是用户视角下 chat 流的第一条 user 气泡,
+ * 让用户看到自己刚才在 sheet 里的请求自然变成对 agent 的喊话,
+ * 比 "[system: start research]" 那种黑话气泡更有契约感。
+ */
+export function buildResearchKickoffVisibleText(input: {
+  topic: string;
+  sections: number;
+}): string {
+  return `请围绕「${input.topic}」做一份 ${input.sections} 节的深度调研课程`;
+}
+
+const DEEPLY_RESEARCH_KICKOFF_REGEX = /^请围绕「(.+?)」做一份\s*(\d+)\s*节的深度调研课程\s*$/;
+const DEEPLY_MATERIAL_KICKOFF_REGEX = /^请基于我提供的资料「(.+?)」做一份\s*(\d+)\s*节的深度学习课程\s*$/;
+
+export function parseDeeplyResearchKickoff(
+  text: string
+): { topic: string; sections: number } | null {
+  const m = text.trim().match(DEEPLY_RESEARCH_KICKOFF_REGEX);
+  if (m === null) return null;
+  const topic = (m[1] ?? "").trim();
+  const sections = Math.trunc(Number(m[2]));
+  if (topic.length === 0 || !Number.isFinite(sections) || sections <= 0) return null;
+  return { topic, sections };
+}
+
+export function buildMaterialKickoffVisibleText(input: {
+  label: string;
+  sections: number;
+}): string {
+  return `请基于我提供的资料「${input.label}」做一份 ${input.sections} 节的深度学习课程`;
+}
+
+export function parseDeeplyMaterialKickoff(
+  text: string
+): { label: string; sections: number } | null {
+  const m = text.trim().match(DEEPLY_MATERIAL_KICKOFF_REGEX);
+  if (m === null) return null;
+  const label = (m[1] ?? "").trim();
+  const sections = Math.trunc(Number(m[2]));
+  if (label.length === 0 || !Number.isFinite(sections) || sections <= 0) return null;
+  return { label, sections };
+}
+
+/**
+ * Research kickoff 的 gatewayText 包装。
+ *
+ * AGENTS.md (deeply agent) 已经告诉 agent "看到这种 user message 就按
+ * kokochat-deeply-research skill 走",这里只是 reinforce 一下节数 + skill
+ * 关键步骤,避免 agent 在没拿到 skill 上下文时跑偏。
+ */
+export function buildResearchKickoffPrompt(input: {
+  topic: string;
+  sections: number;
+}): string {
+  const visible = buildResearchKickoffVisibleText({
+    topic: input.topic,
+    sections: input.sections
+  });
+  return `[系统注入 · 深度调研课程 kickoff]
+
+用户从 KokoChat Deeply mini-app 的「定制课程」入口提交了一个深度调研主题。
+按 \`kokochat-deeply-research\` skill 的"Narration Pattern (Required)"流程办。
+
+# 调研工具
+
+你有两个 OpenClaw 内置 web 工具(已经在 deeply agent 的 allowlist 里):
+
+- \`web_search({ query: "EN keywords", count: 1-10 })\` —— 通过 gateway 配置的搜索 provider(目前 Brave)做 web 搜索,返回 title / url / snippet。**最多调 3 次**,每次换不同角度(主流 → 反方 → 背景 / 不同关键词组)。
+- \`web_fetch({ url: "..." })\` —— 抓某个具体 URL 的正文。**少用**,只在 snippet 不够、需要看正文确认某个具体说法时调一次。
+
+**最终 sources 数组里所有 url 必须来自 web_search / web_fetch 的真实返回 —— 不要编造 URL。** 没找到合适来源,宁可少 cite,也不要编。
+
+# Prose 节奏
+
+1. 用一两句中文 prose 开场,确认主题、说你打算从哪个角度先切入。
+2. 每次调 web_search / web_fetch 之前不要沉默 —— 一定先有一段 1-2 句的 prose 说"接下来我去看 X"。
+3. 工具返回后用 2-4 句 prose 汇报本轮找到了什么、是否有 surprise、下一步打算搜什么。
+4. 综合段(3-5 句 prose):总结 landscape,说出本课要走的视角。
+
+# 段落分隔(强制 · 用一个特殊 sentinel marker)
+
+OpenClaw 在 wire 层把多次 tool call 之间的 commentary phase prose **合并成一个 text block** 推给客户端,合并时会 **strip 段尾的 \`\\n\\n\`**,导致所有 prose 段在用户屏幕上粘成一坨连续文字。
+
+**修法:每段 prose 末尾打一个 sentinel marker \`〔KP〕\`**(中文鱼尾括号包 "KP"),客户端会 detect 这个 marker 把它**替换为段落分隔符**,marker 本身不显示。这样无论 OpenClaw 如何合并,段边界都能保住。
+
+强制要求:
+
+- 开场 prose 末尾打 \`〔KP〕\`
+- 每个 mid prose(tool 之间的汇报段)末尾打 \`〔KP〕\`
+- 综合段末尾打 \`〔KP〕\`
+- 然后才接 fenced block
+
+\`〔KP〕\` 是 ASCII-safe 之外的固定 4 字符 sentinel,不会出现在你的正文里。打 marker 不影响阅读 —— 客户端在渲染前 strip 掉。
+
+**正例**:
+
+\`\`\`
+我先去搜主流综述。〔KP〕
+找到了 6 篇,主线一致 —— 三个机制聚到一起。〔KP〕
+下一步我去搜反对意见。〔KP〕
+\`\`\`
+
+# Outline fenced block(只准备目录,不写完整讲解内容)
+
+这是**研报模式**的关键 —— 你这一轮是**准备阶段**,不是讲解阶段。讲解会发生在用户每点"开始第 N 节"时,**那时**会给你一个新的 turn,允许你再调 web_search / web_fetch 临场基于实时材料创作内容。所以**这一轮不要把每节的内容讲透**,只:
+
+1. 决定课程的总题目和简介
+2. 拆出 N 节(每节一个标题)
+3. **为每节准备一个资料指针清单(从你刚才 web_search / web_fetch 拿到的真实 url 里挑)**
+
+输出严格按这个 JSON schema(字段名必填,不要 alias):
+
+\`\`\`json
+{
+  "version": 1,
+  "courseTitle": "课程标题",
+  "introduction": "200-600 中文字课程介绍,直接当 Deeply 课程介绍渲染。点出本课会回答什么、为什么这个时间点值得看、有哪些主要争议或视角。",
+  "sections": [
+    {
+      "index": 1,
+      "title": "第 1 节标题",
+      "sources": [
+        { "title": "原始来源标题", "url": "https://...", "stance": "primary", "snippet": "<=80 字中文转述这条来源对**这一节**为什么重要" }
+      ]
+    }
+  ],
+  "outlineMarkdown": "## 第1节:标题\\n- [primary] 资料标题 — https://...\\n- [counterpoint] 资料标题 — https://...\\n\\n## 第2节:..."
+}
+\`\`\`
+
+字段要求:
+
+- \`courseTitle\` 必填,5-60 字
+- \`introduction\` 必填,200-600 字。**这是用户进课程页第一眼看到的简介**,缺它 UX 残缺。
+- \`sections\` 必填,4-${input.sections + 4} 项之间(允许 ±20% 浮动)。每节:
+  - \`title\` 8-30 中文字
+  - \`sources\` **每节 2-4 条**,每条 \`{ title, url, stance, snippet }\`。**url 必须来自 web_search / web_fetch 实际返回**,不许编造。stance 是 \`primary\` / \`counterpoint\` / \`background\` 之一。snippet 是中文转述,**说明这条资料对这一节为什么有用**(不是泛泛简介,而是"这一节用得上"的角度),不超过 80 字。
+  - **不要写"核心隐喻"或"要点"**。这一轮你不写讲解内容,讲解交给将来的 mainline turn 临场创作。
+- \`outlineMarkdown\` 必填,严格格式:每节 \`## 第N节:标题\` + 每条资料一行 \`- [stance] 资料标题 — url\`(纯文本列表,不再有"核心隐喻 / 要点")。**不要再用三反引号包裹这段**,它在外层 JSON 字符串里。
+
+# 节数
+
+总节数 ${input.sections} ± 20%,以课题自然结构为准。
+
+fenced block 之后**不要再写任何文字**。
+
+[用户消息]
+${visible}`;
+}
+
+export function buildMaterialKickoffPrompt(input: {
+  label: string;
+  sections: number;
+  sourceKind: "url" | "file";
+  url?: string;
+  attachments?: ReadonlyArray<{
+    name?: string;
+    mimeType?: string;
+  }>;
+}): string {
+  const visible = buildMaterialKickoffVisibleText({
+    label: input.label,
+    sections: input.sections
+  });
+  const mediaBlock = (input.attachments ?? [])
+    .map((item, index) => {
+      const meta: string[] = [];
+      if (item.name !== undefined) meta.push(`name=${item.name}`);
+      if (item.mimeType !== undefined) meta.push(`mime=${item.mimeType}`);
+      return `${index + 1}. 附件 ${meta.length > 0 ? `(${meta.join(", ")})` : ""}`;
+    })
+    .join("\n");
+
+  return `[系统注入 · 基于用户资料的课程 kickoff]
+
+用户从 KokoChat Deeply mini-app 的「基于你的资料」入口提交了材料。
+这条路径和普通调研课不同:这里的核心不是搜索全网,而是**围绕用户给的 URL / 文件做课程化整理**。
+
+# 用户提供的资料
+
+- 资料标题/标签:${input.label}
+- 来源类型:${input.sourceKind === "url" ? "URL" : "文件"}
+${input.url !== undefined ? `- URL:${input.url}` : ""}
+${mediaBlock.length > 0 ? `- 文件附件:\n${mediaBlock}` : ""}
+
+# 工具与材料读取
+
+${input.sourceKind === "url"
+    ? `1. 先用 \`web_fetch({ url: "${input.url ?? ""}" })\` 抓正文。若抓取失败,再用 \`web_search\` 搜这个页面标题/域名,找同一资料或可靠摘要。`
+    : `1. 这条 chat.send 附带了文件 attachments。OpenClaw 会把文件 offload/stage 到 agent 可读路径。请优先读取/解析用户提供的文件本身;如果文件解析失败,直接告诉用户而不是编造内容。`}
+2. 可以用 \`web_search\` 做少量背景补充,但课程主线必须来自用户提供的资料,不要喧宾夺主。
+3. 如果资料很长,先建立目录/主题索引,再挑出适合拆课的 5-20 个核心段落/概念。
+
+# 准备阶段交付
+
+你这一轮只做准备,不讲完整课程。但 **fenced block 之前必须有 2-4 段中文 narration**:
+
+1. 第一段:说明你正在读取/分析用户给的资料。〔KP〕
+2. 第二段:概括这份资料的结构(它主要讲哪几块)。〔KP〕
+3. 第三段:说明你会如何把它拆成课程。〔KP〕
+
+每段末尾都必须有 \`〔KP〕\` sentinel。不要直接上 fenced block。
+
+然后输出一个 \`koko.deeply.research.outline\` fenced block:
+
+- \`courseTitle\`:围绕这份资料的课程标题
+- \`introduction\`:200-600 字,说明这份资料讲什么、为什么值得学、课程怎么组织
+- \`sections\`:${input.sections} ± 20% 节。每节必须有 2-4 条 \`sources\`:
+  - URL 资料:source.url 用该 URL 或你 web_fetch/web_search 得到的真实 URL
+  - 文件资料:source.url 可以使用 agent 看到的文件路径 / MEDIA 引用 / 原始文件名;snippet 必须说明这条资料对应文件中的哪个部分/页码/标题/段落
+  - source.stance 必须是 \`primary\` / \`counterpoint\` / \`background\` 之一。基于同一份资料的主要段落通常用 \`primary\`,补充背景资料用 \`background\`,反方/限制用 \`counterpoint\`。
+  - 每条 source 的 snippet 是「这一节会用到什么材料」,不是泛泛摘要
+- \`outlineMarkdown\`:每节 \`## 第N节:标题\` + \`- [stance] 资料标题 — url\`
+
+# 段落分隔
+
+每段可见 prose 末尾打 \`〔KP〕\` sentinel,客户端会替换成段落分隔。
+
+fenced block 之后不要再写任何文字。
+
+[用户消息]
+${visible}`;
+}
+
 const COURSE_MAINLINE_USER_REGEX = /^继续\s*讲解\s*第\s*(\d{1,4})\s*节\s*$/;
 const COURSE_JUMP_USER_REGEX = /^请\s*讲解\s*第\s*(\d{1,4})\s*节(?:\s*[:：]\s*.+)?\s*$/;
 
@@ -360,10 +692,24 @@ export function buildCourseMainlinePrompt(input: {
   section: number;
   sectionTitle: string;
   isFirstSection: boolean;
+  /**
+   * Research 路径的课程才会传:agent 在调研阶段拿到的 sources。
+   * 注入到 prompt 里,讲解时可以自然 cite。普通 topic 课程 sources
+   * 不传(undefined),agent 按 persona 默认讲解,不强制 cite。
+   */
+  sources?: ReadonlyArray<{
+    title: string;
+    url: string;
+    stance: "primary" | "counterpoint" | "background";
+    snippet: string;
+  }>;
 }): string {
   const firstSectionLine = input.isFirstSection
     ? "这是这门课的第一节,你可以用 1-2 句作为整门课的开场,再切入本节内容。"
     : "前面已经讲过若干节,直接从本节切入即可,不要重复整门课的开场。";
+
+  const sourcesBlock = renderSourcesBlock(input.sources);
+
   return `<deeply_course_persona>
 ${DEEPLY_COURSE_PERSONA_DOC}
 </deeply_course_persona>
@@ -376,7 +722,7 @@ ${DEEPLY_COURSE_PERSONA_DOC}
 <course_outline>
 ${input.outlineMarkdown}
 </course_outline>
-
+${sourcesBlock}
 [系统注入 · 你正在沿着上面的课程目录推进主线]
 
 现在必须开始讲解 **第 ${input.section} 节**。
@@ -399,9 +745,41 @@ ${input.outlineMarkdown}
 - 讲完本节内容后只附:**1-2 句收尾凝缩** + **一句承接下一节** 即可。
   **不要列"好奇点 / 延伸问题 / 你可以问…"等候选追问列表**——
   界面会自动出快捷回复 chip,不要在正文里再列一遍。
+${input.sources !== undefined && input.sources.length > 0
+    ? `- 这是一门带调研的课。讲到具体观点 / 数据 / 实验时,**自然地** cite 上面 \`<course_sources>\` 里的一条:用 markdown 链接形式,例如 \`[Nature Reviews 2024](https://...)\`。
+  - 一节里 cite 1-3 次就够,不要堆砌。
+  - 不要在正文末尾整一段 "参考资料",cite 散在讲解里更读得下去。
+  - 不要 cite \`<course_sources>\` 之外的 url —— 别的你都没读过,不许编造。`
+    : ""}
 
 [用户消息]
 继续讲解第${input.section}节。
+`;
+}
+
+function renderSourcesBlock(
+  sources:
+    | ReadonlyArray<{
+        title: string;
+        url: string;
+        stance: "primary" | "counterpoint" | "background";
+        snippet: string;
+      }>
+    | undefined
+): string {
+  if (sources === undefined || sources.length === 0) return "";
+  const lines = sources.map((s) => {
+    const stanceTag = s.stance === "primary"
+      ? "主流"
+      : s.stance === "counterpoint"
+        ? "反对"
+        : "背景";
+    return `- [${stanceTag}] [${s.title}](${s.url}) — ${s.snippet}`;
+  });
+  return `
+<course_sources>
+${lines.join("\n")}
+</course_sources>
 `;
 }
 
