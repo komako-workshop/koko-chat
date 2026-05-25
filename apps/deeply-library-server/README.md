@@ -30,53 +30,50 @@ pnpm --filter @koko/deeply-library-server dev
 
 ## 生产部署
 
-跟 `koko-relay` 共用一台阿里云 ECS,代码独立。
-公网入口走 **Cloudflare Tunnel**(免配置域名 / 证书,cloudflared 给出
-一个 `https://*.trycloudflare.com` 或 named tunnel 子域名)。
+跑在 Komako exchange 服务器(deeply.plus host),Caddy 接 :443 反代到本地
+`127.0.0.1:8788`。客户端 API base 为 `https://deeply.plus`。
 
 ### 一次性部署
 
 ```bash
-# 1. 服务器拉最新代码 + 安装依赖
-ssh koko
-cd /opt/koko-chat
-git pull
-cd apps/deeply-library-server
-pnpm install --prod
+ssh exchange
+sudo mkdir -p /opt/koko-chat && sudo chown ecs-user:ecs-user /opt/koko-chat
+cd /opt && git clone https://github.com/komako-workshop/koko-chat.git
+cd /opt/koko-chat/apps/deeply-library-server
+npm install --omit=dev --no-audit --no-fund
 
-# 2. 装 systemd unit 跑 server(监听 127.0.0.1 之外也允许,但 cloudflared
-#    会从 127.0.0.1:8788 反代过去,所以理论上也可锁 127.0.0.1)
-cp deploy/kokochat-library.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now kokochat-library
-systemctl status kokochat-library --no-pager
-curl -s http://127.0.0.1:8788/healthz
+# 装 systemd unit
+sudo cp deploy/kokochat-library.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now kokochat-library
+sudo systemctl status kokochat-library --no-pager
+curl -s http://127.0.0.1:8788/healthz   # {"ok":true,...}
 
-# 3. 装 cloudflared + 起 tunnel(只需一次)
-#    详见 deploy/cloudflared-setup.md
+# Caddyfile:在 deeply.plus 块里 vercel_pages 之后、godbti 之前加
+#   @library path /library/* /healthz
+#   handle @library {
+#     reverse_proxy 127.0.0.1:8788
+#   }
+sudo nano /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+curl -s https://deeply.plus/healthz     # 公网验证
 ```
 
 ### 更新代码 / 数据
 
 ```bash
-ssh koko
+ssh exchange
 cd /opt/koko-chat
 git pull
 # 数据有变 -> 重启 service(in-memory load)
-systemctl restart kokochat-library
-# server.mjs 改了 -> 同上
+sudo systemctl restart kokochat-library
 ```
-
-### 系统 service 文件
-
-* `deploy/kokochat-library.service` — server 本体
-* `deploy/kokochat-library-tunnel.service` — cloudflared 出公网(named tunnel)
-* `deploy/cloudflared-setup.md` — cloudflared 首次配置指引
 
 ### Env
 
-| 变量 | 默认 | 说明 |
+| 变量 | prod 值 | 说明 |
 | --- | --- | --- |
+| `LIBRARY_HOST` | `127.0.0.1` | 监听 host。loopback 因为 Caddy 反代,不直接暴露公网 |
 | `LIBRARY_PORT` | `8788` | 监听端口 |
-| `LIBRARY_HOST` | `0.0.0.0` | 监听 host,内网或容器场景 0.0.0.0,严格 loopback 用 127.0.0.1 |
-| `LIBRARY_POOL_PATH` | `../../miniapps/deeply/data/library-pool.json` | 数据文件绝对路径 |
+| `LIBRARY_POOL_PATH` | `/opt/koko-chat/miniapps/deeply/data/library-pool.json` | 数据文件绝对路径 |

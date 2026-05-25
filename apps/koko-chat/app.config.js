@@ -64,16 +64,17 @@ const config = {
     // Deeply 课程库 API base。客户端 libraryData.ts 从这里读,不再把
     // library-pool.json 打进 bundle。
     //
-    // 默认走线上 cloudflared tunnel(dev / Expo Go / TestFlight 开箱即用)。
+    // 默认走 https://deeply.plus(部署在 Komako exchange 服务器,Caddy 反代
+    // 到本地 kokochat-library.service:8788)。dev / Expo Go / TestFlight
+    // 开箱即用,无需在本机起 server。
+    //
     // 想用本机 dev library server 改库时,export 环境变量覆盖:
     //   KOKO_DEEPLY_LIBRARY_API_BASE=http://192.168.x.x:8788 pnpm app:dev
     //
-    // 注意:当前线上是 Cloudflare *quick* tunnel,cloudflared systemd 重启
-    // 会换子域名。要切到固定 named tunnel,见
-    // apps/deeply-library-server/deploy/cloudflared-setup.md。
+    // 部署说明:apps/deeply-library-server/deploy/README-deeply-plus.md
     deeplyLibraryApiBase:
       process.env.KOKO_DEEPLY_LIBRARY_API_BASE ??
-      "https://implementing-pixels-refurbished-modified.trycloudflare.com",
+      "https://deeply.plus",
     eas: {
       projectId: "e0f1a3d6-5d11-417b-b49f-a8da8891fb5e"
     }

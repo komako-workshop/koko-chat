@@ -11,14 +11,14 @@
  *   - 列表 API 默认只返回轻量字段(给主页/分类列表用),详情 API 返回
  *     全字段(给单本详情 + 知识谱系 + 关系卡用)。
  *   - 路径前缀 `/library` 而非 `/v1/library`,后续若引入版本/auth 再前缀。
- *   - 部署上跟 koko-relay 共用一台阿里云 ECS,但代码完全独立(同 monorepo
- *     不同 apps 目录),走 systemd unit + cloudflared tunnel 出公网 HTTPS。
- *     见 `deploy/` 目录。
+ *   - prod 部署在 Komako exchange 服务器(deeply.plus 同台),systemd 守护
+ *     + Caddy 在 :443 反代 `/library/*` 到本地 `127.0.0.1:8788`。详见
+ *     `deploy/` 目录 + 包根 `README.md`。
  *
  * Env:
  *   LIBRARY_PORT     默认 8788
- *   LIBRARY_HOST     默认 0.0.0.0(LAN / 容器都能访问);如要锁回 loopback
- *                    显式设 127.0.0.1
+ *   LIBRARY_HOST     默认 0.0.0.0(LAN / 容器都能访问);prod 显式设
+ *                    127.0.0.1,Caddy 负责暴露公网
  *   LIBRARY_POOL_PATH override 数据文件路径(默认 miniapps/deeply/data/library-pool.json)
  */
 import fs from "node:fs";
