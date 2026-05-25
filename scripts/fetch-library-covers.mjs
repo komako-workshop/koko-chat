@@ -680,7 +680,8 @@ async function callOpenRouterJson({ model, messages }) {
 }
 
 async function selectImageCandidate(book, candidates, options) {
-  if (!options.llmSelect || candidates.length <= 1) return candidates[0] ?? null;
+  if (candidates.length === 0) return null;
+  if (!options.llmSelect) return candidates[0];
   const aliases = bookAliases(book);
   const payload = {
     book: {
@@ -710,6 +711,8 @@ async function selectImageCandidate(book, candidates, options) {
             "Return strict JSON only: {\"choice\": number|null, \"reason\": string}.",
             "Choose the candidate that is most likely the cover of the exact requested book.",
             "Prefer exact title and author matches. Reject unrelated books, posters, screenshots, bundles, ads, and pages that only mention the book in passing.",
+            "Reject author/person biography pages unless the page is clearly for the exact book.",
+            "When there is only one candidate, still reject it if it is not clearly the exact book cover.",
             "If none is sufficiently likely, return choice:null."
           ].join("\n")
         },
@@ -719,7 +722,10 @@ async function selectImageCandidate(book, candidates, options) {
         }
       ]
     });
-    const choice = selected?.choice;
+    const rawChoice = selected?.choice;
+    const choice = typeof rawChoice === "string" && /^\d+$/.test(rawChoice)
+      ? Number(rawChoice)
+      : rawChoice;
     if (Number.isInteger(choice) && choice >= 0 && choice < candidates.length) {
       candidates[choice].selector = {
         model: options.llmModel,
@@ -734,7 +740,7 @@ async function selectImageCandidate(book, candidates, options) {
       openRouterWarned = true;
     }
   }
-  return candidates[0] ?? null;
+  return null;
 }
 
 async function duckDuckGoImageResults(query, limiters) {
@@ -807,6 +813,45 @@ async function bingImageResults(query, limiters) {
   return out;
 }
 
+async function baiduImageResults(query, limiters) {
+  await limiters.imageSearch();
+  const url = new URL("https://image.baidu.com/search/acjson");
+  url.searchParams.set("tn", "resultjson_com");
+  url.searchParams.set("ipn", "rj");
+  url.searchParams.set("ct", "201326592");
+  url.searchParams.set("queryWord", query);
+  url.searchParams.set("cl", "2");
+  url.searchParams.set("lm", "-1");
+  url.searchParams.set("ie", "utf-8");
+  url.searchParams.set("oe", "utf-8");
+  url.searchParams.set("word", query);
+  url.searchParams.set("pn", "0");
+  url.searchParams.set("rn", "12");
+  const referer = new URL("https://image.baidu.com/search/index");
+  referer.searchParams.set("tn", "baiduimage");
+  referer.searchParams.set("word", query);
+  const res = await fetchWithRetry(url, {
+    headers: {
+      "Accept": "application/json,text/plain,*/*",
+      "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+      "Referer": referer.toString()
+    }
+  }, { attempts: 2, timeoutMs: 30_000 });
+  const json = JSON.parse(await res.text());
+  const data = Array.isArray(json.data) ? json.data : [];
+  return data
+    .filter((item) => item && typeof item.middleURL === "string")
+    .slice(0, 12)
+    .map((item) => ({
+      image: item.middleURL,
+      thumbnail: item.thumbURL,
+      title: item.fromPageTitleEnc || item.fromPageTitle || "",
+      url: item.fromURLHost ? `https://${String(item.fromURLHost).replace(/^https?:\/\//, "")}/` : "",
+      width: Number(item.width) || null,
+      height: Number(item.height) || null
+    }));
+}
+
 function imageSearchQueries(book) {
   const variants = searchVariants(book).slice(0, 2);
   const out = [];
@@ -843,7 +888,21 @@ const HIGH_RISK_IMAGE_SEARCH_DOMAINS = new Set([
   "jiemian.com",
   "v.qq.com",
   "fbs.qq.com",
-  "worldscience.cn"
+  "worldscience.cn",
+  "m.douban.com",
+  "huiyankan.com",
+  "guokr.com",
+  "zazhi.com.cn",
+  "diancang.xyz",
+  "mbd.baidu.com",
+  "zhonghuashu.com",
+  "bbs.zhulong.com",
+  "douyin.com",
+  "xiaohongshu.com",
+  "m.sohu.com",
+  "sfrx.cn",
+  "bilibili.com",
+  "yifanr.com"
 ]);
 
 function isTitleAliasInCandidateTitle(book, candidateTitle) {
@@ -853,6 +912,37 @@ function isTitleAliasInCandidateTitle(book, candidateTitle) {
     .map((alias) => normalizeText(alias))
     .filter((alias) => alias.length >= 2)
     .some((alias) => title.includes(alias) || alias.includes(title));
+}
+
+function isAuthorAliasInCandidateTitle(book, candidateTitle) {
+  const title = normalizeText(candidateTitle);
+  if (!title) return false;
+  return bookAliases(book).authors
+    .map((alias) => normalizeText(alias))
+    .filter((alias) => alias.length >= 2)
+    .some((alias) => title.includes(alias) || alias.includes(title));
+}
+
+function hasAuthorAliasInText(book, text) {
+  const normalized = normalizeText(text);
+  if (!normalized) return false;
+  return bookAliases(book).authors
+    .map((alias) => normalizeText(alias))
+    .filter((alias) => alias.length >= 2)
+    .some((alias) => normalized.includes(alias));
+}
+
+function hasTitleAliasInText(book, text) {
+  const normalized = normalizeText(text);
+  if (!normalized) return false;
+  return bookAliases(book).titles
+    .map((alias) => normalizeText(alias))
+    .filter((alias) => alias.length >= 2)
+    .some((alias) => normalized.includes(alias));
+}
+
+function isBookishCandidateTitle(candidateTitle) {
+  return /图书|书籍|出版|著作|小说|文集|译丛|教材|作品|典藏|全书|丛书|读本|书评|豆瓣|京东|孔夫子|book|books/i.test(candidateTitle);
 }
 
 function parseHostnameAndPath(url) {
@@ -870,14 +960,63 @@ function parseHostnameAndPath(url) {
 function isHighRiskImageSearchCandidate(book, candidate) {
   const { hostname, pathname } = parseHostnameAndPath(candidate.pageUrl || candidate.imageUrl);
   if (HIGH_RISK_IMAGE_SEARCH_DOMAINS.has(hostname)) return true;
-  if (hostname === "upimg.baike.so.com" || pathname.includes("/gallery/")) return true;
+  if (/执导|剧情片|犯罪电影|电视剧|纪录片|歌曲|专辑/.test(candidate.title) && !isBookishCandidateTitle(candidate.title)) return true;
   if (isTitleAliasInCandidateTitle(book, candidate.title)) return false;
+  if (hostname === "upimg.baike.so.com" || pathname.includes("/gallery/")) return true;
+  if (
+    ["baike.baidu.com", "baike.so.com", "baike.sogou.com"].includes(hostname) &&
+    !isBookishCandidateTitle(candidate.title)
+  ) {
+    return true;
+  }
+  if (isAuthorAliasInCandidateTitle(book, candidate.title) && !isBookishCandidateTitle(candidate.title)) {
+    return true;
+  }
 
   return (
     /图册/.test(candidate.title) ||
     /（[^）]*(学者|哲学家|经济学家|作家|画家|政治家|教育家|心理学家|数学家|物理学家|社会学家|人类学家|导演|人物|思想家|历史学家|法学家|语言学家|建筑师|艺术家|科学家|生物学家|外交家)[^）]*）/.test(candidate.title) ||
     /(_文献类参考资料|参考资料_百度百科|百科TA说)/.test(candidate.title)
   );
+}
+
+async function verifyImageSearchCandidatePage(book, candidate) {
+  const metadataText = `${candidate.title ?? ""} ${candidate.pageUrl ?? ""}`;
+  if (hasTitleAliasInText(book, metadataText) && hasAuthorAliasInText(book, metadataText)) return true;
+  if (!candidate.pageUrl || !hasTitleAliasInText(book, metadataText)) return false;
+
+  const { hostname } = parseHostnameAndPath(candidate.pageUrl);
+  const pageDomains = [
+    "baike.baidu.com",
+    "baike.so.com",
+    "baike.sogou.com",
+    "book.kongfz.com",
+    "item.jd.com",
+    "item.xhsd.com",
+    "product.suning.com",
+    "tuan.bookschina.com",
+    "bookschina.com",
+    "read.douban.com",
+    "www.sdxjpc.com",
+    "www.sinobook.com.cn",
+    "www.guoxuemeng.com",
+    "www.tup.tsinghua.edu.cn",
+    "tup.tsinghua.edu.cn"
+  ];
+  if (!pageDomains.includes(hostname)) return false;
+
+  try {
+    const res = await fetchWithRetry(candidate.pageUrl, {
+      headers: {
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
+      }
+    }, { attempts: 1, timeoutMs: 12_000 });
+    const html = await res.text();
+    return hasTitleAliasInText(book, html) && hasAuthorAliasInText(book, html);
+  } catch {
+    return false;
+  }
 }
 
 async function tryImageSearch(book, limiters, options) {
@@ -892,6 +1031,11 @@ async function tryImageSearch(book, limiters, options) {
     }
     if (results.length === 0) {
       results = await duckDuckGoImageResults(query, limiters);
+    }
+    try {
+      results.push(...await baiduImageResults(query, limiters));
+    } catch {
+      // Baidu image search is a best-effort supplement.
     }
     rawCandidates.push(
       ...results.map((result) => ({
@@ -925,6 +1069,9 @@ async function tryImageSearch(book, limiters, options) {
   const downloaded = [];
   let lastErr = null;
   for (const candidate of ranked) {
+    if (!options.llmSelect && !(await verifyImageSearchCandidatePage(book, candidate))) {
+      continue;
+    }
     for (const url of [candidate.imageUrl, candidate.thumbnailUrl].filter(Boolean)) {
       try {
         const image = await downloadCandidate(url, {
