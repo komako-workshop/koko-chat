@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -27,9 +26,7 @@ import {
   LIBRARY_INK,
   LIBRARY_INK_2,
   LIBRARY_INK_3,
-  LIBRARY_LINE,
-  getCategoryCoverUrl,
-  getCategoryStyle
+  LIBRARY_LINE
 } from "./libraryTheme";
 
 /**
@@ -123,14 +120,20 @@ function CategoryCard({
   onOpenBook: (id: string) => void;
 }): React.ReactElement {
   const desc = CATEGORY_DESC[cat.name] ?? "";
+  // Home 卡只展示文字 head + 书横滚 — 类目封面图留给点进去后的分类页
+  // (LibraryCategoryScreen 顶部 banner)。这里如果也放图,9 张高饱和图
+  // 堆在一起反而抢走对书本身的注意力,信噪比降低。
   return (
     <View style={styles.catCard}>
-      <CategoryHero
-        name={cat.name}
-        desc={desc}
-        count={cat.count}
-        onPress={onOpenCategory}
-      />
+      <Pressable onPress={onOpenCategory} style={styles.catHead}>
+        <View style={styles.catHeadText}>
+          <Text style={styles.catName}>{cat.name}</Text>
+          <Text style={styles.catMeta}>
+            {cat.count} 本{desc.length > 0 ? ` · ${desc}` : ""}
+          </Text>
+        </View>
+        <Text style={styles.catMore}>查看全部 ›</Text>
+      </Pressable>
 
       <ScrollView
         horizontal
@@ -142,59 +145,6 @@ function CategoryCard({
         ))}
       </ScrollView>
     </View>
-  );
-}
-
-/**
- * 类目 hero banner — 全宽 3:2 图,底部叠类目名 / 副标题 / 「查看全部」。
- * 图片来自 deeply.plus/library-assets/category-covers/<id>.jpg(Caddy 反代
- * 到 deeply-library-server/static/)。加载失败时 fallback 到 colorStart 纯色。
- */
-function CategoryHero({
-  name,
-  desc,
-  count,
-  onPress
-}: {
-  name: string;
-  desc: string;
-  count: number;
-  onPress: () => void;
-}): React.ReactElement {
-  const url = getCategoryCoverUrl(name);
-  const style = getCategoryStyle(name);
-  const [imageFailed, setImageFailed] = useState(false);
-  const showImage = url.length > 0 && !imageFailed;
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.hero, pressed && styles.heroPressed]}
-      accessibilityRole="button"
-      accessibilityLabel={`${name} 分类,查看全部 ${count} 本书`}
-    >
-      <View style={[styles.heroFill, { backgroundColor: style.colorStart }]}>
-        {showImage ? (
-          <Image
-            source={{ uri: url }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="cover"
-            onError={() => setImageFailed(true)}
-          />
-        ) : null}
-        <View style={styles.heroScrim} />
-        <View style={styles.heroOverlay}>
-          <View style={styles.heroTextCol}>
-            <Text style={styles.heroName} numberOfLines={1}>
-              {name}
-            </Text>
-            <Text style={styles.heroMeta} numberOfLines={1}>
-              {count} 本{desc.length > 0 ? ` · ${desc}` : ""}
-            </Text>
-          </View>
-          <Text style={styles.heroMore}>查看全部 ›</Text>
-        </View>
-      </View>
-    </Pressable>
   );
 }
 
@@ -270,73 +220,40 @@ const styles = StyleSheet.create({
   },
   catCard: {
     marginHorizontal: 16,
-    marginBottom: 14,
+    marginBottom: 12,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: LIBRARY_LINE,
     borderRadius: 16,
     overflow: "hidden"
   },
-  hero: {
-    width: "100%",
-    aspectRatio: 3 / 2
-  },
-  heroPressed: {
-    opacity: 0.92
-  },
-  heroFill: {
-    flex: 1,
-    overflow: "hidden",
-    justifyContent: "flex-end"
-  },
-  // 底部 ~45% 高度的暗色渐变,让叠字总能读清,不依赖图本身底部够暗。
-  // RN 没原生 LinearGradient,这里用一层半透明黑色取代;实际观感对编辑风
-  // 调色板已经够好,不必为这点引一个 expo-linear-gradient 依赖。
-  heroScrim: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: "55%",
-    backgroundColor: "rgba(0,0,0,0.42)"
-  },
-  heroOverlay: {
+  catHead: {
     flexDirection: "row",
-    alignItems: "flex-end",
     justifyContent: "space-between",
+    alignItems: "flex-end",
     paddingHorizontal: 16,
-    paddingBottom: 14,
-    paddingTop: 32,
-    gap: 12
+    paddingTop: 14,
+    paddingBottom: 10
   },
-  heroTextCol: {
+  catHeadText: {
     flex: 1,
-    minWidth: 0
+    minWidth: 0,
+    paddingRight: 8
   },
-  heroName: {
-    fontSize: 18,
+  catName: {
+    fontSize: 15,
     fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: -0.2,
-    textShadowColor: "rgba(0,0,0,0.45)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3
+    color: LIBRARY_INK
   },
-  heroMeta: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.86)",
-    marginTop: 3,
-    textShadowColor: "rgba(0,0,0,0.45)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3
+  catMeta: {
+    fontSize: 11,
+    color: LIBRARY_INK_3,
+    marginTop: 3
   },
-  heroMore: {
+  catMore: {
     fontSize: 12,
-    color: "rgba(255,255,255,0.92)",
-    fontWeight: "600",
-    textShadowColor: "rgba(0,0,0,0.45)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3
+    color: LIBRARY_INK_2,
+    fontWeight: "600"
   },
   bookRow: {
     gap: 8,

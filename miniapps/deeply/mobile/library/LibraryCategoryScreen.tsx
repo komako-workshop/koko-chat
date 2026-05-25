@@ -116,9 +116,15 @@ export function LibraryCategoryScreen({ categoryName }: Props): React.ReactEleme
 }
 
 /**
- * 分类详情页 hero。3:2 比例 banner,图来自 deeply.plus/library-assets/
- * category-covers/<id>.jpg。加载失败 fallback 到 colorStart 色块,保持原有
- * "面包屑 + 类目名 + 副标题 + 共 N 本" 版式。
+ * 分类详情页 hero。两段式:
+ *   - 顶部一条窄的纯图 banner(~5:2 ≈ 160pt 高),做装饰、定品类调子
+ *   - 下方白底标题区,信息层级清晰(面包屑 / 大标题 / 副标题 / 共 N 本)
+ *
+ * 之前用过 3:2 + 文字 overlay 的版本 — 图占太大,底部又得大块 scrim 压字,
+ * 整体被切成两段,视觉割裂。改成"图归图、字归字"后两块各司其职,
+ * 屏幕更紧凑、读起来更安静。
+ *
+ * 图加载失败时 banner fallback 到 colorStart 纯色,标题区保持白底。
  */
 function CategoryHero({
   categoryName,
@@ -135,16 +141,17 @@ function CategoryHero({
   const [imageFailed, setImageFailed] = useState(false);
   const showImage = url.length > 0 && !imageFailed;
   return (
-    <View style={[styles.hero, { backgroundColor: fallbackColor }]}>
-      {showImage ? (
-        <Image
-          source={{ uri: url }}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-          onError={() => setImageFailed(true)}
-        />
-      ) : null}
-      <View style={styles.heroScrim} />
+    <View>
+      <View style={[styles.heroBanner, { backgroundColor: fallbackColor }]}>
+        {showImage ? (
+          <Image
+            source={{ uri: url }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            onError={() => setImageFailed(true)}
+          />
+        ) : null}
+      </View>
       <View style={styles.heroBody}>
         <Text style={styles.heroCrumb}>课程库 / {shortenName(categoryName)}</Text>
         <Text style={styles.heroName}>{categoryName}</Text>
@@ -220,61 +227,41 @@ const styles = StyleSheet.create({
   },
   retryPressed: { opacity: 0.6 },
   retryText: { color: "#FFFFFF", fontWeight: "700" },
-  hero: {
+  // 顶部纯图装饰带。5:2 ≈ 屏幕宽 / 2.5 高,在 6.1" 手机上约 150-170pt。
+  // 不带文字 overlay,字归下方 heroBody。
+  heroBanner: {
     width: "100%",
-    aspectRatio: 3 / 2,
-    overflow: "hidden",
-    justifyContent: "flex-end"
-  },
-  // 底部 60% 暗色 scrim,保证白字可读;Library Home hero 用 55%,这里
-  // 文字多一档(crumb + name + desc + meta)所以暗一些更保险。
-  heroScrim: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: "60%",
-    backgroundColor: "rgba(0,0,0,0.45)"
+    aspectRatio: 5 / 2,
+    overflow: "hidden"
   },
   heroBody: {
     paddingHorizontal: 22,
-    paddingTop: 36,
-    paddingBottom: 20
+    paddingTop: 18,
+    paddingBottom: 18,
+    backgroundColor: LIBRARY_BG
   },
   heroCrumb: {
     fontSize: 11,
-    color: "rgba(255,255,255,0.78)",
-    marginBottom: 8,
-    textShadowColor: "rgba(0,0,0,0.45)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3
+    color: LIBRARY_INK_3,
+    marginBottom: 6
   },
   heroName: {
     fontSize: 26,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: LIBRARY_INK,
     letterSpacing: -0.4,
-    marginBottom: 6,
-    textShadowColor: "rgba(0,0,0,0.5)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4
+    marginBottom: 6
   },
   heroDesc: {
     fontSize: 13,
-    color: "rgba(255,255,255,0.9)",
+    color: LIBRARY_INK_2,
     lineHeight: 20,
-    maxWidth: 280,
-    textShadowColor: "rgba(0,0,0,0.45)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3
+    maxWidth: 320
   },
   heroMeta: {
     fontSize: 12,
-    color: "rgba(255,255,255,0.8)",
-    marginTop: 12,
-    textShadowColor: "rgba(0,0,0,0.45)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3
+    color: LIBRARY_INK_3,
+    marginTop: 10
   },
   sortBar: {
     flexDirection: "row",
