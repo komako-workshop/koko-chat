@@ -52,6 +52,10 @@ function parseArgs(argv) {
     retryMisses: false,
     llmSelect: false,
     llmModel: "deepseek/deepseek-v4-pro",
+    titleOnlyImageSearch: false,
+    titleOnlyOnly: false,
+    visionSelect: false,
+    visionModel: "gpt-4o-mini",
     concurrency: 6,
     googleIntervalMs: 1000,
     openLibraryIntervalMs: 120,
@@ -69,6 +73,11 @@ function parseArgs(argv) {
     else if (raw === "--llm-select") args.llmSelect = true;
     else if (raw === "--llm-model") args.llmModel = argv[++i] ?? args.llmModel;
     else if (raw.startsWith("--llm-model=")) args.llmModel = raw.slice("--llm-model=".length);
+    else if (raw === "--title-only-image-search") args.titleOnlyImageSearch = true;
+    else if (raw === "--title-only-only") args.titleOnlyOnly = true;
+    else if (raw === "--vision-select") args.visionSelect = true;
+    else if (raw === "--vision-model") args.visionModel = argv[++i] ?? args.visionModel;
+    else if (raw.startsWith("--vision-model=")) args.visionModel = raw.slice("--vision-model=".length);
     else if (raw === "--only") args.only = argv[++i] ?? null;
     else if (raw.startsWith("--only=")) args.only = raw.slice("--only=".length);
     else if (raw === "--limit") args.limit = Number(argv[++i]);
@@ -621,6 +630,9 @@ function parseDotenv(text) {
 let cachedOpenRouterApiKey = null;
 let openRouterKeyLoaded = false;
 let openRouterWarned = false;
+let cachedOpenAiApiKey = null;
+let openAiKeyLoaded = false;
+let openAiWarned = false;
 
 function getOpenRouterApiKey() {
   if (openRouterKeyLoaded) return cachedOpenRouterApiKey;
@@ -635,6 +647,24 @@ function getOpenRouterApiKey() {
     if (parsed.OPENROUTER_API_KEY) {
       cachedOpenRouterApiKey = parsed.OPENROUTER_API_KEY;
       return cachedOpenRouterApiKey;
+    }
+  }
+  return null;
+}
+
+function getOpenAiApiKey() {
+  if (openAiKeyLoaded) return cachedOpenAiApiKey;
+  openAiKeyLoaded = true;
+  if (process.env.OPENAI_API_KEY) {
+    cachedOpenAiApiKey = process.env.OPENAI_API_KEY;
+    return cachedOpenAiApiKey;
+  }
+  const envboxPath = path.join(os.homedir(), ".alice-secrets/.env");
+  if (fs.existsSync(envboxPath)) {
+    const parsed = parseDotenv(fs.readFileSync(envboxPath, "utf8"));
+    if (parsed.OPENAI_API_KEY) {
+      cachedOpenAiApiKey = parsed.OPENAI_API_KEY;
+      return cachedOpenAiApiKey;
     }
   }
   return null;
@@ -679,6 +709,11 @@ async function callOpenRouterJson({ model, messages }) {
   return JSON.parse(cleanJsonText(content));
 }
 
+function selectorReasonRejects(reason) {
+  if (typeof reason !== "string") return false;
+  return /(?:therefore,? it is rejected|is rejected|should be rejected|reject it|conflicts? with the requested author|does not match the requested author|different author|unrelated|not the requested book|wrong book|not the same book)/i.test(reason);
+}
+
 async function selectImageCandidate(book, candidates, options) {
   if (candidates.length === 0) return null;
   if (!options.llmSelect) return candidates[0];
@@ -708,12 +743,12 @@ async function selectImageCandidate(book, candidates, options) {
           role: "system",
           content: [
             "You select book cover images.",
-            "Return strict JSON only: {\"choice\": number|null, \"reason\": string}.",
+            "Return strict JSON only: {\"choice\": number|null, \"accept\": boolean, \"reason\": string}.",
             "Choose the candidate that is most likely the cover of the exact requested book.",
             "Prefer exact title and author matches. Reject unrelated books, posters, screenshots, bundles, ads, and pages that only mention the book in passing.",
             "Reject author/person biography pages unless the page is clearly for the exact book.",
             "When there is only one candidate, still reject it if it is not clearly the exact book cover.",
-            "If none is sufficiently likely, return choice:null."
+            "If none is sufficiently likely, return {\"choice\": null, \"accept\": false, \"reason\": \"...\"}."
           ].join("\n")
         },
         {
@@ -727,6 +762,7 @@ async function selectImageCandidate(book, candidates, options) {
       ? Number(rawChoice)
       : rawChoice;
     if (Number.isInteger(choice) && choice >= 0 && choice < candidates.length) {
+      if (selected?.accept !== true || selectorReasonRejects(selected?.reason)) return null;
       candidates[choice].selector = {
         model: options.llmModel,
         reason: typeof selected.reason === "string" ? selected.reason.slice(0, 180) : ""
@@ -864,6 +900,26 @@ function imageSearchQueries(book) {
       seen.add(key);
       out.push(query);
     }
+  }
+  return out;
+}
+
+function titleOnlyImageSearchQueries(book) {
+  const aliases = bookAliases(book);
+  const out = [];
+  const seen = new Set();
+  for (const title of aliases.titles) {
+    const normalized = normalizeText(title);
+    if (normalized.length < 4 && !/[a-z]/i.test(title)) continue;
+    const suffixes = /[a-z]/i.test(title) ? ["book cover"] : ["书 封面", "图书 封面"];
+    for (const suffix of suffixes) {
+      const query = `${title} ${suffix}`;
+      const key = normalizeText(query);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(query);
+    }
+    if (out.length >= 4) break;
   }
   return out;
 }
@@ -1019,39 +1075,221 @@ async function verifyImageSearchCandidatePage(book, candidate) {
   }
 }
 
+async function fetchVisionDataUrl(url) {
+  const res = await fetchWithRetry(url, {
+    headers: {
+      "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+      "Referer": "https://image.baidu.com/"
+    }
+  }, { attempts: 1, timeoutMs: 12_000 });
+  const contentType = res.headers.get("content-type") ?? "";
+  const buffer = Buffer.from(await res.arrayBuffer());
+  if (buffer.length < MIN_BYTES || buffer.length > 2_500_000) {
+    throw new Error(`vision image size out of range: ${buffer.length}`);
+  }
+  const detected = detectImage(buffer, contentType);
+  if (detected === null) throw new Error(`vision image unsupported type: ${contentType}`);
+  return `data:${detected.mime};base64,${buffer.toString("base64")}`;
+}
+
+async function selectVisionCandidate(book, candidates, options) {
+  if (!options.visionSelect || candidates.length === 0) return candidates[0] ?? null;
+  const apiKey = getOpenAiApiKey();
+  if (!apiKey) {
+    if (!openAiWarned) {
+      console.error("[warn] OPENAI_API_KEY not found; title-only vision selection disabled");
+      openAiWarned = true;
+    }
+    return null;
+  }
+
+  const prepared = [];
+  for (const candidate of candidates) {
+    try {
+      prepared.push({ ...candidate, visionUrl: await fetchVisionDataUrl(candidate.imageUrl) });
+    } catch {
+      // Skip candidates that are not reachable from this runner.
+    }
+    if (prepared.length >= 6) break;
+  }
+  if (prepared.length === 0) return null;
+
+  const aliases = bookAliases(book);
+  const content = [
+    {
+      type: "text",
+      text: [
+        "Select a book cover image for the requested book.",
+        "Return strict JSON only: {\"choice\": number|null, \"accept\": boolean, \"reason\": string, \"visibleText\": string}.",
+        "Choose only if the image is clearly a book cover for the exact requested title.",
+        "Visible title text must match the requested title or a close translation/edition.",
+        "If visible author text is present and conflicts with the requested author, reject it.",
+        "Reject film posters, author portraits, article screenshots, unrelated books, bundles where this exact book is not clearly shown, and generic illustrations.",
+        "If you reject a candidate, choice must be null and accept must be false.",
+        "",
+        `Requested title: ${book.t}`,
+        `Requested author: ${book.a}`,
+        `Title aliases: ${aliases.titles.join(" | ")}`,
+        `Author aliases: ${aliases.authors.join(" | ")}`,
+        "",
+        "Candidates:"
+      ].join("\n")
+    }
+  ];
+  prepared.forEach((candidate, index) => {
+    content.push({
+      type: "text",
+      text: `Candidate ${index}: sourceTitle=${candidate.title || ""}; page=${candidate.pageUrl || ""}`
+    });
+    content.push({
+      type: "image_url",
+      image_url: {
+        url: candidate.visionUrl,
+        detail: "low"
+      }
+    });
+  });
+
+  try {
+    const res = await fetchWithRetry("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: options.visionModel,
+        messages: [{ role: "user", content }],
+        temperature: 0,
+        max_tokens: 220,
+        response_format: { type: "json_object" }
+      })
+    }, { attempts: 2, timeoutMs: 60_000 });
+    const json = await res.json();
+    const text = json?.choices?.[0]?.message?.content;
+    if (typeof text !== "string") return null;
+    const selected = JSON.parse(cleanJsonText(text));
+    const rawChoice = selected?.choice;
+    const choice = typeof rawChoice === "string" && /^\d+$/.test(rawChoice)
+      ? Number(rawChoice)
+      : rawChoice;
+    if (Number.isInteger(choice) && choice >= 0 && choice < prepared.length) {
+      if (selected?.accept !== true || selectorReasonRejects(selected?.reason)) return null;
+      prepared[choice].selector = {
+        model: options.visionModel,
+        reason: typeof selected.reason === "string" ? selected.reason.slice(0, 180) : "",
+        visibleText: typeof selected.visibleText === "string" ? selected.visibleText.slice(0, 260) : ""
+      };
+      return prepared[choice];
+    }
+  } catch (err) {
+    if (!openAiWarned) {
+      console.error(`[warn] vision selector failed: ${err instanceof Error ? err.message : String(err)}`);
+      openAiWarned = true;
+    }
+  }
+  return null;
+}
+
+function isTitleOnlyCandidateShape(candidate) {
+  const width = Number(candidate.width) || null;
+  const height = Number(candidate.height) || null;
+  if (!width || !height) return true;
+  const ratio = width / height;
+  return ratio >= 0.42 && ratio <= 0.95 && height >= 160;
+}
+
+async function tryTitleOnlyImageSearch(book, limiters, options) {
+  const rawCandidates = [];
+  for (const query of titleOnlyImageSearchQueries(book)) {
+    try {
+      rawCandidates.push(...await baiduImageResults(query, limiters));
+    } catch {
+      // Title-only image search is best-effort.
+    }
+    if (rawCandidates.length >= 10) break;
+  }
+
+  const seen = new Set();
+  const candidates = rawCandidates
+    .map((result) => ({
+      title: typeof result.title === "string" ? result.title : "",
+      pageUrl: typeof result.url === "string" ? result.url : "",
+      imageUrl: typeof result.image === "string" ? result.image : "",
+      thumbnailUrl: typeof result.thumbnail === "string" ? result.thumbnail : "",
+      width: Number(result.width) || null,
+      height: Number(result.height) || null
+    }))
+    .filter((candidate) => candidate.imageUrl)
+    .filter((candidate) => isTitleOnlyCandidateShape(candidate))
+    .filter((candidate) => {
+      if (seen.has(candidate.imageUrl)) return false;
+      seen.add(candidate.imageUrl);
+      return true;
+    })
+    .slice(0, 8);
+
+  const selected = await selectVisionCandidate(book, candidates, options);
+  if (selected === null) return null;
+
+  const urls = [selected.imageUrl, selected.thumbnailUrl].filter(Boolean);
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      const image = await downloadCandidate(url, {
+        "Referer": "https://image.baidu.com/"
+      }, { attempts: 1, timeoutMs: 15_000 }, { minRatio: 0.42, maxRatio: 0.95 });
+      return {
+        source: "baidu-title-vision",
+        originalUrl: image.originalUrl,
+        image,
+        candidateTitle: selected.title,
+        candidatePageUrl: selected.pageUrl,
+        selector: selected.selector
+      };
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (lastErr) throw lastErr;
+  return null;
+}
+
 async function tryImageSearch(book, limiters, options) {
   const rawCandidates = [];
   const minScore = options.llmSelect ? 0 : 7;
-  for (const query of imageSearchQueries(book)) {
-    let results = [];
-    try {
-      results = await bingImageResults(query, limiters);
-    } catch {
-      results = [];
-    }
-    if (results.length === 0) {
-      results = await duckDuckGoImageResults(query, limiters);
-    }
-    try {
-      results.push(...await baiduImageResults(query, limiters));
-    } catch {
-      // Baidu image search is a best-effort supplement.
-    }
-    rawCandidates.push(
-      ...results.map((result) => ({
-        title: typeof result.title === "string" ? result.title : "",
-        pageUrl: typeof result.url === "string" ? result.url : "",
-        imageUrl: typeof result.image === "string" ? result.image : "",
-        thumbnailUrl: typeof result.thumbnail === "string" ? result.thumbnail : "",
-        width: Number(result.width) || null,
-        height: Number(result.height) || null,
-        score: scoreCandidate(book, {
+  if (!options.titleOnlyOnly) {
+    for (const query of imageSearchQueries(book)) {
+      let results = [];
+      try {
+        results = await bingImageResults(query, limiters);
+      } catch {
+        results = [];
+      }
+      if (results.length === 0) {
+        results = await duckDuckGoImageResults(query, limiters);
+      }
+      try {
+        results.push(...await baiduImageResults(query, limiters));
+      } catch {
+        // Baidu image search is a best-effort supplement.
+      }
+      rawCandidates.push(
+        ...results.map((result) => ({
           title: typeof result.title === "string" ? result.title : "",
-          authors: [typeof result.title === "string" ? result.title : "", typeof result.url === "string" ? result.url : ""]
-        })
-      }))
-    );
-    if (rawCandidates.some((candidate) => candidate.score >= minScore)) break;
+          pageUrl: typeof result.url === "string" ? result.url : "",
+          imageUrl: typeof result.image === "string" ? result.image : "",
+          thumbnailUrl: typeof result.thumbnail === "string" ? result.thumbnail : "",
+          width: Number(result.width) || null,
+          height: Number(result.height) || null,
+          score: scoreCandidate(book, {
+            title: typeof result.title === "string" ? result.title : "",
+            authors: [typeof result.title === "string" ? result.title : "", typeof result.url === "string" ? result.url : ""]
+          })
+        }))
+      );
+      if (rawCandidates.some((candidate) => candidate.score >= minScore)) break;
+    }
   }
 
   const seen = new Set();
@@ -1086,12 +1324,21 @@ async function tryImageSearch(book, limiters, options) {
     if (downloaded.length >= 5) break;
   }
   if (downloaded.length === 0) {
+    if (options.titleOnlyImageSearch) {
+      const titleOnly = await tryTitleOnlyImageSearch(book, limiters, options);
+      if (titleOnly !== null) return titleOnly;
+    }
     if (lastErr) throw lastErr;
     return null;
   }
 
   const selected = await selectImageCandidate(book, downloaded, options);
-  if (selected === null) return null;
+  if (selected === null) {
+    if (options.titleOnlyImageSearch) {
+      return tryTitleOnlyImageSearch(book, limiters, options);
+    }
+    return null;
+  }
   return {
     source: selected.selector ? "image-search-llm" : "image-search",
     originalUrl: selected.image.originalUrl,
@@ -1418,7 +1665,9 @@ async function main() {
   console.log(`google: ${args.skipGoogle ? "disabled" : "enabled"}`);
   console.log(`openlibrary: ${args.skipOpenLibrary ? "disabled" : `enabled (${args.openLibraryIntervalMs}ms)`}`);
   console.log(`image search: ${args.skipImageSearch ? "disabled" : `enabled (${args.imageSearchIntervalMs}ms)`}`);
+  console.log(`title-only image search: ${args.titleOnlyImageSearch ? `enabled${args.titleOnlyOnly ? " (only)" : ""}` : "disabled"}`);
   console.log(`llm select: ${args.llmSelect ? args.llmModel : "disabled"}`);
+  console.log(`vision select: ${args.visionSelect ? args.visionModel : "disabled"}`);
   console.log(`douban: ${args.skipDouban ? "disabled" : "enabled"}`);
 
   const startedAt = Date.now();
