@@ -424,9 +424,14 @@ export function DeeplyExploreScreen({
   //   - `koko_run_material_url`
   // 等 gateway connected 后自动 start course → 清 query param。
   // 只在 web + 已连接时跑,一次性,刷掉 query 后不会再触发。
+  //
+  // 守卫必须用 Platform.OS === "web":Hermes 在 iOS 上也定义了 window 全局
+  // (空对象),`typeof window === "undefined"` 不够,会在真机 mount 时直接抛
+  // "Cannot read property 'search' of undefined"。
   const autoRunFiredRef = useRef(false);
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (Platform.OS !== "web") return;
+    if (typeof window === "undefined" || window.location === undefined) return;
     if (autoRunFiredRef.current) return;
     if (!isConnected) return;
     if (conversationId === null) return;

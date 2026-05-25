@@ -677,7 +677,11 @@ export function DeeplyCourseScreen({
   // 用 module-level Set 持久化已 fire 的 conversationId+section 组合,跨
   // mount 不再重 fire(useRef 在 React 18 strict mode 会重置)。
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    // Hermes 在 iOS 上也有 window 全局(空对象),`typeof window === "undefined"`
+    // 拦不住,会在真机 mount 时直接抛 "Cannot read property 'search' of undefined"。
+    // 这个 effect 全是 web-only dev backdoor,直接按平台拒绝。
+    if (Platform.OS !== "web") return;
+    if (typeof window === "undefined" || window.location === undefined) return;
     if (conversationId === null) return;
     if (!isConnected) return;
     if (isLoadingBootstrap) return;
