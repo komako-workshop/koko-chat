@@ -1,0 +1,23 @@
+[Unit]
+Description=KokoChat Deeply Library API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/koko-chat/apps/deeply-library-server
+Environment=NODE_ENV=production
+Environment=LIBRARY_HOST=0.0.0.0
+Environment=LIBRARY_PORT=8788
+# 显式指向 monorepo 里 build 出来的数据文件。如果以后把数据搬到独立卷,
+# 改这里即可。
+Environment=LIBRARY_POOL_PATH=/opt/koko-chat/miniapps/deeply/data/library-pool.json
+ExecStart=/usr/bin/node /opt/koko-chat/apps/deeply-library-server/server.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

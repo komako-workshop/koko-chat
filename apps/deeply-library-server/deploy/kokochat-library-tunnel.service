@@ -1,0 +1,20 @@
+[Unit]
+Description=KokoChat Deeply Library Cloudflare Tunnel
+After=network-online.target kokochat-library.service
+Wants=network-online.target
+Requires=kokochat-library.service
+
+[Service]
+Type=simple
+User=root
+# 命名 tunnel 配置存在 /etc/cloudflared/config.yml(`cloudflared tunnel create`
+# + `cloudflared tunnel route dns` 之后由 install 脚本生成)。
+# 这里用 --config 显式指向,避免依赖默认查找路径。
+ExecStart=/usr/local/bin/cloudflared tunnel --config /etc/cloudflared/config.yml run
+Restart=always
+RestartSec=10
+TimeoutStopSec=20
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

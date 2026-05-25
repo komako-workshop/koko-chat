@@ -23,12 +23,21 @@ export interface DeeplyCourseSheetState {
   /** Explore conversation id that owns the card. Used as transcript context. */
   conversationId: string | null;
   isOpen: boolean;
+  /**
+   * 被点击卡片底边在屏幕上的 y 坐标(measureInWindow 测得),
+   * explore 层在 sheet 打开瞬间用它做 list scroll —— 把卡片完整推到
+   * sheet 上方,而不是被 sheet 盖掉一半。
+   *
+   * `null` = 触发方没传(老调用 / dev 路径),explore 层就不做 scroll。
+   */
+  cardBottomY: number | null;
 }
 
 const initialState: DeeplyCourseSheetState = {
   card: null,
   conversationId: null,
-  isOpen: false
+  isOpen: false,
+  cardBottomY: null
 };
 
 let currentState: DeeplyCourseSheetState = initialState;
@@ -57,9 +66,19 @@ function getSnapshot(): DeeplyCourseSheetState {
 
 export function openDeeplyCourseSheet(
   card: DeeplyRecommendationCard,
-  conversationId: string
+  conversationId: string,
+  /**
+   * 可选:被点击卡片底边在屏幕上的 y 坐标(measureInWindow 测得)。
+   * Explore 拿到后会 scroll FlatList 让卡片完整露在 sheet 上方。
+   */
+  cardBottomY?: number
 ): void {
-  setState({ card, conversationId, isOpen: true });
+  setState({
+    card,
+    conversationId,
+    isOpen: true,
+    cardBottomY: cardBottomY ?? null
+  });
 }
 
 export function closeDeeplyCourseSheet(): void {

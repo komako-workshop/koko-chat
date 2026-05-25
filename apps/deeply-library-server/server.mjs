@@ -12,11 +12,13 @@
  *     全字段(给单本详情 + 知识谱系 + 关系卡用)。
  *   - 路径前缀 `/library` 而非 `/v1/library`,后续若引入版本/auth 再前缀。
  *   - 部署上跟 koko-relay 共用一台阿里云 ECS,但代码完全独立(同 monorepo
- *     不同 apps 目录)。生产环境可直接 `pm2 start server.mjs`。
+ *     不同 apps 目录),走 systemd unit + cloudflared tunnel 出公网 HTTPS。
+ *     见 `deploy/` 目录。
  *
  * Env:
  *   LIBRARY_PORT     默认 8788
- *   LIBRARY_HOST     默认 127.0.0.1(本机 dev);生产用 0.0.0.0
+ *   LIBRARY_HOST     默认 0.0.0.0(LAN / 容器都能访问);如要锁回 loopback
+ *                    显式设 127.0.0.1
  *   LIBRARY_POOL_PATH override 数据文件路径(默认 miniapps/deeply/data/library-pool.json)
  */
 import fs from "node:fs";
@@ -30,7 +32,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_POOL = path.resolve(HERE, "../../miniapps/deeply/data/library-pool.json");
 const POOL_PATH = process.env.LIBRARY_POOL_PATH ?? DEFAULT_POOL;
 const PORT = Number(process.env.LIBRARY_PORT ?? 8788);
-const HOST = process.env.LIBRARY_HOST ?? "127.0.0.1";
+// dev / prod 都默认 bind 0.0.0.0:
+//   - dev 期真机要从 LAN IP 访问;
+//   - prod 走 cloudflared tunnel 也是从本机 127.0.0.1 反代过去,绑 0.0.0.0
+//     不影响安全(防火墙 / cloudflared 才是边界)。
+const HOST = process.env.LIBRARY_HOST ?? "0.0.0.0";
 
 const LIST_FIELDS = ["id", "t", "a", "c", "d", "s", "pr", "img", "h"];
 

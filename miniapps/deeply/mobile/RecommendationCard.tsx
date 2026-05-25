@@ -1,3 +1,4 @@
+import { useCallback, useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { BlockRenderer } from "@/runtime/messageBlocks";
@@ -46,9 +47,26 @@ function DeeplyRecommendationCardView({
   card: DeeplyRecommendationCardData;
   conversationId: string;
 }): React.ReactElement {
+  // 点击瞬间测一下卡片在屏幕上的位置,把 "卡底 y" 一并塞给 store。
+  // explore 层会用它把 FlatList scroll 一下,让这张卡完整露在 sheet 上方,
+  // 不被 sheet 盖掉。measure 是异步的,但 onPress 触发的延迟极小(<16ms),
+  // 用户感受不到。
+  const cardRef = useRef<View | null>(null);
+  const handlePress = useCallback(() => {
+    const node = cardRef.current;
+    if (node === null) {
+      openDeeplyCourseSheet(card, conversationId);
+      return;
+    }
+    node.measureInWindow((_x, y, _w, h) => {
+      openDeeplyCourseSheet(card, conversationId, y + h);
+    });
+  }, [card, conversationId]);
+
   return (
     <Pressable
-      onPress={() => openDeeplyCourseSheet(card, conversationId)}
+      ref={cardRef}
+      onPress={handlePress}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
       <View style={styles.mainRow}>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -11,7 +12,9 @@ import {
   Text,
   TextInput,
   View,
-  type ListRenderItemInfo
+  type ListRenderItemInfo,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent
 } from "react-native";
 
 import { MarkdownText } from "@/components/MarkdownText";
@@ -31,8 +34,19 @@ import {
   startDeeplyResearchCourse
 } from "./courseSession";
 import { DeeplyCourseSheetMount } from "./CourseDetailSheet";
+import { useDeeplyCourseSheetState } from "./courseSheetStore";
 import { DeeplyCustomizeSheetMount } from "./CourseCustomizeSheet";
 import { openDeeplyCustomizeSheet } from "./customizeSheetStore";
+
+/**
+ * CourseDetailSheet 的 maxHeight(见 CourseDetailSheet.tsx,目前 88%)。
+ * Explore 用这个常量算出 sheet 顶部在屏幕上的 y,把被点击的卡 scroll 到
+ * sheet 上方时用得上。保守按 maxHeight 算(即使 sheet 实际更矮也只会让卡
+ * 多露一截,不会被遮)。
+ */
+const COURSE_SHEET_MAX_HEIGHT_RATIO = 0.88;
+/** 卡底与 sheet 顶之间留出来的可呼吸距离(pt)。 */
+const COURSE_SHEET_REVEAL_GAP = 16;
 
 /**
  * Deeply 知识探索 chat surface。
@@ -88,6 +102,35 @@ export function DeeplyExploreScreen({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  // FlatList 当前 contentOffset.y,onScroll 实时更新。下面 sheet-reveal
+  // 副作用需要在它基础上加 delta scroll。
+  const scrollOffsetRef = useRef(0);
+  const handleListScroll = (e: NativeSyntheticEvent<NativeScrollEvent>): void => {
+    scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+  };
+
+  // 监听 CourseDetailSheet 打开事件:卡片在 onPress 时已经把自己屏幕底边的
+  // y 坐标塞进 store,这里读出来 → 算出"sheet 顶部 - 20px"作为期望卡底位置
+  // → list 加上 delta scroll,把卡完整推到 sheet 上方。
+  //
+  // 保守按 sheet maxHeight(75%) 算 sheet 顶部 —— 即便 sheet 实际更矮,
+  // list 也只是多 scroll 了一点点,效果是卡片更靠上、不会被遮。
+  const sheetState = useDeeplyCourseSheetState();
+  const sheetIsOpen = sheetState.isOpen;
+  const sheetCardBottomY = sheetState.cardBottomY;
+  useEffect(() => {
+    if (!sheetIsOpen) return;
+    if (sheetCardBottomY === null) return;
+    const winHeight = Dimensions.get("window").height;
+    const sheetTopY = winHeight * (1 - COURSE_SHEET_MAX_HEIGHT_RATIO);
+    const desiredCardBottomY = sheetTopY - COURSE_SHEET_REVEAL_GAP;
+    const delta = sheetCardBottomY - desiredCardBottomY;
+    if (delta <= 0) return;
+    listRef.current?.scrollToOffset({
+      offset: scrollOffsetRef.current + delta,
+      animated: true
+    });
+  }, [sheetIsOpen, sheetCardBottomY]);
 
   const isConnected = status === "connected";
   const isRecoveringConnection = status === "connecting" || status === "handshaking";
@@ -208,6 +251,8 @@ export function DeeplyExploreScreen({
         ListHeaderComponent={messages.length === 0 ? <EmptyState /> : null}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        onScroll={handleListScroll}
+        scrollEventThrottle={32}
       />
 
       <View style={styles.inputDock}>

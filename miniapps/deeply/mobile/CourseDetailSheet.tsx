@@ -19,7 +19,10 @@ import {
   closeDeeplyCourseSheet,
   useDeeplyCourseSheetState
 } from "./courseSheetStore";
-import { inferCourseBrief } from "./inferCourseBrief";
+import {
+  inferCourseBrief,
+  lookupCachedCourseBrief
+} from "./inferCourseBrief";
 import type { DeeplyCourseBrief } from "./parseCourseBrief";
 import type { DeeplyRecommendationCard } from "./parseRecommendations";
 import { startDeeplyCourseSession, type SectionPreset } from "./courseSession";
@@ -116,8 +119,14 @@ function CourseDetailSheet({
     });
   }, [anim, onClose]);
 
-  // Each mount of the sheet re-runs the brief. The store unmounts the sheet
-  // on close, so re-opening always re-triggers this effect with fresh context.
+  // Sheet 关闭时 store 会卸载组件,重开一定会再跑一次这个 effect。
+  //
+  // Cache 命中:同步把 cached brief 喂进去 → 立刻 ready,不发 LLM 请求。
+  //  这条路径下用户会看到大约 1 帧的 loading state(useState 初值是 loading),
+  //  16ms 基本无感,换来代码简单 + 跟原 async path 走一条 codepath 不分叉。
+  //
+  // Cache miss:走 inferCourseBrief async,返回后 setStatus + setBrief。
+  //  inferCourseBrief 内部成功时会自动把结果写进 cache,下次再开同卡走 hit。
   useEffect(() => {
     let cancelled = false;
     setStatus("loading");
@@ -125,6 +134,16 @@ function CourseDetailSheet({
     setError(null);
     setSectionPreset("auto");
     setCustomSectionsRaw("12");
+
+    const cached = lookupCachedCourseBrief(card);
+    if (cached !== null) {
+      setBrief(cached);
+      setStatus("ready");
+      return () => {
+        cancelled = true;
+      };
+    }
+
     void (async () => {
       const result = await inferCourseBrief({
         card,
@@ -450,6 +469,13 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingTop: 8,
     paddingBottom: 16,
+    // maxHeight 88%(留 12% 让 list 把被点击的卡片 reveal 出来)。
+    // DeeplyExploreScreen 里的 COURSE_SHEET_MAX_HEIGHT_RATIO 必须跟这个值
+    // 同步,否则 sheet-reveal 的 scroll 计算会偏。
+    //
+    // sheet 高度由 children 内容决定。Loading 时 LoadingState 自己撑了一个
+    // 较大的 minHeight(见 styles.loadingState),让 sheet 一弹出就接近 ready
+    // 状态的高度,避免 brief 加载完成那一刻 sheet "蹦"高。
     maxHeight: "88%"
   },
   grabber: {
@@ -505,10 +531,15 @@ const styles = StyleSheet.create({
     paddingBottom: 8
   },
   loadingState: {
+    // 把 ScrollView 的内容撑到一个比单行 spinner 大不少的高度,让 sheet
+    // 一弹出就接近 ready 状态的高度,brief 到位时不会"蹦高"。240pt 大约
+    // 是 ready-state introduction 的下半截高度,sheet 总高比之前提升
+    // ~150pt(约 2-3cm)。spinner + 文字在该区块内居中。
+    minHeight: 240,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 10,
-    paddingVertical: 32,
     paddingHorizontal: 4
   },
   loadingText: {
