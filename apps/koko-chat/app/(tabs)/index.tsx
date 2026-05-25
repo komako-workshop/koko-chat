@@ -179,14 +179,23 @@ function ConversationRow({
   onDelete
 }: ConversationRowProps): React.ReactElement {
   const swipeRef = useRef<Swipeable>(null);
-  // Per-conversation avatar (e.g. a character card's portrait) wins over the
-  // mini-app's bundled icon. This lets mini-apps spawn conversations whose
-  // row shows the right artwork without polluting the mini-app descriptor.
+  // Avatar precedence:
+  //   1. listSnapshot.avatarUri — real remote/local image (e.g. a character
+  //      portrait, a real book cover).
+  //   2. listSnapshot.avatarFallback — coloured swatch + short label, used by
+  //      deeply library courses whose book has no cover URL. Keeps each book
+  //      visually distinct instead of collapsing every uncovered book onto the
+  //      same default mini-app icon.
+  //   3. mini-app's bundled listImage (e.g. deeply learning brain).
+  //   4. listGlyph / first-character glyph as a last-resort text avatar.
   const avatarUri = item.listSnapshot?.avatarUri;
+  const avatarFallback = item.listSnapshot?.avatarFallback;
   const listImage =
     avatarUri !== undefined && avatarUri.length > 0
       ? { uri: avatarUri }
-      : getMiniAppListImage(item.mode);
+      : avatarFallback === undefined
+        ? getMiniAppListImage(item.mode)
+        : undefined;
   const isPinned = item.pinned === true;
 
   function handlePinPress(): void {
@@ -249,13 +258,24 @@ function ConversationRow({
           pressed && { backgroundColor: KokoColors.surfaceSoft }
         ]}
       >
-        <View style={styles.avatar}>
+        <View
+          style={[
+            styles.avatar,
+            avatarFallback !== undefined && {
+              backgroundColor: avatarFallback.fillColor
+            }
+          ]}
+        >
           {listImage !== undefined ? (
             <CachedImage
               source={listImage}
               style={styles.avatarImage}
               contentFit="cover"
             />
+          ) : avatarFallback !== undefined ? (
+            <Text style={styles.avatarFallbackLabel} numberOfLines={1}>
+              {avatarFallback.label}
+            </Text>
           ) : (
             <Text style={styles.avatarGlyph}>
               {getMiniAppListGlyph(item.mode) ?? avatarGlyph(item.title)}
@@ -391,6 +411,17 @@ const styles = StyleSheet.create({
   avatarImage: {
     width: "100%",
     height: "100%"
+  },
+  // Coloured-swatch fallback label (book name initials when a library course
+  // has no cover image). White, bold, slightly tracked — matches the inset
+  // BookCoverImage label style used inside the library itself.
+  avatarFallbackLabel: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    paddingHorizontal: 4,
+    textAlign: "center",
+    letterSpacing: 0.2
   },
   rowBody: {
     flex: 1,

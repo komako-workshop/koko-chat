@@ -18,9 +18,37 @@ import type {
   DeeplyResearchOutline,
   DeeplyResearchSource
 } from "./parseResearchOutline";
+import { getCategoryStyle } from "./library/libraryTheme";
 
 export const DEEPLY_COURSE_MODE_ID = "deeply-course";
 const STORAGE = getMiniAppStorage(DEEPLY_MINI_APP_ID);
+
+/**
+ * Short label drawn on top of a coloured swatch when a library course's book
+ * has no real cover image. Mirrors BookCoverImage's title fallback inside the
+ * library, but constrained to 2 CJK chars / 3 latin letters so it stays
+ * legible inside the ~48px chat-list avatar slot.
+ *
+ * Strategy:
+ *   - Strip subtitle after the first ":" / "：" / "—" / "-" / "(" / "（".
+ *   - Take the first non-whitespace codepoints.
+ *   - 拉丁开头 → up to 3 letters, uppercased.
+ *   - 其他(CJK/混合) → 前 2 个 codepoint。
+ */
+function makeBookGlyphLabel(title: string): string {
+  const trimmed = title.trim();
+  if (trimmed.length === 0) return "书";
+  const head = trimmed.split(/[:：\-—()（）]/)[0]?.trim() ?? trimmed;
+  const source = head.length > 0 ? head : trimmed;
+  const chars = Array.from(source).filter((c) => c.trim().length > 0);
+  if (chars.length === 0) return "书";
+  const first = chars[0]!;
+  const isLatin = /^[A-Za-z]$/.test(first);
+  if (isLatin) {
+    return chars.slice(0, 3).join("").toUpperCase();
+  }
+  return chars.slice(0, 2).join("");
+}
 
 /**
  * Persisted snapshot of "what the user configured before starting this course".
@@ -527,11 +555,17 @@ export async function startDeeplyLibraryCourse(
       title: displayLabel,
       subtitle: "课程库 · 正在准备",
       icon: "📚",
-      // 用书的封面作 row avatar;空 URL 时不带 avatarUri,自动 fallback 到
-      // mini-app 默认头像(getMiniAppListImage(deeply-course))。
+      // Row avatar 优先级:封面 URL → 分类色块 + 书名首字 → mini-app 默认头像。
+      // 色块 fallback 让每本书在聊天列表里仍有视觉区分度,而不是所有没封面的
+      // 书都退化成同一个 deeply learning brain 头像。
       ...(input.cover !== undefined && input.cover.length > 0
         ? { avatarUri: input.cover }
-        : {})
+        : {
+            avatarFallback: {
+              fillColor: getCategoryStyle(input.category).colorStart,
+              label: makeBookGlyphLabel(input.title)
+            }
+          })
     },
     bootstrap: {
       status: "loading",

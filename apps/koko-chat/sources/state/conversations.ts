@@ -75,6 +75,20 @@ export interface ConversationListSnapshot {
   icon?: string;
   /** Remote or local avatar URI (mini-app storage is the source of truth). */
   avatarUri?: string;
+  /**
+   * "Colour swatch + short label" avatar used when no real image exists.
+   * Designed for deeply library courses whose book has no cover URL: the row
+   * shows a solid category-coloured square with the first 1-2 characters of
+   * the book title, matching the BookCoverImage fallback inside the library.
+   *
+   * Priority: avatarUri > avatarFallback > mini-app listImage > listGlyph.
+   */
+  avatarFallback?: {
+    /** Background colour, e.g. category style colorStart. */
+    fillColor: string;
+    /** Short label drawn on the swatch (1-2 CJK chars or ~3-4 latin chars). */
+    label: string;
+  };
 }
 
 export type ConversationBootstrapStatus = "loading" | "ready" | "error";
