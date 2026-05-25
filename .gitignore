@@ -76,3 +76,7 @@ miniapps/deeply/scripts/out/
 miniapps/deeply/scripts/ref/
 miniapps/deeply/scripts/generation.log.jsonl
 miniapps/deeply/data/covers/
+
+# Deeply avatar originals — kept locally for re-cropping; shipped art is the
+# smaller in-place files under miniapps/deeply/mobile/assets/.
+miniapps/deeply/mobile/assets/.original-backup/
