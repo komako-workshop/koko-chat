@@ -17,6 +17,8 @@ const SRC_KG = "/Users/lijianren/workspace/demo/book-knowledge-graph/graph-data/
 const SRC_EDGES = "/Users/lijianren/workspace/demo/book-knowledge-graph/graph-data/edges_merged.json";
 const SRC_EXTRA = "/Users/lijianren/Desktop/workspace/koko-chat/miniapps/deeply/data/library-extra-books.generated.json";
 const OUT = "/Users/lijianren/Desktop/workspace/koko-chat/miniapps/deeply/data/library-pool.json";
+const COVERS_PATH = "/Users/lijianren/Desktop/workspace/koko-chat/miniapps/deeply/data/library-covers.generated.json";
+const LIBRARY_COVERS_PUBLIC_BASE = (process.env.LIBRARY_COVERS_PUBLIC_BASE ?? "https://deeply.plus/covers").replace(/\/+$/, "");
 
 // 每本书 upstream / downstream 各保留多少邻居(top by peer PageRank)
 const MAX_NEIGHBORS_PER_DIR = 6;
@@ -34,6 +36,9 @@ const deeplyBase = JSON.parse(fs.readFileSync(SRC_DEEPLY, "utf8"));
 const deeplyExtraRaw = fs.existsSync(SRC_EXTRA)
   ? JSON.parse(fs.readFileSync(SRC_EXTRA, "utf8"))
   : [];
+const libraryCovers = fs.existsSync(COVERS_PATH)
+  ? JSON.parse(fs.readFileSync(COVERS_PATH, "utf8"))
+  : { items: {} };
 // Extra 池由 KG 邻居扩展生成,可能和 base pool 里的书是同一本但标题写法
 // 略不同(例如 "奥德赛" vs "《奥德赛》")。合并时先按 normalized(title+author)
 // 去重,base 优先保留。
@@ -215,6 +220,16 @@ const out = deeply.map((b, i) => {
   };
 });
 
+let coverMapped = 0;
+for (const book of out) {
+  if (typeof book.img === "string" && book.img.length > 0) continue;
+  const meta = libraryCovers.items?.[book.id];
+  if (meta?.filename) {
+    book.img = `${LIBRARY_COVERS_PUBLIC_BASE}/${meta.filename}`;
+    coverMapped += 1;
+  }
+}
+
 console.log(`\n=== match 统计 ===`);
 console.log(`  title+author 精确:${matched}`);
 console.log(`  title only fallback:${fallbackTitle}`);
@@ -230,6 +245,11 @@ console.log(`  平均 upstream: ${(upTotal/deeply.length).toFixed(1)}, downstrea
 const upPidHit = out.reduce((acc, b) => acc + (b.ue ?? []).filter((n) => n.pid !== undefined).length, 0);
 const downPidHit = out.reduce((acc, b) => acc + (b.de ?? []).filter((n) => n.pid !== undefined).length, 0);
 console.log(`  邻居中能跳 pool 的: up ${upPidHit}/${upTotal} (${(100*upPidHit/upTotal).toFixed(1)}%), down ${downPidHit}/${downTotal} (${(100*downPidHit/downTotal).toFixed(1)}%)`);
+
+console.log(`\n=== cover mapping 统计 ===`);
+console.log(`  mapping items: ${Object.keys(libraryCovers.items ?? {}).length}`);
+console.log(`  filled empty img from mapping: ${coverMapped}`);
+console.log(`  img coverage: ${out.filter((b) => typeof b.img === "string" && b.img.length > 0).length}/${out.length} (${(100*out.filter((b) => typeof b.img === "string" && b.img.length > 0).length/out.length).toFixed(1)}%)`);
 
 // PR top 20 sanity check
 const withPr = out.filter((b) => b.pr > 0);

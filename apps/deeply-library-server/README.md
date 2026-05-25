@@ -70,6 +70,35 @@ git pull
 sudo systemctl restart kokochat-library
 ```
 
+### 封面图维护
+
+封面源数据由 `scripts/fetch-library-covers.mjs` 维护。脚本读取
+`miniapps/deeply/data/library-pool.json`，把缺失封面的图片下载到本地
+`miniapps/deeply/data/covers/`，并生成会进 git 的
+`miniapps/deeply/data/library-covers.generated.json`。本地图片目录很大，
+已经被 `.gitignore` 忽略。
+
+常用命令：
+
+```bash
+node scripts/fetch-library-covers.mjs --only kgx_
+node scripts/fetch-library-covers.mjs --limit 100 --skip-douban
+node scripts/build-library-pool.mjs
+```
+
+上线图片时同步本地 covers 目录到 exchange，然后让 Caddy 的 `/covers/*`
+静态路由读取 `/var/www/library-covers/`：
+
+```bash
+rsync -avz --delete miniapps/deeply/data/covers/ \
+  exchange:/var/www/library-covers/
+```
+
+`library-pool.json` 中的空 `img` 会在 build 阶段按
+`library-covers.generated.json` 填成 `https://deeply.plus/covers/<id>.<ext>`。
+需要临时指向别的 host 时，可设置 `LIBRARY_COVERS_PUBLIC_BASE` 后再跑
+`scripts/build-library-pool.mjs`。
+
 ### Env
 
 | 变量 | prod 值 | 说明 |
