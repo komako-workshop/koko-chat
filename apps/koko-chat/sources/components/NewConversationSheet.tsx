@@ -1,15 +1,14 @@
 /**
- * "+ 新建会话" 弹出面板。
+ * "+ 新建会话" Spotlight 浮岛面板。
  *
- * 替代了之前的 iOS ActionSheet + Android Alert 原生组合。设计参考
- * `.brand/new-conversation-mockups.html` 方案 E:磨砂感的底部 sheet,
- * 顶部一条"粘 GitHub 链接装新 mini-app"的占位入口(灰态、不可点,
- * 给用户一个"以后可以装更多 mini-app"的扩展信号),下面是"已安装" mini-app
- * 列表,挑一个就开始新会话。
- *
- * 视觉上跟 KokoChat 暖纸调一致(白底 + 米色描边),区别于 deeply / tavern
- * 自家弹窗的圆头像风格 — 这里 mini-app icon 用 squircle 圆角方,呼应
- * 启动器 UI 的语义(挑一个"应用")。
+ * 参照 `.brand/new-conversation-mockups.html` 方案 E:
+ *   - 整屏深色 backdrop(点击外部关闭)
+ *   - 一个**居中浮岛**式的白色圆角面板,距离屏幕上下都有 margin,
+ *     不贴底也不全宽,像 macOS Spotlight / iOS share sheet 的命令面板
+ *   - 顶部一条"粘 GitHub 链接装新 mini-app"占位入口(灰态、不可点),
+ *     KokoChat 是 mini-app 容器,先把视觉信号占住
+ *   - 下方 "已安装" mini-app 列表;条目之间细分隔线
+ *   - "取消"按钮**漂浮在面板下方独立位置**,白色字、无容器,跟面板分开
  *
  * 不用 RN `Modal`:Modal portal 到根视图外,会跳出 deeply web demo 的 480
  * 手机框。这里用 absolute fill 在父 root 渲染,跟其它 sheet 一致。
@@ -24,15 +23,16 @@ import {
   Text,
   View
 } from "react-native";
+import { BlurView } from "expo-blur";
 
 import { CachedImage } from "@/components/CachedImage";
 import {
   getMiniAppListGlyph,
   type MiniAppDescriptor
 } from "@/runtime/miniApps";
-import { KokoColors, KokoRadius } from "@/theme/koko";
+import { KokoColors } from "@/theme/koko";
 
-const SHEET_TRANSLATE_INITIAL = 480;
+const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 export interface NewConversationSheetProps {
   apps: MiniAppDescriptor[];
@@ -45,43 +45,40 @@ export function NewConversationSheet({
   onPickApp,
   onClose
 }: NewConversationSheetProps): React.ReactElement {
+  // anim 0 → 1:backdrop 渐显 + 面板 fade+scale-in(从 0.94 弹到 1)。
+  // Spotlight 那种"突然出现的浮岛"质感,不用底部滑入的动作。
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(anim, {
       toValue: 1,
-      duration: 240,
+      duration: 180,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true
     }).start();
   }, [anim]);
 
-  const handleClose = useCallback(() => {
-    Animated.timing(anim, {
-      toValue: 0,
-      duration: 180,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: true
-    }).start(({ finished }) => {
-      if (finished) onClose();
-    });
-  }, [anim, onClose]);
-
-  const handlePick = useCallback(
-    (app: MiniAppDescriptor) => {
+  const closeAndThen = useCallback(
+    (after?: () => void) => {
       Animated.timing(anim, {
         toValue: 0,
-        duration: 160,
+        duration: 140,
         easing: Easing.in(Easing.cubic),
         useNativeDriver: true
       }).start(({ finished }) => {
         if (finished) {
-          onPickApp(app);
+          after?.();
           onClose();
         }
       });
     },
-    [anim, onClose, onPickApp]
+    [anim, onClose]
+  );
+
+  const handleClose = useCallback(() => closeAndThen(), [closeAndThen]);
+  const handlePick = useCallback(
+    (app: MiniAppDescriptor) => closeAndThen(() => onPickApp(app)),
+    [closeAndThen, onPickApp]
   );
 
   const backdropOpacity = anim.interpolate({
@@ -89,27 +86,35 @@ export function NewConversationSheet({
     outputRange: [0, 1],
     extrapolate: "clamp"
   });
-  const sheetTranslateY = anim.interpolate({
+  const panelScale = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [SHEET_TRANSLATE_INITIAL, 0],
+    outputRange: [0.94, 1],
     extrapolate: "clamp"
   });
 
   return (
     <View style={styles.backdrop} pointerEvents="auto">
-      <Animated.View
+      {/* 真·毛玻璃 backdrop:expo-blur 给到 native 平台 UIVisualEffectView /
+          Android 12+ RenderEffect 实现,web 走 backdrop-filter。tint dark
+          + intensity 32 拉出和深色 dim 一致的高级感。Animated 包装让 mount
+          时 opacity 渐显,跟面板 fade-scale 同步。 */}
+      <AnimatedBlurView
+        intensity={32}
+        tint="dark"
+        style={[styles.backdropBlur, { opacity: backdropOpacity }]}
         pointerEvents="none"
-        style={[styles.backdropFill, { opacity: backdropOpacity }]}
       />
       <Pressable style={styles.backdropPressable} onPress={handleClose} />
-      <Animated.View
-        style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}
-      >
-        <View style={styles.grabber} />
 
-        {/* 顶部占位 install 入口:从 mockup 方案 E 来。视觉上等同于
-            Spotlight 的搜索条,但语义换成"装新 mini-app",符合 KokoChat
-            的容器哲学。当前 disabled,点了不响应。 */}
+      {/* 居中浮岛主体。Spotlight 风:左右离屏幕 16,纵向偏下让面板接近
+          内容区中央偏下,既不贴底也不顶天,跟 + 按钮拉开距离,视觉重心
+          下沉一点更稳。 */}
+      <Animated.View
+        style={[
+          styles.panel,
+          { opacity: backdropOpacity, transform: [{ scale: panelScale }] }
+        ]}
+      >
         <View style={styles.installRow}>
           <View style={styles.installLead}>
             <Text style={styles.installLeadGlyph}>+</Text>
@@ -129,22 +134,15 @@ export function NewConversationSheet({
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
         >
-          {apps.map((app) => (
-            <AppRow key={app.id} app={app} onPress={() => handlePick(app)} />
+          {apps.map((app, index) => (
+            <AppRow
+              key={app.id}
+              app={app}
+              onPress={() => handlePick(app)}
+              divider={index > 0}
+            />
           ))}
         </ScrollView>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="取消"
-          onPress={handleClose}
-          style={({ pressed }) => [
-            styles.cancelButton,
-            pressed && styles.cancelButtonPressed
-          ]}
-        >
-          <Text style={styles.cancelButtonText}>取消</Text>
-        </Pressable>
       </Animated.View>
     </View>
   );
@@ -152,10 +150,12 @@ export function NewConversationSheet({
 
 function AppRow({
   app,
-  onPress
+  onPress,
+  divider
 }: {
   app: MiniAppDescriptor;
   onPress: () => void;
+  divider: boolean;
 }): React.ReactElement {
   const glyph = app.listGlyph ?? getMiniAppListGlyph(app.id) ?? "·";
   return (
@@ -163,7 +163,11 @@ function AppRow({
       accessibilityRole="button"
       accessibilityLabel={app.displayName}
       onPress={onPress}
-      style={({ pressed }) => [styles.appRow, pressed && styles.appRowPressed]}
+      style={({ pressed }) => [
+        styles.appRow,
+        divider && styles.appRowDivider,
+        pressed && styles.appRowPressed
+      ]}
     >
       <View style={styles.appIcon}>
         {app.listImage !== undefined ? (
@@ -194,43 +198,45 @@ function AppRow({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: "flex-end",
     zIndex: 60
   },
-  backdropFill: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(20,20,28,0.42)"
+  backdropBlur: {
+    ...StyleSheet.absoluteFillObject
   },
   backdropPressable: {
     ...StyleSheet.absoluteFillObject
   },
-  sheet: {
-    backgroundColor: KokoColors.bg,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+  // 居中偏下的浮岛:left/right 离屏幕 16,top 25%(从 12% 下移),让面板
+  // 远离屏幕顶 + 按钮,视觉重心稳一些。圆角 22 + 阴影偏柔,叠在 blur backdrop
+  // 上时跟 Spotlight 命令面板观感对齐。
+  panel: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    top: "25%",
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderRadius: 22,
     paddingTop: 6,
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-    maxHeight: "82%"
-  },
-  grabber: {
-    alignSelf: "center",
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    marginTop: 6,
-    marginBottom: 14
+    paddingHorizontal: 10,
+    paddingBottom: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.22,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 24,
+    maxHeight: "58%",
+    overflow: "hidden"
   },
   installRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     backgroundColor: KokoColors.surfaceSoft,
-    borderRadius: 14,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    marginBottom: 14
+    marginTop: 6,
+    marginBottom: 12
   },
   installLead: {
     width: 26,
@@ -269,31 +275,34 @@ const styles = StyleSheet.create({
     color: KokoColors.inkSecondary,
     letterSpacing: 0.6,
     textTransform: "uppercase",
-    paddingHorizontal: 4,
-    marginBottom: 6
+    paddingHorizontal: 6,
+    marginBottom: 4
   },
   list: {
     flexGrow: 0,
     flexShrink: 1
   },
   listContent: {
-    paddingBottom: 6
+    paddingBottom: 2
   },
   appRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 4
+    paddingVertical: 12,
+    paddingHorizontal: 6
+  },
+  appRowDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: KokoColors.hairline
   },
   appRowPressed: {
-    backgroundColor: KokoColors.surfaceSoft,
-    borderRadius: 12
+    backgroundColor: KokoColors.surfaceSoft
   },
   appIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: KokoColors.surfaceSoft,
     alignItems: "center",
     justifyContent: "center",
@@ -304,7 +313,7 @@ const styles = StyleSheet.create({
     height: "100%"
   },
   appIconGlyph: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "600",
     color: KokoColors.inkSecondary
   },
@@ -323,26 +332,9 @@ const styles = StyleSheet.create({
     marginTop: 3
   },
   appChevron: {
-    fontSize: 22,
+    fontSize: 20,
     color: KokoColors.inkMuted,
     fontWeight: "300",
-    paddingHorizontal: 4
-  },
-  cancelButton: {
-    marginTop: 14,
-    paddingVertical: 14,
-    borderRadius: KokoRadius.lg,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(17,17,17,0.06)"
-  },
-  cancelButtonPressed: {
-    backgroundColor: KokoColors.surfaceSoft
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: KokoColors.ink
+    paddingHorizontal: 2
   }
 });

@@ -6,7 +6,11 @@ import {
   registerOutboundMessageBuilder,
   type OutboundMessageBuilder
 } from "@/runtime/outboundMessages";
-import type { ChatMessage } from "@/state/conversations";
+import {
+  useConversationStore,
+  type ChatMessage,
+  type ConversationMeta
+} from "@/state/conversations";
 
 import { deeplyAvatarChatBuddy, deeplyAvatarLearning } from "./avatars";
 import { DEEPLY_MINI_APP_ID } from "./constants";
@@ -549,6 +553,27 @@ const deeplyCourseOutboundBuilder: OutboundMessageBuilder = async ({
   };
 };
 
+/**
+ * "+ menu" entry for Deeply.
+ *
+ * The mini-app itself owns `/deeply`, but tapping the `+` launcher should mean
+ * "start a fresh thread with this app", just like Koko and 酒馆. Returning to
+ * an old Deeply row in the chat list still opens that old conversation. Direct
+ * route access to `/deeply` continues to fall back to the singleton explore
+ * conversation inside DeeplyExploreScreen.
+ */
+function createDeeplyExploreConversation(): ConversationMeta {
+  return useConversationStore.getState().create({
+    mode: DEEPLY_MINI_APP_ID,
+    title: "Deeply 知识探索",
+    sessionScope: `explore:${Date.now().toString(36)}`,
+    listSnapshot: {
+      title: "Deeply 知识探索",
+      subtitle: "陪你引经据典地聊一聊"
+    }
+  });
+}
+
 export function registerDeeplyMiniApp(): void {
   if (registered) return;
   registered = true;
@@ -577,7 +602,7 @@ export function registerDeeplyMiniApp(): void {
     showInLauncher: true,
     listGlyph: "📖",
     listImage: deeplyAvatarChatBuddy,
-    launch: { kind: "route", pathname: "/deeply" },
+    onCreate: createDeeplyExploreConversation,
     openclaw: {
       defaultAgentId: "deeply"
     }

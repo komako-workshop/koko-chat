@@ -6,17 +6,17 @@
  * conversation mode,所以 `openConversation(meta.id)` 会自动跳到这里。
  */
 import { useLayoutEffect } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useConversationStore } from "@/state/conversations";
-import { KokoColors, KokoRadius } from "@/theme/koko";
+import { KokoRadius } from "@/theme/koko";
 
-import { deeplyAvatarLearning } from "../../../../../miniapps/deeply/mobile/avatars";
 import { openDeeplyCourseOutlineDrawer } from "../../../../../miniapps/deeply/mobile/courseOutlineDrawerStore";
 import { DeeplyCourseScreen } from "../../../../../miniapps/deeply/mobile/DeeplyCourseScreen";
+import { LibraryBackButton } from "../library/_backButton";
 
 export default function DeeplyCourseRoute(): React.ReactElement {
   const navigation = useNavigation();
@@ -32,31 +32,15 @@ export default function DeeplyCourseRoute(): React.ReactElement {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      // Header title = 课程名(取代 "课程讲解"),进度小字交给 screen 自己渲染,
-      // 避免 host header / screen 头像区双层重复信息。
+      // Header title = 课程名(取代 "课程讲解"),进度小字交给 screen 自己渲染。
       title: conversationTitle,
-      // headerLeft 自定义同时放 back chevron + Deeply 头像。RN Navigation
-      // 默认 headerLeft 只在没 set headerLeft 时才显示返回按钮 —— 我们 set 了
-      // 头像就把它顶掉了,所以这里手动加回 chevron。
-      headerLeft: () => (
-        <View style={styles.headerLeftRow}>
-          {navigation.canGoBack() ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="返回"
-              hitSlop={10}
-              onPress={() => navigation.goBack()}
-              style={({ pressed }) => [
-                styles.headerBackButton,
-                pressed && styles.headerBackButtonPressed
-              ]}
-            >
-              <Text style={styles.headerBackGlyph}>‹</Text>
-            </Pressable>
-          ) : null}
-          <Image source={deeplyAvatarLearning} style={styles.headerAvatar} resizeMode="cover" />
-        </View>
-      ),
+      // 跟 Deeply 主页 / library 三个子页统一用 LibraryBackButton 圆角 ‹,
+      // 不再夹一个不可点的 Deeply 头像把入口位置抢走 — 之前 chevron 跟头像
+      // 并排,用户经常按到头像,以为返回坏了。
+      headerLeft: () =>
+        navigation.canGoBack() ? (
+          <LibraryBackButton onPress={() => navigation.goBack()} />
+        ) : null,
       headerRight: () =>
         conversationId === null ? null : (
           <Pressable
@@ -86,33 +70,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#F9F9F7"
-  },
-  headerLeftRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingLeft: 4,
-    paddingRight: 4,
-    gap: 4
-  },
-  headerBackButton: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: KokoRadius.pill
-  },
-  headerBackButtonPressed: {
-    opacity: 0.5
-  },
-  headerBackGlyph: {
-    fontSize: 26,
-    color: "#111111",
-    fontWeight: "300",
-    lineHeight: 28
-  },
-  headerAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: KokoRadius.pill,
-    backgroundColor: KokoColors.surfaceSoft
   },
   headerOutlineButton: {
     paddingHorizontal: 14,
