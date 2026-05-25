@@ -74,7 +74,7 @@ interface GatewayState {
   activeAgentRuns: Record<string, number>;
 
   connect: (setup: OpenClawSetup) => Promise<void>;
-  reconnectIfPossible: () => Promise<boolean>;
+  reconnectIfPossible: (options?: { force?: boolean }) => Promise<boolean>;
   syncPendingConversations: () => Promise<void>;
   disconnect: () => Promise<void>;
   forgetIdentity: () => Promise<void>;
@@ -98,7 +98,7 @@ export interface OpenClawChatAttachment {
 
 interface PendingConversationSyncTarget {
   conversation: ConversationMeta;
-  localUserText: string;
+  localUserText?: string;
   fallbackRunId: string;
 }
 
@@ -383,18 +383,29 @@ function shouldDeferStreamingAgentText(
 function collectPendingConversationSyncTargets(): PendingConversationSyncTarget[] {
   const store = useConversationStore.getState();
   const targets: PendingConversationSyncTarget[] = [];
+
   for (const conversation of store.list) {
     const messages = store.getMessages(conversation.id);
-    const pendingIndex = findLastPendingAgentIndex(messages);
-    if (pendingIndex < 0) continue;
-    const localUser = findLastUserBefore(messages, pendingIndex);
-    if (localUser === null) continue;
-    const pendingMessage = messages[pendingIndex];
-    targets.push({
-      conversation,
-      localUserText: localUser.text,
-      fallbackRunId: pendingMessage?.runId ?? `recovered-${conversation.id}-${Date.now()}`
-    });
+    const recoverableIndex = findLastRecoverableAgentIndex(messages);
+    if (recoverableIndex >= 0) {
+      const localUser = findLastUserBefore(messages, recoverableIndex);
+      if (localUser !== null) {
+        const pendingMessage = messages[recoverableIndex];
+        targets.push({
+          conversation,
+          localUserText: localUser.text,
+          fallbackRunId: pendingMessage?.runId ?? `recovered-${conversation.id}-${Date.now()}`
+        });
+        continue;
+      }
+    }
+
+    if (conversation.bootstrap?.status === "loading" || isRecoverableTransportError(conversation.bootstrap?.error)) {
+      targets.push({
+        conversation,
+        fallbackRunId: `recovered-${conversation.id}-${Date.now()}`
+      });
+    }
   }
   return targets;
 }
@@ -403,6 +414,16 @@ function findLastPendingAgentIndex(messages: ChatMessage[]): number {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message?.role === "agent" && message.streaming === true) return i;
+  }
+  return -1;
+}
+
+function findLastRecoverableAgentIndex(messages: ChatMessage[]): number {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role !== "agent") continue;
+    if (message.streaming === true) return i;
+    if (isRecoverableTransportError(message.error)) return i;
   }
   return -1;
 }
@@ -449,6 +470,18 @@ function findRemoteAssistantAfterLocalUser(
   return null;
 }
 
+function findLatestRemoteAssistant(remoteMessages: JsonRecord[]): RemoteAssistantCandidate | null {
+  for (let i = remoteMessages.length - 1; i >= 0; i -= 1) {
+    const message = remoteMessages[i];
+    if (message === undefined || remoteMessageRole(message) !== "agent") continue;
+    const text = remoteMessageText(message).trim();
+    if (text.length === 0) continue;
+    const runId = typeof message.runId === "string" ? message.runId : undefined;
+    return runId === undefined ? { text } : { text, runId };
+  }
+  return null;
+}
+
 function remoteMessageRole(message: JsonRecord): "user" | "agent" | null {
   if (message.role === "user") return "user";
   if (message.role === "assistant" || message.role === "agent") return "agent";
@@ -472,6 +505,11 @@ function normalizeHistoryText(value: string): string {
   return value.trim().replace(/\s+/g, " ");
 }
 
+function isRecoverableTransportError(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  return /websocket closed:\s*(1000|1001|1005|1006|1012|1013)\b|ws not open|not connected/i.test(value);
+}
+
 function applyRecoveredAgentFinal(
   conversationId: string,
   runId: string,
@@ -481,8 +519,28 @@ function applyRecoveredAgentFinal(
   let preview: string | undefined;
 
   useConversationStore.getState().setMessages(conversationId, (prev) => {
-    const pendingIndex = findLastPendingAgentIndex(prev);
-    if (pendingIndex < 0) return prev;
+    const pendingIndex = findLastRecoverableAgentIndex(prev);
+    if (pendingIndex < 0) {
+      if (hasEquivalentAgentText(prev, fullText)) return prev;
+      const transformed = buildTransformedAgentMessages(conversationId, runId, fullText);
+      if (transformed !== null) {
+        preview = transformed.preview;
+        applied = true;
+        return [...prev, ...transformed.messages];
+      }
+      preview = previewFromText(fullText);
+      applied = true;
+      return [
+        ...prev,
+        {
+          id: newMessageId(),
+          role: "agent",
+          text: fullText,
+          runId,
+          streaming: false
+        }
+      ];
+    }
 
     const transformed = buildTransformedAgentMessages(conversationId, runId, fullText);
     const next = [...prev];
@@ -508,6 +566,16 @@ function applyRecoveredAgentFinal(
     useConversationStore.getState().touch(conversationId, preview);
   }
   return applied;
+}
+
+function hasEquivalentAgentText(messages: ChatMessage[], text: string): boolean {
+  const needle = normalizeHistoryText(text);
+  if (needle.length === 0) return false;
+  return messages.some((message) => {
+    if (message.role !== "agent") return false;
+    if (message.error !== undefined) return false;
+    return normalizeHistoryText(message.text) === needle;
+  });
 }
 
 function applyMultiBubbleDelta(
@@ -897,9 +965,9 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     }
   },
 
-  async reconnectIfPossible() {
+  async reconnectIfPossible(options) {
     const { status, setup } = get();
-    if (status === "connected" || status === "connecting" || status === "handshaking") {
+    if (options?.force !== true && (status === "connected" || status === "connecting" || status === "handshaking")) {
       return true;
     }
 
@@ -940,10 +1008,9 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
               timeoutMs: PENDING_SESSION_SYNC_TIMEOUT_MS
             }
           );
-          const assistant = findRemoteAssistantAfterLocalUser(
-            remoteMessages,
-            target.localUserText
-          );
+          const assistant = target.localUserText === undefined
+            ? findLatestRemoteAssistant(remoteMessages)
+            : findRemoteAssistantAfterLocalUser(remoteMessages, target.localUserText);
           if (assistant === null) continue;
           applyRecoveredAgentFinal(
             target.conversation.id,

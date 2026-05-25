@@ -467,30 +467,48 @@ async function translateFirstMes(card: FetchedCard, characterName: string): Prom
   const original = typeof card.data?.first_mes === "string" ? card.data.first_mes.trim() : "";
   if (original.length === 0) return "";
   if (looksMostlyChinese(original)) return original;
-  const result = await inferOnce({
-    miniAppId: MINI_APP_ID,
-    prompt: [
-      "把下面的角色开场白翻译成自然中文。",
-      "要求：",
-      "- 保留角色语气、动作描写、段落结构和 Markdown / 斜体标记。",
-      "- 人名、乐队名、地名、专有名词可保留原文。",
-      "- 只输出译文，不要解释。",
-      "",
-      `角色名：${characterName}`,
-      "",
-      "原文：",
-      original
-    ].join("\n"),
-    timeoutMs: 300_000
-  });
-  const translated = result.text.trim();
-  return translated.length > 0 ? translated : original;
+  try {
+    const result = await inferOnce({
+      miniAppId: MINI_APP_ID,
+      prompt: [
+        "把下面的角色开场白翻译成自然中文。",
+        "要求：",
+        "- 保留角色语气、动作描写、段落结构和 Markdown / 斜体标记。",
+        "- 人名、乐队名、地名、专有名词可保留原文。",
+        "- 只输出译文，不要解释。",
+        "",
+        `角色名：${characterName}`,
+        "",
+        "原文：",
+        original
+      ].join("\n"),
+      timeoutMs: 300_000
+    });
+    const translated = result.text.trim();
+    return translated.length > 0 ? translated : original;
+  } catch (error) {
+    if (isRecoverableTransportError(error)) {
+      if (__DEV__) {
+        console.warn(
+          "[tavern-roleplay] first_mes translation transport failed; falling back to original:",
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+      return original;
+    }
+    throw error;
+  }
 }
 
 function looksMostlyChinese(text: string): boolean {
   const cjk = (text.match(/[\u3400-\u9fff\uf900-\ufaff]/g) ?? []).length;
   const letters = (text.match(/[A-Za-z]/g) ?? []).length;
   return cjk > 0 && cjk >= letters * 0.2;
+}
+
+function isRecoverableTransportError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /websocket closed:\s*(1000|1001|1005|1006|1012|1013)\b|ws not open|not connected/i.test(message);
 }
 
 function slug(value: string): string {
