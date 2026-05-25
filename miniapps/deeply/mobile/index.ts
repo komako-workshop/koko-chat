@@ -573,6 +573,7 @@ export function registerDeeplyMiniApp(): void {
   registerMiniApp({
     id: DEEPLY_MINI_APP_ID,
     displayName: "Deeply",
+    launcherSubtitle: "陪你引经据典地聊一聊",
     showInLauncher: true,
     listGlyph: "📖",
     listImage: deeplyAvatarChatBuddy,

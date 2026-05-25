@@ -148,6 +148,7 @@ export function registerTavernMiniApp(): void {
   registerMiniApp({
     id: MINI_APP_ID,
     displayName: "酒馆",
+    launcherSubtitle: "找一张对味的角色卡",
     listGlyph: "🍺",
     listImage: tavernAvatar,
     showInLauncher: true,

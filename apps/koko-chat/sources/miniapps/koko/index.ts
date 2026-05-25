@@ -154,6 +154,7 @@ export function registerKokoMiniApp(): void {
     showInLauncher: true,
     listGlyph: "K",
     listImage: kokoAvatar,
+    launcherSubtitle: "主助手 · 一只爱聊天的小鸟",
     defaultTitle: () => "Koko",
     openclaw: { defaultAgentId: "koko" },
     splitAgentMessages: true,

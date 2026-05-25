@@ -1,9 +1,7 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
-  ActionSheetIOS,
   Alert,
   FlatList,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -16,6 +14,7 @@ import { router, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CachedImage } from "@/components/CachedImage";
+import { NewConversationSheet } from "@/components/NewConversationSheet";
 import {
   getLauncherMiniApps,
   getMiniAppListGlyph,
@@ -47,29 +46,13 @@ export default function ChatsTabScreen(): React.ReactElement {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
+  // Custom "+ 新建会话" sheet (see .brand/new-conversation-mockups.html · 方案 E).
+  // Replaces the previous iOS ActionSheet + Android Alert combo so the launcher
+  // can host a GitHub-install placeholder row plus richer per-mini-app metadata.
+  const [isNewChatSheetOpen, setIsNewChatSheetOpen] = useState(false);
+
   function handleNewChat(): void {
-    const launchers = getLauncherMiniApps();
-    const options = ["取消", ...launchers.map((app) => app.displayName)];
-    const onSelect = (index: number): void => {
-      if (index <= 0) return;
-      const app = launchers[index - 1];
-      if (app === undefined) return;
-      void createFromLauncher(app);
-    };
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: 0, title: "新建会话" },
-        onSelect
-      );
-    } else {
-      Alert.alert("新建会话", undefined, [
-        ...launchers.map((app, index) => ({
-          text: app.displayName,
-          onPress: () => onSelect(index + 1)
-        })),
-        { text: "取消", style: "cancel" }
-      ]);
-    }
+    setIsNewChatSheetOpen(true);
   }
 
   async function createFromLauncher(app: MiniAppDescriptor): Promise<void> {
@@ -166,6 +149,14 @@ export default function ChatsTabScreen(): React.ReactElement {
           </View>
         }
       />
+
+      {isNewChatSheetOpen ? (
+        <NewConversationSheet
+          apps={getLauncherMiniApps()}
+          onPickApp={(app) => void createFromLauncher(app)}
+          onClose={() => setIsNewChatSheetOpen(false)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

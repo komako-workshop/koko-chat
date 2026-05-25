@@ -27,6 +27,12 @@ export interface MiniAppDescriptor {
   id: string;
   /** Human-readable name shown in launchers and developer tools. */
   displayName: string;
+  /**
+   * One-line tagline shown under the display name inside the "+ new conversation"
+   * sheet. Skip if the name alone is self-explanatory; the sheet hides the row
+   * if this is omitted.
+   */
+  launcherSubtitle?: string;
   /** Whether the app should be visible in the conversation-list + menu. */
   showInLauncher?: boolean;
   /** Fallback glyph used by host list rows when no avatar is present. */

@@ -6,14 +6,15 @@
  * 等也都在 Deeply 自己的 surface 完成。
  */
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { KokoColors, KokoRadius } from "@/theme/koko";
-import { deeplyAvatarChatBuddy } from "../../../../miniapps/deeply/mobile/avatars";
 import { DeeplyExploreScreen } from "../../../../miniapps/deeply/mobile/DeeplyExploreScreen";
+import { LibraryBackButton } from "./library/_backButton";
 
 export default function DeeplyHomeRoute(): React.ReactElement {
   // header 里左边渲染 Deeply 头像,告诉用户这里是 Deeply 而不是泛 KokoChat。
@@ -49,11 +50,10 @@ export default function DeeplyHomeRoute(): React.ReactElement {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerLeft: () => (
-        <View style={styles.headerLeft}>
-          <Image source={deeplyAvatarChatBuddy} style={styles.headerAvatar} resizeMode="cover" />
-        </View>
-      ),
+      headerLeft: () =>
+        navigation.canGoBack() ? (
+          <LibraryBackButton onPress={() => navigation.goBack()} />
+        ) : null,
       headerRight: () => (
         <Pressable
           accessibilityRole="button"
@@ -65,7 +65,7 @@ export default function DeeplyHomeRoute(): React.ReactElement {
             pressed && styles.headerLibraryButtonPressed
           ]}
         >
-          <Text style={styles.headerLibraryGlyph}>📚</Text>
+          <Ionicons name="library-outline" size={22} color={KokoColors.ink} />
         </Pressable>
       )
     });
@@ -88,16 +88,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F9F9F7"
   },
-  headerLeft: {
-    paddingLeft: 12,
-    paddingRight: 4
-  },
-  headerAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: KokoRadius.pill,
-    backgroundColor: KokoColors.surfaceSoft
-  },
   headerLibraryButton: {
     paddingHorizontal: 12,
     paddingVertical: 4,
@@ -108,9 +98,5 @@ const styles = StyleSheet.create({
   },
   headerLibraryButtonPressed: {
     opacity: 0.5
-  },
-  headerLibraryGlyph: {
-    fontSize: 18,
-    lineHeight: 22
   }
 });
