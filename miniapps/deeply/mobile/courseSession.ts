@@ -1,7 +1,6 @@
 import { getMiniAppStorage } from "@/runtime/miniAppStorage";
 import { openConversation } from "@/runtime/navigation";
 import { useConversationStore } from "@/state/conversations";
-import type { OpenClawChatAttachment } from "@/state/gateway";
 
 import { DEEPLY_MINI_APP_ID } from "./constants";
 import { initDeeplyCourseProgress } from "./courseProgress";
@@ -39,7 +38,19 @@ const STORAGE = getMiniAppStorage(DEEPLY_MINI_APP_ID);
  *      不通过 inferCourseOutline 单跑,而是 course surface 自动 fire 一条
  *      引导消息给 mainline session,由 agent 边搜边汇报后输出 outline。
  */
-export type DeeplyCourseSessionKind = "topic" | "research" | "material";
+export type DeeplyCourseSessionKind = "topic" | "research" | "material" | "book" | "library";
+
+/**
+ * 课程长度 preset。
+ *
+ * - `auto`:让 agent 在材料收集 / 分析阶段后自定推断节数。record.sections=0。
+ * - `light`(8 节)、`standard`(24 节,legacy)、`deep`(24 节):用户用 preset 指定具体节数。
+ * - `custom`:用户自己填一个节数。
+ *
+ * `standard` 是早期 sheet 的 default,保留兼容已有 record 反序列化;新 sheet
+ * 不再渲染 standard 选项。
+ */
+export type SectionPreset = "auto" | "light" | "standard" | "deep" | "custom";
 
 export interface DeeplyCourseSessionRecord {
   schemaVersion: 1;
@@ -50,8 +61,16 @@ export interface DeeplyCourseSessionRecord {
   subtitle: string;
   reason: string;
   introduction: string;
+  /**
+   * 课程目标节数。
+   *
+   * - `0` 表示「自动」:agent 在完成材料收集/分析后,基于材料量和课题
+   *   自然结构自行决定节数。这一栏在 outline 落库前是预期值,落库后
+   *   `applyResearchOutlineToCourse` 会覆盖为实际节数。
+   * - 大于 0:用户指定的具体节数(可能是 preset 8/24,也可能是自定义)。
+   */
   sections: number;
-  sectionPreset: "light" | "standard" | "deep";
+  sectionPreset: SectionPreset;
   optionChoices: Array<{
     optionId: string;
     optionTitle: string;
@@ -63,11 +82,48 @@ export interface DeeplyCourseSessionRecord {
    * 会把它注入到给 mainline session 的 research 引导消息里。
    */
   researchTopic?: string;
+  /**
+   * Material-only:用户在 CourseCustomizeSheet "基于一个链接" 里贴的 URL。
+   *
+   * 历史上 sourceKind 还可以是 "file"(本地文件 base64 走 chat attachments),
+   * 但 OpenClaw `chat.send.attachments` 只支持图片(5MB / 25MB WS frame 限),
+   * 长文件没法走过去 — MVP 阶段先只保留 URL 入口。schema 保留 sourceKind 字段
+   * 是为了反序列化老 record。
+   */
   materialInput?: {
     sourceKind: "url" | "file";
     label: string;
     url?: string;
-    attachments?: OpenClawChatAttachment[];
+  };
+  /**
+   * Book-only:用户在 CourseCustomizeSheet "从一本书入门" 里输入的元数据。
+   * 跟 research 走同样的 kickoff → web_search → outline 流程,但 prompt
+   * 侧重不同:agent 会先 disambiguate 书的版本,然后围绕书的章节结构出 outline。
+   */
+  bookInput?: {
+    title: string;
+    author?: string;
+    edition?: string;
+  };
+  /**
+   * Library-only:从预置课程库("右上角 📚")开始的课程。书已经在 metadata
+   * 里 disambiguated 好(title + author 都准确),所以**直接走 book Phase B**
+   * outline 生成,跳过候选 disambiguation。
+   *
+   * 同时把 hook / pitch / echo 等 deeply 现成文案带进 record,后续 prompt 可
+   * inline 作为 hint(让 outline 更贴合 deeply 已有的内容调性)。
+   */
+  libraryInput?: {
+    /** kg_xxx 稳定 id。 */
+    bookId: string;
+    title: string;
+    author: string;
+    /** category 中文名 */
+    category: string;
+    /** hook 副标题(book.h)*/
+    hook: string;
+    /** pitch 长文案(book.p)*/
+    pitch: string;
   };
   parentConversationId?: string;
   startedAt: number;
@@ -112,9 +168,10 @@ export interface DeeplyCourseSourcesRecord {
 
 export interface StartDeeplyCourseInput {
   card: DeeplyRecommendationCard;
+  // ↓ 下面的 sections/sectionPreset 也支持 auto:sections=0 时 agent 决定。
   brief: DeeplyCourseBrief;
   sections: number;
-  sectionPreset: "light" | "standard" | "deep";
+  sectionPreset: SectionPreset;
   optionChoices: Record<string, string>;
   parentConversationId: string | null;
 }
@@ -185,17 +242,17 @@ export interface StartDeeplyResearchCourseInput {
   /** User-provided raw topic from the customize sheet. */
   topic: string;
   sections: number;
-  sectionPreset: "light" | "standard" | "deep";
+  sectionPreset: SectionPreset;
   parentConversationId: string | null;
 }
 
 export interface StartDeeplyMaterialCourseInput {
+  /** 用户输入的 URL,直接当 label / subtitle 用。 */
   label: string;
-  sourceKind: "url" | "file";
-  url?: string;
-  attachments?: OpenClawChatAttachment[];
+  /** 用户贴的 URL — 必填(本地文件入口已下线)。 */
+  url: string;
   sections: number;
-  sectionPreset: "light" | "standard" | "deep";
+  sectionPreset: SectionPreset;
   parentConversationId: string | null;
 }
 
@@ -274,9 +331,10 @@ export async function startDeeplyMaterialCourse(
 ): Promise<void> {
   const store = useConversationStore.getState();
   const label = input.label.trim();
-  if (label.length === 0) {
-    throw new Error("material label is empty");
-  }
+  const url = input.url.trim();
+  if (label.length === 0) throw new Error("material label is empty");
+  if (url.length === 0) throw new Error("material url is empty");
+
   const meta = store.create({
     mode: DEEPLY_COURSE_MODE_ID,
     title: label,
@@ -291,15 +349,12 @@ export async function startDeeplyMaterialCourse(
     },
     listSnapshot: {
       title: label,
-      subtitle: input.sourceKind === "url" ? "基于链接 · 正在准备" : "基于文件 · 正在准备",
-      icon: "📎"
+      subtitle: "基于链接 · 正在准备",
+      icon: "🔗"
     },
     bootstrap: {
       status: "loading",
-      hint:
-        input.sourceKind === "url"
-          ? "正在读取这份链接资料,准备把它拆成一门课。"
-          : "正在把你上传的文件交给 OpenClaw,准备拆成一门课。"
+      hint: "正在读取这份链接资料,准备把它拆成一门课。"
     }
   });
 
@@ -316,12 +371,184 @@ export async function startDeeplyMaterialCourse(
     optionChoices: [],
     researchTopic: label,
     materialInput: {
-      sourceKind: input.sourceKind,
+      sourceKind: "url",
       label,
-      ...(input.url !== undefined ? { url: input.url } : {}),
-      ...(input.attachments !== undefined && input.attachments.length > 0
-        ? { attachments: input.attachments }
-        : {})
+      url
+    },
+    ...(input.parentConversationId !== null
+      ? { parentConversationId: input.parentConversationId }
+      : {}),
+    startedAt: Date.now()
+  };
+  STORAGE.setJson(`${COURSE_RECORD_PREFIX}${meta.id}`, record);
+
+  openConversation(meta.id);
+}
+
+export interface StartDeeplyBookCourseInput {
+  /** 用户输入的书名(必填)。 */
+  title: string;
+  /** 可选作者,大幅降低书目歧义。 */
+  author?: string;
+  /** 可选版本 / 年份提示(如 "2005 扩充版")。 */
+  edition?: string;
+  sections: number;
+  sectionPreset: SectionPreset;
+  parentConversationId: string | null;
+}
+
+/**
+ * 启动一个"从一本书入门"型 course conversation。
+ *
+ * 跟 research / material 完全同形:不调 inferCourseOutline,outline 由 course
+ * surface 自动 fire book kickoff 消息后由 agent 通过 web_search 找资料后产出。
+ *
+ * 跟 research 的核心差别在 prompt 文案:agent 会先 disambiguate 书的版本
+ * (narration 里显式说"我理解你说的是 X 作者 Y 年版本,如不是请告诉我"),
+ * 然后围绕该书的章节结构出 outline,sources 倾向书评 / chapter summary /
+ * 知名解读,而不是 research 那种争议视角。
+ */
+export async function startDeeplyBookCourse(
+  input: StartDeeplyBookCourseInput
+): Promise<void> {
+  const store = useConversationStore.getState();
+  const title = input.title.trim();
+  if (title.length === 0) {
+    throw new Error("book title is empty");
+  }
+  const author = input.author?.trim();
+  const edition = input.edition?.trim();
+  // listSnapshot / window title 用「书名 · 作者」更易识别。
+  const displayLabel = author !== undefined && author.length > 0
+    ? `${title} · ${author}`
+    : title;
+
+  const meta = store.create({
+    mode: DEEPLY_COURSE_MODE_ID,
+    title: displayLabel,
+    sessionScope: `book:${slug(title)}:${Date.now().toString(36)}`,
+    ...(input.parentConversationId !== null
+      ? { parentConversationId: input.parentConversationId }
+      : {}),
+    artifactRef: {
+      type: "koko.deeply.course",
+      id: `book:${title}`,
+      miniAppId: DEEPLY_MINI_APP_ID
+    },
+    listSnapshot: {
+      title: displayLabel,
+      subtitle: "从一本书入门 · 正在准备",
+      icon: "📚"
+    },
+    bootstrap: {
+      status: "loading",
+      hint: "正在确认这本书的版本 + 找它的章节解读,通常需要 1-3 分钟。"
+    }
+  });
+
+  const record: DeeplyCourseSessionRecord = {
+    schemaVersion: 1,
+    kind: "book",
+    cardKind: "topic",
+    title: displayLabel,
+    subtitle: "",
+    reason: "",
+    introduction: "",
+    sections: input.sections,
+    sectionPreset: input.sectionPreset,
+    optionChoices: [],
+    researchTopic: displayLabel,
+    bookInput: {
+      title,
+      ...(author !== undefined && author.length > 0 ? { author } : {}),
+      ...(edition !== undefined && edition.length > 0 ? { edition } : {})
+    },
+    ...(input.parentConversationId !== null
+      ? { parentConversationId: input.parentConversationId }
+      : {}),
+    startedAt: Date.now()
+  };
+  STORAGE.setJson(`${COURSE_RECORD_PREFIX}${meta.id}`, record);
+
+  openConversation(meta.id);
+}
+
+export interface StartDeeplyLibraryCourseInput {
+  /** kg_xxx 稳定 id. */
+  bookId: string;
+  title: string;
+  author: string;
+  category: string;
+  /** book.h 副标题。 */
+  hook: string;
+  /** book.p 推荐文案。 */
+  pitch: string;
+  /** AI 建议节数(从 book.s 折算的整数,大约 8-50)。 */
+  sections: number;
+  parentConversationId: string | null;
+}
+
+/**
+ * 启动一个"从课程库选的"课程。
+ *
+ * 跟从一本书入门(book)的差别:metadata 已经精确,直接走 book Phase B
+ * (outline 生成)。客户端在 DeeplyCourseScreen 里专门为 kind="library"
+ * 加了 kickoff 路径,dispatch buildBookCandidateChosenVisibleText —— 这
+ * 条 visibleText 命中 outbound builder 的 chosen path → buildBookOutlinePrompt。
+ */
+export async function startDeeplyLibraryCourse(
+  input: StartDeeplyLibraryCourseInput
+): Promise<void> {
+  const store = useConversationStore.getState();
+  const title = input.title.trim();
+  if (title.length === 0) {
+    throw new Error("library course title is empty");
+  }
+  const displayLabel = `${title} · ${input.author}`;
+
+  const meta = store.create({
+    mode: DEEPLY_COURSE_MODE_ID,
+    title: displayLabel,
+    sessionScope: `library:${slug(title)}:${Date.now().toString(36)}`,
+    ...(input.parentConversationId !== null
+      ? { parentConversationId: input.parentConversationId }
+      : {}),
+    artifactRef: {
+      type: "koko.deeply.course",
+      id: `library:${input.bookId}`,
+      miniAppId: DEEPLY_MINI_APP_ID
+    },
+    listSnapshot: {
+      title: displayLabel,
+      subtitle: "课程库 · 正在准备",
+      icon: "📚"
+    },
+    bootstrap: {
+      status: "loading",
+      hint: "正在为你准备这门课的目录,通常 1-3 分钟。"
+    }
+  });
+
+  const record: DeeplyCourseSessionRecord = {
+    schemaVersion: 1,
+    kind: "library",
+    cardKind: "topic",
+    title: displayLabel,
+    subtitle: input.hook,
+    reason: "",
+    // pitch 直接作为 record.introduction,详情页 / outline prompt 都用得上。
+    introduction: input.pitch,
+    sections: input.sections,
+    sectionPreset: "auto",
+    optionChoices: [],
+    researchTopic: displayLabel,
+    libraryInput: {
+      bookId: input.bookId,
+      title,
+      author: input.author,
+      category: input.category,
+      hook: input.hook,
+      pitch: input.pitch
     },
     ...(input.parentConversationId !== null
       ? { parentConversationId: input.parentConversationId }

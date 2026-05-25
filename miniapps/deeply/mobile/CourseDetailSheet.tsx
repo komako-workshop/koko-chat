@@ -3,10 +3,13 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View
 } from "react-native";
 
@@ -19,7 +22,7 @@ import {
 import { inferCourseBrief } from "./inferCourseBrief";
 import type { DeeplyCourseBrief } from "./parseCourseBrief";
 import type { DeeplyRecommendationCard } from "./parseRecommendations";
-import { startDeeplyCourseSession } from "./courseSession";
+import { startDeeplyCourseSession, type SectionPreset } from "./courseSession";
 
 const SHEET_BG = "#FFFFFF";
 const SHEET_BACKDROP = "rgba(17,17,17,0.45)";
@@ -30,8 +33,7 @@ const SHEET_CHIP_BG = "#F1F5F2";
 const SHEET_CHIP_BG_ACTIVE = "#111111";
 const SHEET_CHIP_TEXT_ACTIVE = "#FFFFFF";
 const SHEET_DANGER = "#C9460C";
-
-type SectionPreset = "light" | "standard" | "deep";
+const CARD_BORDER = "rgba(17,17,17,0.08)";
 
 /**
  * 顶层挂载的 sheet bridge:订阅 useDeeplyCourseSheetStore,sheet 打开时
@@ -85,7 +87,10 @@ function CourseDetailSheet({
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [brief, setBrief] = useState<DeeplyCourseBrief | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sectionPreset, setSectionPreset] = useState<SectionPreset>("standard");
+  // 默认 "auto" = 用 AI brief.suggestedSections。和 CourseCustomizeSheet 4 preset 保持一致:
+  // 自动 / 轻量 8 / 深度 24 / 自定义。
+  const [sectionPreset, setSectionPreset] = useState<SectionPreset>("auto");
+  const [customSectionsRaw, setCustomSectionsRaw] = useState<string>("12");
   const [starting, setStarting] = useState(false);
 
   // Slide-up + backdrop fade 动画:mount 时从 0 推到 1,
@@ -118,7 +123,8 @@ function CourseDetailSheet({
     setStatus("loading");
     setBrief(null);
     setError(null);
-    setSectionPreset("standard");
+    setSectionPreset("auto");
+    setCustomSectionsRaw("12");
     void (async () => {
       const result = await inferCourseBrief({
         card,
@@ -142,21 +148,34 @@ function CourseDetailSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.title, card.subtitle, card.kind]);
 
+  const customSectionsNum = (() => {
+    const n = Number(customSectionsRaw.trim());
+    return Number.isFinite(n) ? Math.trunc(n) : NaN;
+  })();
+  const customSectionsValid =
+    sectionPreset !== "custom" ? true : Number.isFinite(customSectionsNum) && customSectionsNum >= 1;
+
   const sections = useMemo(() => {
-    const base = brief?.suggestedSections ?? card.suggestedSections;
+    const aiBase = brief?.suggestedSections ?? card.suggestedSections;
     switch (sectionPreset) {
+      case "auto":
+        return clampSections(aiBase);
       case "light":
-        return clampSections(Math.round(base * 0.5));
+        return 8;
       case "deep":
-        return clampSections(Math.round(base * 1.5));
+        return 24;
+      case "custom":
+        return Number.isFinite(customSectionsNum) && customSectionsNum >= 1 ? customSectionsNum : 1;
+      // legacy "standard" 从老 record 反序列化时可能出现:走 AI base 兜底
       case "standard":
       default:
-        return clampSections(base);
+        return clampSections(aiBase);
     }
-  }, [brief, card.suggestedSections, sectionPreset]);
+  }, [brief, card.suggestedSections, sectionPreset, customSectionsNum]);
 
   const onStart = useCallback(async () => {
     if (brief === null || starting) return;
+    if (!customSectionsValid) return;
     setStarting(true);
     try {
       await startDeeplyCourseSession({
@@ -172,7 +191,7 @@ function CourseDetailSheet({
       console.error("[deeply] start course failed", err);
       setStarting(false);
     }
-  }, [brief, card, conversationId, handleClose, sectionPreset, sections, starting]);
+  }, [brief, card, conversationId, customSectionsValid, handleClose, sectionPreset, sections, starting]);
 
   const backdropOpacity = anim.interpolate({
     inputRange: [0, 1],
@@ -192,6 +211,11 @@ function CourseDetailSheet({
         style={[styles.backdropFill, { opacity: backdropOpacity }]}
       />
       <Pressable style={styles.backdropPressable} onPress={handleClose} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardAvoid}
+        pointerEvents="box-none"
+      >
       <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
           <View style={styles.grabber} />
           <View style={styles.header}>
@@ -232,6 +256,8 @@ function CourseDetailSheet({
                 sections={sections}
                 sectionPreset={sectionPreset}
                 setSectionPreset={setSectionPreset}
+                customSectionsRaw={customSectionsRaw}
+                setCustomSectionsRaw={setCustomSectionsRaw}
               />
             ) : null}
           </ScrollView>
@@ -258,6 +284,7 @@ function CourseDetailSheet({
           </Pressable>
         </View>
       </Animated.View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -294,13 +321,29 @@ interface ReadyStateProps {
   sections: number;
   sectionPreset: SectionPreset;
   setSectionPreset: (preset: SectionPreset) => void;
+  customSectionsRaw: string;
+  setCustomSectionsRaw: (value: string) => void;
 }
+
+interface SectionPresetCard {
+  id: Exclude<SectionPreset, "standard">;
+  label: string;
+  sub: string;
+}
+const SECTION_PRESETS: SectionPresetCard[] = [
+  { id: "auto", label: "自动", sub: "AI 决定" },
+  { id: "light", label: "轻量", sub: "约 8 节" },
+  { id: "deep", label: "深度", sub: "约 24 节" },
+  { id: "custom", label: "自定义", sub: "你来定节数" }
+];
 
 function ReadyState({
   brief,
   sections,
   sectionPreset,
-  setSectionPreset
+  setSectionPreset,
+  customSectionsRaw,
+  setCustomSectionsRaw
 }: ReadyStateProps): React.ReactElement {
   return (
     <View>
@@ -311,8 +354,6 @@ function ReadyState({
         <View style={styles.chipRow}>
           {SECTION_PRESETS.map((preset) => {
             const active = preset.id === sectionPreset;
-            const base = brief.suggestedSections;
-            const previewCount = clampSections(Math.round(base * preset.multiplier));
             return (
               <Pressable
                 key={preset.id}
@@ -324,29 +365,44 @@ function ReadyState({
                 ]}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
-                accessibilityLabel={`${preset.label} 约 ${previewCount} 节`}
+                accessibilityLabel={`${preset.label} ${preset.sub}`}
               >
                 <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
                   {preset.label}
                 </Text>
                 <Text style={[styles.chipMeta, active && styles.chipMetaActive]}>
-                  约 {previewCount} 节
+                  {preset.sub}
                 </Text>
               </Pressable>
             );
           })}
         </View>
-        <Text style={styles.configHint}>当前选择:{sections} 节</Text>
+
+        {sectionPreset === "auto" ? (
+          <Text style={styles.configHint}>
+            AI 根据这门课的内容,建议讲 {sections} 节。
+          </Text>
+        ) : sectionPreset === "custom" ? (
+          <View style={styles.customSectionsRow}>
+            <TextInput
+              value={customSectionsRaw}
+              onChangeText={(t) => setCustomSectionsRaw(t.replace(/[^0-9]/g, ""))}
+              placeholder="12"
+              placeholderTextColor={SHEET_INK_MUTED}
+              keyboardType="number-pad"
+              inputMode="numeric"
+              maxLength={3}
+              style={styles.customSectionsInput}
+            />
+            <Text style={styles.customSectionsSuffix}>节</Text>
+          </View>
+        ) : (
+          <Text style={styles.configHint}>当前选择:{sections} 节</Text>
+        )}
       </View>
     </View>
   );
 }
-
-const SECTION_PRESETS: { id: SectionPreset; label: string; multiplier: number }[] = [
-  { id: "light", label: "轻量", multiplier: 0.5 },
-  { id: "standard", label: "标准", multiplier: 1 },
-  { id: "deep", label: "深度", multiplier: 1.5 }
-];
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
@@ -376,6 +432,10 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: "flex-end",
     zIndex: 50
+  },
+  keyboardAvoid: {
+    width: "100%",
+    justifyContent: "flex-end"
   },
   backdropFill: {
     ...StyleSheet.absoluteFillObject,
@@ -505,6 +565,30 @@ const styles = StyleSheet.create({
     color: SHEET_INK_MUTED,
     fontSize: 12,
     marginTop: 6
+  },
+  customSectionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+    gap: 8
+  },
+  customSectionsInput: {
+    width: 64,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    backgroundColor: "#FFFFFF",
+    color: SHEET_INK,
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center"
+  },
+  customSectionsSuffix: {
+    color: SHEET_INK_SECONDARY,
+    fontSize: 14,
+    fontWeight: "600"
   },
   chipRow: {
     flexDirection: "row",

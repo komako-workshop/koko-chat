@@ -1,0 +1,446 @@
+{
+  "categories": [
+    {
+      "id": "deep_history",
+      "name": "历史的镜像",
+      "count": 956,
+      "books": [
+        {
+          "id": "kg_cdabebbb3b28",
+          "title": "《史记》",
+          "author": "司马迁",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_559c9dd292d3",
+          "title": "战国策",
+          "author": "刘向",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_d878704995a9",
+          "title": "罗马帝国衰亡史",
+          "author": "吉本",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_c92f4f237035",
+          "title": "《伯罗奔尼撒战争史》",
+          "author": "修昔底德",
+          "sections": 100,
+          "score": 99
+        },
+        {
+          "id": "kg_045cec99f6c7",
+          "title": "《人类简史：从动物到上帝》",
+          "author": "尤瓦尔·赫拉利",
+          "sections": 80,
+          "score": 99
+        },
+        {
+          "id": "kg_a6287c00e62a",
+          "title": "Naturalis Historia",
+          "author": "老普林尼",
+          "sections": 100,
+          "score": 98
+        }
+      ]
+    },
+    {
+      "id": "civilization_logic",
+      "name": "文明的逻辑",
+      "count": 859,
+      "books": [
+        {
+          "id": "kg_c0a3d016c879",
+          "title": "《经济与社会》",
+          "author": "马克斯·韦伯",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_7dc8969b32d5",
+          "title": "《资本论》",
+          "author": "马克思",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_63d1dc2ca4c8",
+          "title": "《自杀论》",
+          "author": "涂尔干",
+          "sections": 45,
+          "score": 100
+        },
+        {
+          "id": "kg_fd3a19ed3d4f",
+          "title": "《新教伦理与资本主义精神》",
+          "author": "马克斯·韦伯",
+          "sections": 40,
+          "score": 100
+        },
+        {
+          "id": "kg_38b97e6d4be2",
+          "title": "《共产党宣言》",
+          "author": "马克思",
+          "sections": 30,
+          "score": 100
+        },
+        {
+          "id": "kg_e1cda343e0f0",
+          "title": "《想象的共同体》",
+          "author": "本尼迪克特·安德森",
+          "sections": 35,
+          "score": 99
+        }
+      ]
+    },
+    {
+      "id": "mental_theory",
+      "name": "心智理论",
+      "count": 739,
+      "books": [
+        {
+          "id": "kg_d471b6da0ac8",
+          "title": "《梦的解析》",
+          "author": "弗洛伊德",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_c5603b910fb9",
+          "title": "《自我与本我》",
+          "author": "弗洛伊德",
+          "sections": 28,
+          "score": 100
+        },
+        {
+          "id": "kg_a546e06d4055",
+          "title": "《心理学原理》",
+          "author": "威廉·詹姆斯",
+          "sections": 100,
+          "score": 98
+        },
+        {
+          "id": "kg_21cedddd8cc1",
+          "title": "法律的经济分析",
+          "author": "理查德·波斯纳",
+          "sections": 100,
+          "score": 98
+        },
+        {
+          "id": "kg_11df25c0dd85",
+          "title": "《人性中的善良天使》",
+          "author": "史蒂芬·平克",
+          "sections": 85,
+          "score": 98
+        },
+        {
+          "id": "kg_08bfd7e36e5e",
+          "title": "《原型与集体无意识》",
+          "author": "荣格",
+          "sections": 85,
+          "score": 98
+        }
+      ]
+    },
+    {
+      "id": "wealth_hardcore",
+      "name": "财富的逻辑",
+      "count": 704,
+      "books": [
+        {
+          "id": "kg_9604886ddd01",
+          "title": "《国富论》",
+          "author": "亚当·斯密",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_deb80988c21b",
+          "title": "《政治经济学及赋税原理》",
+          "author": "大卫·李嘉图",
+          "sections": 85,
+          "score": 100
+        },
+        {
+          "id": "kg_81a001ebec68",
+          "title": "《经济学》",
+          "author": "保罗·萨缪尔森",
+          "sections": 100,
+          "score": 99
+        },
+        {
+          "id": "kg_32ceb4d556b9",
+          "title": "《经济分析史》",
+          "author": "约瑟夫·熊彼特",
+          "sections": 100,
+          "score": 98
+        },
+        {
+          "id": "kg_ac5ab33d0bde",
+          "title": "《经济学原理》",
+          "author": "阿尔弗雷德·马歇尔",
+          "sections": 100,
+          "score": 98
+        },
+        {
+          "id": "kg_b72aa327d4e6",
+          "title": "《美国货币史》",
+          "author": "米尔顿·弗里德曼",
+          "sections": 100,
+          "score": 98
+        }
+      ]
+    },
+    {
+      "id": "hardcore_philosophy",
+      "name": "思想的深渊",
+      "count": 596,
+      "books": [
+        {
+          "id": "kg_bd476be79077",
+          "title": "《存在与时间》",
+          "author": "海德格尔",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_a0b6e1a3fad0",
+          "title": "《庄子》",
+          "author": "庄子",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_5f074d66e302",
+          "title": "《论语》",
+          "author": "孔子",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_f6138391662e",
+          "title": "《韩非子》",
+          "author": "韩非",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_b298330b7950",
+          "title": "判断力批判",
+          "author": "康德",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_dbcc953c0df4",
+          "title": "形而上学",
+          "author": "亚里士多德",
+          "sections": 100,
+          "score": 100
+        }
+      ]
+    },
+    {
+      "id": "creativity_expression",
+      "name": "创造与表达",
+      "count": 515,
+      "books": [
+        {
+          "id": "kg_37f2868b8008",
+          "title": "《艺术的故事》",
+          "author": "贡布里希",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_36dd6c00d203",
+          "title": "电影艺术：形式与风格",
+          "author": "大卫·波德维尔",
+          "sections": 100,
+          "score": 98
+        },
+        {
+          "id": "kg_0519d557a8e0",
+          "title": "《艺术与错觉》",
+          "author": "贡布里希",
+          "sections": 75,
+          "score": 98
+        },
+        {
+          "id": "kg_07a0146ac6a3",
+          "title": "东方学",
+          "author": "爱德华·萨义德",
+          "sections": 60,
+          "score": 98
+        },
+        {
+          "id": "kg_c6bffa3bd0ed",
+          "title": "《消费社会》",
+          "author": "鲍德里亚",
+          "sections": 55,
+          "score": 98
+        },
+        {
+          "id": "kg_ae74a5cb059b",
+          "title": "历史与阶级意识",
+          "author": "格奥尔格·卢卡奇",
+          "sections": 50,
+          "score": 98
+        }
+      ]
+    },
+    {
+      "id": "literature_hardcore",
+      "name": "重读经典",
+      "count": 479,
+      "books": [
+        {
+          "id": "kg_827183250a75",
+          "title": "《伊利亚特》",
+          "author": "荷马",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_bf5c44b0a5b0",
+          "title": "《奥德赛》",
+          "author": "荷马",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_6a78aeb2501d",
+          "title": "《安娜·卡列尼娜》",
+          "author": "托尔斯泰",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_5e190eac6533",
+          "title": "《战争与和平》",
+          "author": "托尔斯泰",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_fd67c009f915",
+          "title": "《浮士德》",
+          "author": "歌德",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_939164d3049b",
+          "title": "《神曲》",
+          "author": "但丁",
+          "sections": 100,
+          "score": 100
+        }
+      ]
+    },
+    {
+      "id": "science_frontiers",
+      "name": "科学的边界",
+      "count": 438,
+      "books": [
+        {
+          "id": "kg_4d1fac05b8ea",
+          "title": "《自然哲学的数学原理》",
+          "author": "牛顿",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_a413914fdf1e",
+          "title": "艺术的故事",
+          "author": "恩斯特·贡布里希",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_79977015fbd7",
+          "title": "《时间简史》",
+          "author": "斯蒂芬·霍金",
+          "sections": 48,
+          "score": 100
+        },
+        {
+          "id": "kg_3985829a045b",
+          "title": "《科学革命的结构》",
+          "author": "托马斯·库恩",
+          "sections": 45,
+          "score": 100
+        },
+        {
+          "id": "kg_df0292c2d749",
+          "title": "《费曼物理学讲义》",
+          "author": "费曼",
+          "sections": 100,
+          "score": 99
+        },
+        {
+          "id": "kg_9c4e8ade4c37",
+          "title": "The Elements of Euclid",
+          "author": "罗伯特·西姆森",
+          "sections": 100,
+          "score": 98
+        }
+      ]
+    },
+    {
+      "id": "stellar_minds_100",
+      "name": "人类群星",
+      "count": 347,
+      "books": [
+        {
+          "id": "kg_a6b7d218ad48",
+          "title": "《毛泽东选集》",
+          "author": "毛泽东",
+          "sections": 100,
+          "score": 100
+        },
+        {
+          "id": "kg_f97c50ed948c",
+          "title": "战争论",
+          "author": "卡尔·冯·克劳塞维茨",
+          "sections": 80,
+          "score": 100
+        },
+        {
+          "id": "kg_6190cbf6bf68",
+          "title": "《国家与革命》",
+          "author": "列宁",
+          "sections": 32,
+          "score": 100
+        },
+        {
+          "id": "kg_d3854ee596f4",
+          "title": "《矛盾论》",
+          "author": "毛泽东",
+          "sections": 25,
+          "score": 100
+        },
+        {
+          "id": "kg_83ac6e0516dc",
+          "title": "《大外交》",
+          "author": "基辛格",
+          "sections": 100,
+          "score": 98
+        },
+        {
+          "id": "kg_db54968c9311",
+          "title": "《论中国》",
+          "author": "基辛格",
+          "sections": 85,
+          "score": 98
+        }
+      ]
+    }
+  ],
+  "total": 5633
+}

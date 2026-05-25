@@ -54,3 +54,20 @@ docs/research/roleplay-import-sample/
 .brand/refs_user/
 .brand/run.log
 .brand/*.jsonl
+.brand/preview-result.png
+.brand/shot-*.png
+.brand/deeply-avatar-lab/out/
+
+# Misc dev artifacts (screenshots / event dumps captured during iterations).
+# These get cycled often; keep code-side debug tooling under scripts/ instead.
+/_shot.png
+/preview.png
+/app.json
+tmp-debug/
+tmp-shots/
+
+# Deeply icon generation lab — generated images & run log live alongside
+# source `generate.py`; the source is kept,outputs are local to each iteration.
+miniapps/deeply/scripts/out/
+miniapps/deeply/scripts/ref/
+miniapps/deeply/scripts/generation.log.jsonl

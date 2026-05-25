@@ -1,0 +1,16 @@
+{
+  "name": "@koko/deeply-library-server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "typecheck": "node --check server.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "hono": "^4.6.14"
+  }
+}

@@ -32,7 +32,11 @@ registerMiniApps();
 //   #koko-run-research:<topic>:<sections>  清 storage + 跑一轮 research kickoff,
 //                                          topic 必须 encodeURIComponent。
 //   #koko-run-material-url:<url>:<sections> 清 storage + 跑一轮 URL 资料课程。
-if (typeof window !== "undefined") {
+//
+// Guard 必须用 Platform.OS === "web":React Native Hermes 也定义了 window
+// 全局(空对象),`typeof window !== "undefined"` 不够,会在真机抛
+// "window.addEventListener is not a function"。
+if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.addEventListener === "function") {
   const handleHashTrigger = async () => {
     const hash = window.location.hash;
     if (hash === "#koko-reset") {

@@ -6,6 +6,14 @@
 // extra.devSetupCode will be undefined and the APP boots into the normal
 // Pair flow.
 
+function deriveLibraryApiBaseFromDevGateway(devGatewayUrl) {
+  if (typeof devGatewayUrl !== "string" || devGatewayUrl.length === 0) return null;
+  // ws://192.168.1.10:18789 → 取 host,自己拼 :8788
+  const m = devGatewayUrl.match(/^wss?:\/\/([^/:?#]+)(?::\d+)?/i);
+  if (m === null) return null;
+  return `http://${m[1]}:8788`;
+}
+
 /** @type {import('@expo/config-types').ExpoConfig} */
 const config = {
   name: "KokoChat",
@@ -61,6 +69,14 @@ const config = {
     // launcher, and renders a phone-sized frame on web for layout sanity.
     // Wired up by `pnpm deeply:web` / scripts/dev-start.mjs.
     demoApp: process.env.KOKO_DEMO_APP ?? null,
+    // Deeply 课程库 API base。dev 跑本机服务,prod 走线上独立部署。
+    // 客户端 libraryClient.ts 从这里读,不再把 library-pool.json 打进 bundle。
+    // 优先 KOKO_DEEPLY_LIBRARY_API_BASE 环境变量 → dev 期复用 LAN IP +
+    // server 端口(8788) → 兜底 localhost。
+    deeplyLibraryApiBase:
+      process.env.KOKO_DEEPLY_LIBRARY_API_BASE ??
+      deriveLibraryApiBaseFromDevGateway(process.env.KOKO_DEV_GATEWAY_URL) ??
+      "http://127.0.0.1:8788",
     eas: {
       projectId: "e0f1a3d6-5d11-417b-b49f-a8da8891fb5e"
     }

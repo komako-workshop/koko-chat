@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KokoChat · Typing Indicators</title>
+<style>
+  :root {
+    --bg: #FFFCF6;
+    --surface: #FFFFFF;
+    --surface-soft: #FFF3DC;
+    --primary: #F5A742;
+    --primary-deep: #E69228;
+    --primary-soft: #FFE9C7;
+    --primary-wash: #FFF6E8;
+    --ink: #2E1E10;
+    --ink-secondary: #7A6248;
+    --ink-muted: #A89274;
+    --ink-placeholder: #C3B299;
+    --hairline: #F0E4CC;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 48px 32px 96px;
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+  header h1 {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  header .sub {
+    color: var(--ink-secondary);
+    font-size: 14px;
+  }
+  p.intro {
+    color: var(--ink-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+    max-width: 700px;
+    margin: 8px 0 32px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
+  }
+  @media (max-width: 980px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 20px;
+    padding: 24px 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .card h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+  .card .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--primary-wash);
+    color: var(--primary-deep);
+    border: 1px solid var(--primary-soft);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .card .desc {
+    color: var(--ink-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .card .tradeoff {
+    color: var(--ink-muted);
+    font-size: 12px;
+    line-height: 1.6;
+    border-top: 1px dashed var(--hairline);
+    padding-top: 14px;
+  }
+  .card .tradeoff b { color: var(--ink-secondary); font-weight: 600; }
+
+  /* ---- Chat preview frame (mimics real chat row) ---- */
+  .stage {
+    background: var(--bg);
+    border-radius: 14px;
+    padding: 28px 16px;
+    border: 1px dashed var(--hairline);
+  }
+  .row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: var(--surface-soft);
+    flex: 0 0 auto;
+    background-image: radial-gradient(circle at 60% 38%, #f3c89c 0 32%, transparent 32%),
+      radial-gradient(circle at 38% 56%, #9b4dca 0 24%, transparent 24%);
+  }
+  .bubble {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 18px;
+    border-top-left-radius: 6px;
+    padding: 14px 16px;
+    min-height: 44px;
+    min-width: 64px;
+    display: flex;
+    align-items: center;
+  }
+  /* Bigger demo row */
+  .row.demo .bubble { padding: 16px 20px; }
+
+  /* ===== A. Three Dots Bounce ===== */
+  .a-dots { display: inline-flex; gap: 6px; align-items: center; }
+  .a-dots span {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ink-placeholder);
+    display: inline-block;
+    animation: bounce 1.1s ease-in-out infinite;
+  }
+  .a-dots span:nth-child(2) { animation-delay: 0.15s; }
+  .a-dots span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.55; }
+    30% { transform: translateY(-5px); opacity: 1; }
+  }
+
+  /* ===== B. Pulse Halo (single dot with breathing glow) ===== */
+  .b-pulse {
+    position: relative;
+    width: 18px; height: 18px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .b-pulse .core {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--primary);
+    position: relative; z-index: 2;
+  }
+  .b-pulse .halo {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    background: var(--primary);
+    opacity: 0.4;
+    animation: halo 1.6s ease-out infinite;
+  }
+  .b-pulse .halo.delay { animation-delay: 0.8s; }
+  @keyframes halo {
+    0%   { transform: scale(0.55); opacity: 0.45; }
+    80%  { transform: scale(1.9);  opacity: 0;    }
+    100% { transform: scale(1.9);  opacity: 0;    }
+  }
+
+  /* ===== C. Shimmer Skeleton ===== */
+  .c-skel {
+    width: 140px; height: 14px;
+    border-radius: 8px;
+    background: var(--surface-soft);
+    overflow: hidden;
+    position: relative;
+  }
+  .c-skel::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(245,167,66,0.0) 30%,
+      rgba(245,167,66,0.45) 50%,
+      rgba(245,167,66,0.0) 70%,
+      transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(120%); }
+  }
+
+  /* ---- Speed / size sandbox ---- */
+  section.sandbox {
+    margin-top: 56px;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 20px;
+    padding: 24px 24px 28px;
+  }
+  section.sandbox h2 {
+    margin: 0 0 16px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .sandbox-row {
+    display: grid;
+    grid-template-columns: 120px 1fr 1fr 1fr;
+    gap: 16px;
+    align-items: center;
+    padding: 12px 0;
+    border-top: 1px dashed var(--hairline);
+  }
+  .sandbox-row:first-of-type { border-top: 0; }
+  .sandbox-label { font-size: 12px; color: var(--ink-secondary); font-weight: 600; }
+  .sandbox-cell {
+    background: var(--bg);
+    border: 1px dashed var(--hairline);
+    border-radius: 12px;
+    padding: 18px;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 56px;
+  }
+
+  /* sandbox speed variants */
+  .a-dots.fast span { animation-duration: 0.8s; }
+  .a-dots.slow span { animation-duration: 1.6s; }
+  .b-pulse.fast .halo { animation-duration: 1.1s; }
+  .b-pulse.slow .halo { animation-duration: 2.2s; }
+  .c-skel.fast::after { animation-duration: 1.1s; }
+  .c-skel.slow::after { animation-duration: 2.4s; }
+
+  /* hint text */
+  footer {
+    margin-top: 48px;
+    color: var(--ink-muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--surface-soft);
+    color: var(--ink-secondary);
+    padding: 1px 6px;
+    border-radius: 6px;
+    font-size: 11.5px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>KokoChat · Typing Indicator 候选</h1>
+    <span class="sub">三种风格 · 真实 bubble 尺寸预览</span>
+  </header>
+  <p class="intro">
+    现在的等待状态是一个静态的「·」，太安静、容易被误以为"卡住了"。
+    下面是三个候选，每个都在与实际 chat 完全一致的 bubble / 头像里展示，
+    旁边给出权衡。下方还有不同速度的对比 sandbox。
+  </p>
+
+  <div class="grid">
+
+    <!-- A: Three Dots Bounce -->
+    <div class="card">
+      <div>
+        <span class="tag">A · 三点弹跳</span>
+        <h2 style="margin-top:8px;">最熟悉的 IM 语言</h2>
+      </div>
+      <div class="stage">
+        <div class="row demo">
+          <div class="avatar"></div>
+          <div class="bubble">
+            <div class="a-dots"><span></span><span></span><span></span></div>
+          </div>
+        </div>
+      </div>
+      <p class="desc">
+        三个灰色圆点依次弹起。iMessage / WhatsApp / 微信都用这个，
+        用户瞬间识别为"对方在输入"。
+      </p>
+      <div class="tradeoff">
+        <b>优点：</b>认知零成本、活跃。<br/>
+        <b>缺点：</b>过于"通用 IM"，跟 Koko 自身的暖色品牌色无关联。
+      </div>
+    </div>
+
+    <!-- B: Pulse Halo -->
+    <div class="card">
+      <div>
+        <span class="tag">B · 呼吸光晕</span>
+        <h2 style="margin-top:8px;">最贴 Koko 调性</h2>
+      </div>
+      <div class="stage">
+        <div class="row demo">
+          <div class="avatar"></div>
+          <div class="bubble">
+            <span class="b-pulse">
+              <span class="halo"></span>
+              <span class="halo delay"></span>
+              <span class="core"></span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <p class="desc">
+        延续现在「单点」的视觉，但点是 Koko 主色，外围有柔和光晕一圈圈呼吸出来。
+        像 Koko 在轻轻喘气、思考。
+      </p>
+      <div class="tradeoff">
+        <b>优点：</b>独有品牌感、安静、与 UI 调性一致。<br/>
+        <b>缺点：</b>不如三点那么直观"在打字"，慢思考的语义大于"输入中"。
+      </div>
+    </div>
+
+    <!-- C: Shimmer Skeleton -->
+    <div class="card">
+      <div>
+        <span class="tag">C · 骨架扫光</span>
+        <h2 style="margin-top:8px;">最有「AI 在生成」感</h2>
+      </div>
+      <div class="stage">
+        <div class="row demo">
+          <div class="avatar"></div>
+          <div class="bubble">
+            <div class="c-skel"></div>
+          </div>
+        </div>
+      </div>
+      <p class="desc">
+        bubble 内部是一段空文字占位，一道橙色高光从左到右扫过。
+        视觉上预告"接下来这里会出现一段文字"。
+      </p>
+      <div class="tradeoff">
+        <b>优点：</b>明确指向"AI 正在生成内容"，对长等待更耐心。<br/>
+        <b>缺点：</b>占位宽度需要固定，比纯点醒目，多条连续等待时会有点重复感。
+      </div>
+    </div>
+
+  </div>
+
+  <section class="sandbox">
+    <h2>速度对比</h2>
+
+    <div class="sandbox-row">
+      <div class="sandbox-label">A · 三点弹跳</div>
+      <div class="sandbox-cell">
+        <div class="a-dots slow"><span></span><span></span><span></span></div>
+      </div>
+      <div class="sandbox-cell">
+        <div class="a-dots"><span></span><span></span><span></span></div>
+      </div>
+      <div class="sandbox-cell">
+        <div class="a-dots fast"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+
+    <div class="sandbox-row">
+      <div class="sandbox-label">B · 呼吸光晕</div>
+      <div class="sandbox-cell">
+        <span class="b-pulse slow">
+          <span class="halo"></span>
+          <span class="halo delay"></span>
+          <span class="core"></span>
+        </span>
+      </div>
+      <div class="sandbox-cell">
+        <span class="b-pulse">
+          <span class="halo"></span>
+          <span class="halo delay"></span>
+          <span class="core"></span>
+        </span>
+      </div>
+      <div class="sandbox-cell">
+        <span class="b-pulse fast">
+          <span class="halo"></span>
+          <span class="halo delay"></span>
+          <span class="core"></span>
+        </span>
+      </div>
+    </div>
+
+    <div class="sandbox-row">
+      <div class="sandbox-label">C · 骨架扫光</div>
+      <div class="sandbox-cell">
+        <div class="c-skel slow"></div>
+      </div>
+      <div class="sandbox-cell">
+        <div class="c-skel"></div>
+      </div>
+      <div class="sandbox-cell">
+        <div class="c-skel fast"></div>
+      </div>
+    </div>
+
+    <div class="sandbox-row" style="grid-template-columns: 120px 1fr 1fr 1fr; color: var(--ink-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding-top: 8px; padding-bottom: 0; border-top: 0;">
+      <div></div>
+      <div style="text-align:center;">慢</div>
+      <div style="text-align:center;">默认（推荐）</div>
+      <div style="text-align:center;">快</div>
+    </div>
+  </section>
+
+  <footer>
+    本地预览 · 文件：<code>.brand/typing-indicators.html</code> ·
+    选定方案后我把它换成对应的 RN 实现（react-native-reanimated 或 Animated）。
+  </footer>
+</div>
+</body>
+</html>

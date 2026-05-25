@@ -18,11 +18,16 @@ import {
   loadDeeplyCourseSources
 } from "./courseSession";
 import {
+  buildBookKickoffPrompt,
+  buildBookOutlinePrompt,
   buildCourseDialogPrompt,
   buildCourseMainlinePrompt,
   buildMaterialKickoffPrompt,
   buildResearchCourseSectionPrompt,
   buildResearchKickoffPrompt,
+  dedupSectionHeadings,
+  parseDeeplyBookChosen,
+  parseDeeplyBookKickoff,
   parseDeeplyMaterialKickoff,
   parseDeeplyResearchKickoff,
   parseMainlineUserText
@@ -46,6 +51,12 @@ import {
   isDeeplyResearchOutlineStream,
   parseDeeplyResearchOutline
 } from "./parseResearchOutline";
+import { BookCandidateCard, isDeeplyBookCandidate } from "./BookCandidateCard";
+import {
+  parseDeeplyBookCandidates,
+  DEEPLY_BOOK_CANDIDATES_BLOCK_TYPE,
+  DEEPLY_BOOK_CANDIDATE_BLOCK_TYPE
+} from "./parseBookCandidates";
 import { DeeplyRecommendationCard, isDeeplyRecommendationCard } from "./RecommendationCard";
 import { extractFencedBlock } from "@/runtime/messageBlocks";
 
@@ -219,8 +230,96 @@ function transformDeeplyCourseAgentResponse({
   runId: string;
   text: string;
 }): { messages: ChatMessage[]; preview?: string } | null {
+  // ─── Book candidates(Phase A:从一本书入门 disambiguation)优先识别 ───
+  // 出现 koko.deeply.book.candidates fenced block 时,把它解开成 intro prose
+  // + N 张 BookCandidateCard message。**不触发 outline 落库**,bootstrap
+  // 仍是 loading,等用户点卡片走 Phase B。
+  const candidatesBlock = extractFencedBlock(text, DEEPLY_BOOK_CANDIDATES_BLOCK_TYPE);
+  if (candidatesBlock !== null) {
+    const prose = text.slice(0, candidatesBlock.start).trim();
+    const candidatesParsed = parseDeeplyBookCandidates(text);
+    if (!candidatesParsed.ok) {
+      console.warn("[deeply-course] book.candidates parse failed:", candidatesParsed.error);
+      const messages: ChatMessage[] = [];
+      if (prose.length > 0) {
+        messages.push({
+          id: `${runId}-prose`,
+          role: "agent",
+          text: prose,
+          runId,
+          streaming: false
+        } satisfies ChatMessage);
+      }
+      messages.push({
+        id: `${runId}-error`,
+        role: "agent",
+        text: `🚫 候选书目格式没能解析(${truncate(candidatesParsed.error, 80)})。可以在 chat 里直接告诉我作者 / 出版年份,我换一种方式再试。`,
+        runId,
+        streaming: false
+      } satisfies ChatMessage);
+      return { messages, preview: "候选书目格式错误" };
+    }
+
+    const { intro, candidates } = candidatesParsed.value;
+    const messages: ChatMessage[] = [];
+    if (prose.length > 0) {
+      messages.push({
+        id: `${runId}-prose`,
+        role: "agent",
+        text: prose,
+        runId,
+        streaming: false
+      } satisfies ChatMessage);
+    }
+    if (intro.length > 0) {
+      messages.push({
+        id: `${runId}-intro`,
+        role: "agent",
+        text: intro,
+        runId,
+        streaming: false
+      } satisfies ChatMessage);
+    }
+    for (let i = 0; i < candidates.length; i += 1) {
+      messages.push({
+        id: `${runId}-cand-${i}`,
+        role: "agent",
+        text: "",
+        runId,
+        streaming: false,
+        blocks: [
+          {
+            type: DEEPLY_BOOK_CANDIDATE_BLOCK_TYPE,
+            version: 1,
+            data: candidates[i]
+          }
+        ]
+      } satisfies ChatMessage);
+    }
+    return {
+      messages,
+      preview: `${candidates.length} 本候选书,等你选一本`
+    };
+  }
+
   const block = extractFencedBlock(text, DEEPLY_RESEARCH_OUTLINE_BLOCK_TYPE);
-  if (block === null) return null;
+  if (block === null) {
+    // 没 fenced block(普通讲解 turn):兜底 dedup 重复节标题。如果有改动
+    // 就返回一条 modified message;没改返回 null 让 host 用 raw text。
+    const dedupedText = dedupSectionHeadings(text);
+    if (dedupedText === text) return null;
+    return {
+      messages: [
+        {
+          id: runId,
+          role: "agent",
+          text: dedupedText,
+          runId,
+          streaming: false
+        } satisfies ChatMessage
+      ]
+    };
+  }
 
   // 不管 parse 成不成功,fenced block 永远从可见 chat 文本里剪掉。
   const prose = text.slice(0, block.start).trim();
@@ -310,14 +409,54 @@ const deeplyCourseOutboundBuilder: OutboundMessageBuilder = async ({
   if (materialKickoff !== null) {
     const record = loadDeeplyCourseSessionRecord(conversation.id);
     const material = record?.materialInput;
+    // 老 record 没 url(或路径上压根没 record)时,把 label 当 fallback URL —
+    // material kickoff visibleText 现在只在 "基于一个链接" 路径会出现,label
+    // 本身就是用户贴的 URL。
+    const url = material?.url ?? materialKickoff.label;
     return {
       visibleText,
       gatewayText: buildMaterialKickoffPrompt({
         label: material?.label ?? materialKickoff.label,
-        sections: materialKickoff.sections,
-        sourceKind: material?.sourceKind ?? "url",
-        ...(material?.url !== undefined ? { url: material.url } : {}),
-        ...(material?.attachments !== undefined ? { attachments: material.attachments } : {})
+        url,
+        sections: materialKickoff.sections
+      })
+    };
+  }
+
+  // 用户点候选卡片后,客户端 dispatch 了一条 "我选《XX》..." visible text
+  // 给 agent。这条 chosen 路径优先匹配 —— 它必须先于 bookKickoff 检查,
+  // 否则会被误透传(visibleText 不是 kickoff regex,但也不是 mainline,
+  // 会兜底走 dialog prompt,丢掉本节是"开始出 outline"的语义)。
+  const bookChosen = parseDeeplyBookChosen(visibleText);
+  if (bookChosen !== null) {
+    const record = loadDeeplyCourseSessionRecord(conversation.id);
+    // book(候选选定后)和 library(从一开始就 disambiguated)都走 outline prompt。
+    if (record?.kind === "book" || record?.kind === "library") {
+      return {
+        visibleText,
+        gatewayText: buildBookOutlinePrompt({
+          title: bookChosen.title,
+          ...(bookChosen.meta !== undefined ? { meta: bookChosen.meta } : {}),
+          sections: record.sections,
+          visibleText
+        })
+      };
+    }
+  }
+
+  const bookKickoff = parseDeeplyBookKickoff(visibleText);
+  if (bookKickoff !== null) {
+    const record = loadDeeplyCourseSessionRecord(conversation.id);
+    const book = record?.bookInput;
+    return {
+      visibleText,
+      gatewayText: buildBookKickoffPrompt({
+        // 优先用 storage 里的精确字段(title/author/edition 分开);兜底
+        // 用 visible label 一整段(disambiguation 还能 work,但少一点 hint)。
+        title: book?.title ?? bookKickoff.label,
+        ...(book?.author !== undefined ? { author: book.author } : {}),
+        ...(book?.edition !== undefined ? { edition: book.edition } : {}),
+        sections: bookKickoff.sections
       })
     };
   }
@@ -336,9 +475,18 @@ const deeplyCourseOutboundBuilder: OutboundMessageBuilder = async ({
     const isFirstSection =
       progress.currentSection === 0 || progress.readSections.length === 0;
 
-    // Research 课:每节由 agent 临场基于 sources + web tools 创作内容,
-    // 走完全不同的 prompt(buildResearchCourseSectionPrompt)。
-    if (record.kind === "research") {
+    // Research / material / book / library 课:每节由 agent 临场基于 sources
+    // (+ web tools / 用户资料)创作内容,走 buildResearchCourseSectionPrompt。
+    // 4 种 kind 共用同一个 prompt builder,只在 kind 参数上区分文案侧重 —
+    // research 鼓励多 web_search 拿新角度,material 优先用用户给的资料、
+    // book / library 围绕原书章节结构 + 权威解读。library 跟 book 共用
+    // section prompt(都是"围绕这本书讲解",来源不同只在 kickoff 阶段)。
+    if (
+      record.kind === "research" ||
+      record.kind === "material" ||
+      record.kind === "book" ||
+      record.kind === "library"
+    ) {
       const sourcesRecord = loadDeeplyCourseSources(conversation.id);
       // 从 per-section storage 拿到该节自己的 sources(优先);
       // 兜底:整门课的 union sources。
@@ -353,9 +501,13 @@ const deeplyCourseOutboundBuilder: OutboundMessageBuilder = async ({
       const sectionSources = perSectionSources.length > 0
         ? perSectionSources
         : sourcesRecord?.sources ?? [];
+      // library 在讲解阶段跟 book 完全同质(都是"围绕这本书讲解"),
+      // 把 kind="library" 映射成 "book" 复用 prompt 文案。
+      const sectionKind = record.kind === "library" ? "book" : record.kind;
       return {
         visibleText,
         gatewayText: buildResearchCourseSectionPrompt({
+          kind: sectionKind,
           courseTitle: record.title,
           introduction: record.introduction,
           section: mainlineSection,
@@ -454,15 +606,25 @@ export function registerDeeplyMiniApp(): void {
     shouldDeferStreamingText: isDeeplyRecommendationStream
   });
   registerAgentResponseTransformer(DEEPLY_COURSE_MODE_ID, transformDeeplyCourseAgentResponse, {
-    // Streaming 期间,截掉 fence opener 之后的 raw JSON,只让 prose
-    // narration 可见。fence 开头标记是 ```koko.deeply.research.outline,
-    // 在用户屏幕上很丑,但 fence 之前的 prose(narration)需要持续 streaming
-    // 让用户感受到 agent 在干活。final 时不调这里,transformer 处理
-    // 完整 fullText,剪掉 fence 写 prose-only message。
+    // Streaming 期间做两件事:
+    //   1. 截掉任何已知 fence opener 之后的 raw JSON,只让 prose narration 可见
+    //      (koko.deeply.research.outline / koko.deeply.book.candidates)
+    //   2. 兜底 dedup `## 第N节:...` 重复标题(agent 在 tool call 之间偶尔
+    //      会重新打一次,prompt 已禁但 LLM 不一定 100% 听话)
     streamingDisplayText: ({ text }) => {
-      const fenceIdx = text.indexOf("```" + DEEPLY_RESEARCH_OUTLINE_BLOCK_TYPE);
-      if (fenceIdx <= 0) return null;
-      return text.slice(0, fenceIdx).trimEnd();
+      let display = text;
+      const fenceTypes = [
+        "```" + DEEPLY_RESEARCH_OUTLINE_BLOCK_TYPE,
+        "```" + DEEPLY_BOOK_CANDIDATES_BLOCK_TYPE
+      ];
+      let firstFenceIdx = -1;
+      for (const c of fenceTypes) {
+        const idx = display.indexOf(c);
+        if (idx > 0 && (firstFenceIdx === -1 || idx < firstFenceIdx)) firstFenceIdx = idx;
+      }
+      if (firstFenceIdx > 0) display = display.slice(0, firstFenceIdx).trimEnd();
+      display = dedupSectionHeadings(display);
+      return display === text ? null : display;
     }
   });
   void isDeeplyResearchOutlineStream;
@@ -470,6 +632,11 @@ export function registerDeeplyMiniApp(): void {
     DEEPLY_CARD_BLOCK_TYPE,
     isDeeplyRecommendationCard,
     DeeplyRecommendationCard
+  );
+  registerSharedBlockRenderer(
+    DEEPLY_BOOK_CANDIDATE_BLOCK_TYPE,
+    isDeeplyBookCandidate,
+    BookCandidateCard
   );
 
   void DEEPLY_RECOMMENDATIONS_BLOCK_TYPE;

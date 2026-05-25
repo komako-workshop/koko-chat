@@ -1,0 +1,1945 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1280" />
+  <title>Deeply 书库 · UI 变体对比 v2</title>
+  <style>
+    :root {
+      --bg: #F0EFEA;
+      --frame-bg: #F9F9F7;
+      --ink: #1E293B;
+      --ink-2: #475569;
+      --ink-3: #94A3B8;
+      --ink-4: #CBD5E1;
+      --line: #E8E6E0;
+      --line-soft: #F1F0EC;
+      --accent: #111111;
+      --warm-50: #FAF7F2;
+      --warm-100: #F0EBE0;
+    }
+    * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0;
+      padding: 48px 24px 60px;
+      background: var(--bg);
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      color: var(--ink);
+    }
+    .page-title { max-width: 1180px; margin: 0 auto 24px; }
+    .page-title h1 { font-size: 22px; margin: 0 0 4px; font-weight: 700; }
+    .page-title p { font-size: 14px; color: var(--ink-2); margin: 0; line-height: 1.55; }
+    .compare-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 28px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    .variant { display: flex; flex-direction: column; align-items: center; }
+    .variant-tag {
+      font-size: 13px;
+      color: var(--ink-2);
+      margin-bottom: 14px;
+      max-width: 360px;
+      text-align: center;
+      line-height: 1.55;
+    }
+    .variant-tag strong {
+      display: block;
+      color: var(--ink);
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    /* phone frame */
+    .phone {
+      width: 390px;
+      height: 800px;
+      background: var(--frame-bg);
+      border-radius: 44px;
+      box-shadow:
+        0 0 0 6px #1a1a1c,
+        0 30px 60px -20px rgba(0,0,0,0.25),
+        0 10px 25px -10px rgba(0,0,0,0.1);
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    .status-bar {
+      height: 44px;
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 0 28px 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .status-bar .right { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+    .nav-bar {
+      height: 48px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: var(--frame-bg);
+    }
+    .nav-bar .back { font-size: 22px; color: var(--ink); padding: 4px 6px; }
+    .nav-bar .title { font-size: 16px; font-weight: 700; }
+    .nav-bar .right-icon { font-size: 17px; color: var(--ink-2); padding: 4px 6px; }
+    .screen { flex: 1; overflow-y: auto; overflow-x: hidden; }
+    .screen::-webkit-scrollbar { width: 0; }
+
+    /* —— 共享:9 个分类色 —— */
+    .cat-history { background: linear-gradient(135deg, #4A3F36 0%, #2C2A26 100%); }
+    .cat-civ     { background: linear-gradient(135deg, #5C4470 0%, #382A44 100%); }
+    .cat-mind    { background: linear-gradient(135deg, #3D4E4C 0%, #1F2D2C 100%); }
+    .cat-wealth  { background: linear-gradient(135deg, #84612D 0%, #4F3A1A 100%); }
+    .cat-thought { background: linear-gradient(135deg, #4A4E70 0%, #292D44 100%); }
+    .cat-create  { background: linear-gradient(135deg, #7A3E5C 0%, #4D2438 100%); }
+    .cat-classic { background: linear-gradient(135deg, #7A4A3E 0%, #4D2B22 100%); }
+    .cat-science { background: linear-gradient(135deg, #586645 0%, #34402A 100%); }
+    .cat-stars   { background: linear-gradient(135deg, #6F5C3E 0%, #3F3527 100%); }
+
+    /* ════════════════ Variant 1: 分类大网格(Spotify Mood / Met) ════════════════ */
+    .v1-header {
+      padding: 22px 22px 18px;
+    }
+    .v1-header .h {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+      line-height: 1.4;
+    }
+    .v1-header .s {
+      font-size: 13px;
+      color: var(--ink-2);
+      margin-top: 6px;
+      line-height: 1.65;
+    }
+    .v1-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 4px 16px 24px;
+    }
+    .v1-tile {
+      aspect-ratio: 1 / 0.9;
+      border-radius: 16px;
+      padding: 16px 14px;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+    .v1-tile .name {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      line-height: 1.25;
+    }
+    .v1-tile .num {
+      font-size: 12px;
+      opacity: 0.7;
+      font-weight: 600;
+    }
+    .v1-tile.wide {
+      grid-column: span 2;
+      aspect-ratio: 2 / 0.9;
+    }
+    .v1-tile .arrow {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      font-size: 22px;
+      opacity: 0.6;
+      font-weight: 200;
+    }
+    .v1-footer {
+      padding: 10px 22px 30px;
+      font-size: 12px;
+      color: var(--ink-3);
+      text-align: center;
+    }
+    .v1-row-actions {
+      display: flex;
+      gap: 8px;
+      padding: 0 16px 20px;
+    }
+    .v1-action {
+      flex: 1;
+      background: var(--warm-50);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .v1-action .sub {
+      font-size: 11px;
+      color: var(--ink-3);
+      margin-top: 3px;
+      font-weight: 500;
+    }
+
+    /* ════════════════ Variant 2: 纯列表 + chip(高密度) ════════════════ */
+    .v2-search {
+      margin: 12px 16px 0;
+      background: var(--warm-50);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 11px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--ink-3);
+      font-size: 14px;
+    }
+    .v2-chip-row {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--frame-bg);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .v2-chip-row::-webkit-scrollbar { display: none; }
+    .v2-chip {
+      flex: 0 0 auto;
+      padding: 7px 14px;
+      border-radius: 999px;
+      background: var(--warm-100);
+      color: var(--ink-2);
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .v2-chip.active {
+      background: var(--accent);
+      color: white;
+    }
+    .v2-sort-bar {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 16px 6px;
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+    .v2-list { padding: 0 16px 24px; }
+    .v2-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .v2-row .thumb {
+      flex: 0 0 50px;
+      width: 50px;
+      height: 70px;
+      border-radius: 5px;
+      padding: 7px 6px;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      box-shadow: 0 2px 6px -1px rgba(0,0,0,0.15);
+    }
+    .v2-row .thumb .t-mini {
+      font-size: 9px;
+      font-weight: 700;
+      line-height: 1.15;
+      max-height: 3.5em;
+      overflow: hidden;
+    }
+    .v2-row .info { flex: 1; min-width: 0; }
+    .v2-row .info .t {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .v2-row .info .a { font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
+    .v2-row .info .meta { font-size: 11px; color: var(--ink-3); }
+    .v2-row .info .meta .dot { color: var(--ink-4); margin: 0 6px; }
+    .v2-row .chevron {
+      font-size: 18px;
+      color: var(--ink-4);
+      font-weight: 300;
+    }
+
+    /* ════════════════ Variant 3: 分类卡 + 缩略图 ════════════════ */
+    .v3-intro {
+      padding: 22px 22px 14px;
+    }
+    .v3-intro .h {
+      font-size: 19px;
+      font-weight: 700;
+      color: var(--ink);
+      line-height: 1.4;
+      letter-spacing: -0.01em;
+    }
+    .v3-intro .s {
+      font-size: 13px;
+      color: var(--ink-2);
+      margin-top: 6px;
+      line-height: 1.6;
+    }
+    .v3-cat {
+      margin: 8px 16px 12px;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .v3-cat .head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px 10px;
+    }
+    .v3-cat .head .name {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .v3-cat .head .meta {
+      font-size: 11px;
+      color: var(--ink-3);
+      margin-top: 2px;
+    }
+    .v3-cat .head .more {
+      font-size: 12px;
+      color: var(--ink-2);
+      font-weight: 600;
+    }
+    .v3-cat .books {
+      display: flex;
+      gap: 8px;
+      padding: 0 16px 14px;
+      overflow-x: auto;
+    }
+    .v3-cat .books::-webkit-scrollbar { display: none; }
+    .v3-bk {
+      flex: 0 0 88px;
+    }
+    .v3-bk .cov {
+      width: 88px;
+      height: 124px;
+      border-radius: 6px;
+      padding: 10px 8px;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 4px 10px -2px rgba(0,0,0,0.15);
+      overflow: hidden;
+    }
+    .v3-bk .cov .t {
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.25;
+      max-height: 5em;
+      overflow: hidden;
+    }
+    .v3-bk .cov .a {
+      font-size: 9px;
+      opacity: 0.7;
+    }
+    .v3-bk .meta {
+      font-size: 10px;
+      color: var(--ink-3);
+      margin-top: 5px;
+      padding: 0 1px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-title">
+    <h1>Deeply 书库 · UI 变体 v2</h1>
+    <p>3 种风格,**都没有「今日精选」概念**,只用 5633 本书 × 9 个分类两个核心事实组织信息。</p>
+  </div>
+
+  <div class="compare-row">
+    <!-- ═══════════ 1. 分类大网格 ═══════════ -->
+    <div class="variant">
+      <div class="variant-tag">
+        <strong>1 · 分类大网格</strong>
+        Spotify Mood / Met Museum 调性。首页极简,9 个色块网格,选一个进去看。沉静、像"挑一个心境",符合 Deeply 的"沉下心"基调。
+      </div>
+      <div class="phone">
+        <div class="status-bar"><div>9:41</div><div class="right">● 5G ▮</div></div>
+        <div class="nav-bar">
+          <div class="back">‹</div>
+          <div class="title">课程库</div>
+          <div class="right-icon">🔍</div>
+        </div>
+        <div class="screen">
+          <div class="v1-header">
+            <div class="h">5633 本经过策划的书<br/>9 个主题。</div>
+            <div class="s">挑一个领域开始,或者直接搜你想读的书。</div>
+          </div>
+
+          <div class="v1-grid">
+            <div class="v1-tile cat-history">
+              <div class="name">历史的镜像</div>
+              <div class="num">956 本</div>
+              <div class="arrow">›</div>
+            </div>
+            <div class="v1-tile cat-civ">
+              <div class="name">文明的逻辑</div>
+              <div class="num">859 本</div>
+              <div class="arrow">›</div>
+            </div>
+            <div class="v1-tile cat-mind">
+              <div class="name">心智理论</div>
+              <div class="num">739 本</div>
+              <div class="arrow">›</div>
+            </div>
+            <div class="v1-tile cat-wealth">
+              <div class="name">财富的逻辑</div>
+              <div class="num">704 本</div>
+              <div class="arrow">›</div>
+            </div>
+            <div class="v1-tile cat-thought">
+              <div class="name">思想的深渊</div>
+              <div class="num">596 本</div>
+              <div class="arrow">›</div>
+            </div>
+            <div class="v1-tile cat-create">
+              <div class="name">创造与表达</div>
+              <div class="num">515 本</div>
+              <div class="arrow">›</div>
+            </div>
+            <div class="v1-tile cat-classic">
+              <div class="name">重读经典</div>
+              <div class="num">479 本</div>
+              <div class="arrow">›</div>
+            </div>
+            <div class="v1-tile cat-science">
+              <div class="name">科学的边界</div>
+              <div class="num">438 本</div>
+              <div class="arrow">›</div>
+            </div>
+            <div class="v1-tile cat-stars wide">
+              <div class="name">人类群星</div>
+              <div class="num">347 本 · 思想家 / 实业家 / 艺术家</div>
+              <div class="arrow">›</div>
+            </div>
+          </div>
+
+          <div class="v1-footer">点任意一个色块 → 看该领域的全部书目</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ 2. 高密度列表 + chip ═══════════ -->
+    <div class="variant">
+      <div class="variant-tag">
+        <strong>2 · 高密度列表</strong>
+        微信读书 / Goodreads "分类" 页调性。顶部 sticky chip + 全库纯列表,默认按 explain_score 排。适合"我知道在找什么,直接给我看书"。
+      </div>
+      <div class="phone">
+        <div class="status-bar"><div>9:41</div><div class="right">● 5G ▮</div></div>
+        <div class="nav-bar">
+          <div class="back">‹</div>
+          <div class="title">课程库 · 5633 本</div>
+          <div class="right-icon">🔍</div>
+        </div>
+        <div class="screen">
+          <div class="v2-search">
+            <span>🔍</span>
+            <span>搜书名 / 作者</span>
+          </div>
+          <div class="v2-chip-row">
+            <div class="v2-chip active">全部</div>
+            <div class="v2-chip">历史 956</div>
+            <div class="v2-chip">文明 859</div>
+            <div class="v2-chip">心智 739</div>
+            <div class="v2-chip">财富 704</div>
+            <div class="v2-chip">思想 596</div>
+            <div class="v2-chip">创造 515</div>
+            <div class="v2-chip">重读 479</div>
+            <div class="v2-chip">科学 438</div>
+            <div class="v2-chip">人物 347</div>
+          </div>
+          <div class="v2-sort-bar">
+            <div>共 5633 本 · 按推荐度排</div>
+            <div>排序 ⇅</div>
+          </div>
+          <div class="v2-list">
+            <div class="v2-row">
+              <div class="thumb cat-mind"><div class="t-mini">梦的解析</div></div>
+              <div class="info">
+                <div class="t">梦的解析</div>
+                <div class="a">弗洛伊德</div>
+                <div class="meta">心智理论<span class="dot">·</span>建议 100 节<span class="dot">·</span>★ 100</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">史记</div></div>
+              <div class="info">
+                <div class="t">史记</div>
+                <div class="a">司马迁</div>
+                <div class="meta">历史的镜像<span class="dot">·</span>100 节<span class="dot">·</span>★ 100</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-wealth"><div class="t-mini">国富论</div></div>
+              <div class="info">
+                <div class="t">国富论</div>
+                <div class="a">亚当·斯密</div>
+                <div class="meta">财富的逻辑<span class="dot">·</span>100 节<span class="dot">·</span>★ 100</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-civ"><div class="t-mini">经济与社会</div></div>
+              <div class="info">
+                <div class="t">经济与社会</div>
+                <div class="a">马克斯·韦伯</div>
+                <div class="meta">文明的逻辑<span class="dot">·</span>100 节<span class="dot">·</span>★ 100</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">罗马帝国衰亡史</div></div>
+              <div class="info">
+                <div class="t">罗马帝国衰亡史</div>
+                <div class="a">吉本</div>
+                <div class="meta">历史的镜像<span class="dot">·</span>100 节<span class="dot">·</span>★ 100</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-mind"><div class="t-mini">心理学原理</div></div>
+              <div class="info">
+                <div class="t">心理学原理</div>
+                <div class="a">威廉·詹姆斯</div>
+                <div class="meta">心智理论<span class="dot">·</span>100 节<span class="dot">·</span>★ 98</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">人类简史</div></div>
+              <div class="info">
+                <div class="t">人类简史</div>
+                <div class="a">尤瓦尔·赫拉利</div>
+                <div class="meta">历史的镜像<span class="dot">·</span>80 节<span class="dot">·</span>★ 99</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-wealth"><div class="t-mini">资本论</div></div>
+              <div class="info">
+                <div class="t">资本论</div>
+                <div class="a">马克思</div>
+                <div class="meta">财富的逻辑<span class="dot">·</span>100 节<span class="dot">·</span>★ 98</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-thought"><div class="t-mini">思考快与慢</div></div>
+              <div class="info">
+                <div class="t">思考,快与慢</div>
+                <div class="a">卡尼曼</div>
+                <div class="meta">心智理论<span class="dot">·</span>30 节<span class="dot">·</span>★ 96</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-science"><div class="t-mini">物种起源</div></div>
+              <div class="info">
+                <div class="t">物种起源</div>
+                <div class="a">达尔文</div>
+                <div class="meta">科学的边界<span class="dot">·</span>60 节<span class="dot">·</span>★ 98</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ 3. 分类卡 + 缩略图 ═══════════ -->
+    <div class="variant">
+      <div class="variant-tag">
+        <strong>3 · 分类卡 + 缩略图</strong>
+        Apple Music / Bookwalker 调性。纵排分类卡,每张卡里有该类代表书的小封面横滚。首屏既能看到分类全景,又能直接瞥到具体书。
+      </div>
+      <div class="phone">
+        <div class="status-bar"><div>9:41</div><div class="right">● 5G ▮</div></div>
+        <div class="nav-bar">
+          <div class="back">‹</div>
+          <div class="title">课程库</div>
+          <div class="right-icon">🔍</div>
+        </div>
+        <div class="screen">
+          <div class="v3-intro">
+            <div class="h">5633 本经过策划的书</div>
+            <div class="s">分成 9 个主题。选一个进去,或在任何卡片里直接挑一本。</div>
+          </div>
+
+          <div class="v3-cat">
+            <div class="head">
+              <div>
+                <div class="name">历史的镜像</div>
+                <div class="meta">956 本 · 古代 / 近现代 / 文明史</div>
+              </div>
+              <div class="more">查看全部 ›</div>
+            </div>
+            <div class="books">
+              <div class="v3-bk">
+                <div class="cov cat-history"><div></div><div><div class="t">史记</div><div class="a">司马迁</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-history"><div></div><div><div class="t">罗马帝国衰亡史</div><div class="a">吉本</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-history"><div></div><div><div class="t">人类简史</div><div class="a">赫拉利</div></div></div>
+                <div class="meta">80 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-history"><div></div><div><div class="t">伯罗奔尼撒战争史</div><div class="a">修昔底德</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="v3-cat">
+            <div class="head">
+              <div>
+                <div class="name">心智理论</div>
+                <div class="meta">739 本 · 心理学 / 认知科学 / 哲学</div>
+              </div>
+              <div class="more">查看全部 ›</div>
+            </div>
+            <div class="books">
+              <div class="v3-bk">
+                <div class="cov cat-mind"><div></div><div><div class="t">梦的解析</div><div class="a">弗洛伊德</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-mind"><div></div><div><div class="t">心理学原理</div><div class="a">威廉·詹姆斯</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-mind"><div></div><div><div class="t">思考,快与慢</div><div class="a">卡尼曼</div></div></div>
+                <div class="meta">30 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-mind"><div></div><div><div class="t">被讨厌的勇气</div><div class="a">岸见一郎</div></div></div>
+                <div class="meta">20 节</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="v3-cat">
+            <div class="head">
+              <div>
+                <div class="name">财富的逻辑</div>
+                <div class="meta">704 本 · 经济 / 投资 / 商业史</div>
+              </div>
+              <div class="more">查看全部 ›</div>
+            </div>
+            <div class="books">
+              <div class="v3-bk">
+                <div class="cov cat-wealth"><div></div><div><div class="t">国富论</div><div class="a">亚当·斯密</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-wealth"><div></div><div><div class="t">资本论</div><div class="a">马克思</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-wealth"><div></div><div><div class="t">穷查理宝典</div><div class="a">芒格</div></div></div>
+                <div class="meta">30 节</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="v3-cat">
+            <div class="head">
+              <div>
+                <div class="name">文明的逻辑</div>
+                <div class="meta">859 本 · 社会学 / 制度史 / 文化</div>
+              </div>
+              <div class="more">查看全部 ›</div>
+            </div>
+            <div class="books">
+              <div class="v3-bk">
+                <div class="cov cat-civ"><div></div><div><div class="t">经济与社会</div><div class="a">韦伯</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-civ"><div></div><div><div class="t">枪炮病菌与钢铁</div><div class="a">戴蒙德</div></div></div>
+                <div class="meta">60 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-civ"><div></div><div><div class="t">乡土中国</div><div class="a">费孝通</div></div></div>
+                <div class="meta">30 节</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding: 16px 16px 30px; text-align: center; font-size: 12px; color: var(--ink-3);">还有 5 个分类 ↓</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width: 1180px; margin: 36px auto 0; padding: 22px 26px; background: white; border-radius: 16px; box-shadow: 0 4px 12px -4px rgba(0,0,0,0.06); font-size: 13px; line-height: 1.75; color: var(--ink-2);">
+    <strong style="color: var(--ink); font-size: 14px;">差异维度</strong><br />
+    <span>· <strong>首屏密度</strong>:1(只有分类块,看不到书)< 3(分类块 + 4 本 sample)< 2(直接 10+ 本完整列表)</span><br />
+    <span>· <strong>沉静感</strong>:1 > 3 > 2</span><br />
+    <span>· <strong>到达某本书的步数</strong>:2(1 步)< 3(1 步,如果它在 sample 里)< 1(2 步)</span><br />
+    <span>· <strong>"逛"的感觉</strong>:1 > 3 > 2(列表式逛感最弱,因为只是浏览)</span><br />
+    <span>· <strong>实现难度</strong>:1 < 2 < 3(3 多了横滚组件)</span><br />
+    <br/>
+    <strong style="color: var(--ink); font-size: 14px;">我个人的偏向</strong><br />
+    <span><strong>3 是最好的平衡</strong>(首屏既显分类又显具体书,跟 deeply 沉静调性不冲突)。如果你更在意"高效找到一本",2 最实用。1 太冷,首屏完全看不到书,得再点一次。</span>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- Variant 3 二级页面 —— 完整 flow 展示                                  -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div style="max-width: 1280px; margin: 60px auto 24px;">
+    <h1 style="font-size: 20px; margin: 0 0 4px; font-weight: 700;">Variant 3 二级页面 · 完整 flow</h1>
+    <p style="font-size: 14px; color: var(--ink-2); margin: 0; line-height: 1.55;">
+      首页点"历史的镜像 · 查看全部" → 进入分类全部页 → 点某本书 → 进单本课程详情 → 点"开始精读" → 跳进课程窗口。
+    </p>
+  </div>
+
+  <style>
+    /* —— 分类全部页 (v3a) —— */
+    .v3a-hero {
+      padding: 22px 22px 18px;
+      color: white;
+      position: relative;
+    }
+    .v3a-hero .crumb {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-bottom: 8px;
+    }
+    .v3a-hero .name {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+    }
+    .v3a-hero .desc {
+      font-size: 13px;
+      opacity: 0.85;
+      line-height: 1.6;
+      max-width: 280px;
+    }
+    .v3a-hero .meta {
+      margin-top: 12px;
+      font-size: 12px;
+      opacity: 0.7;
+    }
+    .v3a-sort {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px 6px;
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+    .v3a-sort .pill {
+      padding: 5px 10px;
+      background: var(--warm-100);
+      border-radius: 999px;
+      color: var(--ink-2);
+      font-weight: 600;
+      font-size: 11px;
+    }
+
+    /* —— 单本课程详情 (v3b) —— */
+    .v3b-cover-hero {
+      padding: 32px 16px 28px;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .v3b-cover-hero .big-cover {
+      width: 140px;
+      height: 196px;
+      border-radius: 8px;
+      padding: 16px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      color: white;
+      box-shadow: 0 16px 32px -8px rgba(0,0,0,0.4);
+      margin-bottom: 18px;
+      background: rgba(0,0,0,0.3);
+      backdrop-filter: blur(8px);
+    }
+    .v3b-cover-hero .big-cover .ct {
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.3;
+    }
+    .v3b-cover-hero .big-cover .ca {
+      font-size: 11px;
+      opacity: 0.7;
+    }
+    .v3b-cover-hero .title {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      margin-bottom: 4px;
+    }
+    .v3b-cover-hero .author {
+      font-size: 13px;
+      opacity: 0.75;
+      margin-bottom: 10px;
+    }
+    .v3b-cover-hero .badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .v3b-cover-hero .badge {
+      font-size: 11px;
+      padding: 4px 10px;
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(6px);
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .v3b-section {
+      padding: 22px 22px 0;
+    }
+    .v3b-section .stitle {
+      font-size: 12px;
+      color: var(--ink-3);
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .v3b-section .intro {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--ink);
+    }
+    .v3b-section .intro p {
+      margin: 0 0 12px;
+    }
+    .v3b-toc {
+      padding: 18px 22px 100px;
+    }
+    .v3b-toc .item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .v3b-toc .item .n {
+      flex: 0 0 26px;
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      background: var(--warm-100);
+      color: var(--ink-2);
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .v3b-toc .item .t {
+      font-size: 14px;
+      color: var(--ink);
+      font-weight: 600;
+      flex: 1;
+    }
+    .v3b-toc .more {
+      padding: 14px 0 0;
+      font-size: 12px;
+      color: var(--ink-2);
+      font-weight: 600;
+      text-align: center;
+    }
+    .v3b-cta-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 14px 16px 28px;
+      background: linear-gradient(180deg, rgba(249,249,247,0) 0%, var(--frame-bg) 25%);
+    }
+    .v3b-cta-bar .btn {
+      width: 100%;
+      padding: 16px;
+      background: var(--accent);
+      color: white;
+      border-radius: 14px;
+      text-align: center;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .v3b-cta-bar .btn .sub {
+      font-size: 11px;
+      font-weight: 500;
+      opacity: 0.75;
+      margin-top: 3px;
+    }
+  </style>
+
+  <div class="compare-row">
+    <!-- ─────────── 1. Variant 3 首页(参考缩略图)─────────── -->
+    <div class="variant">
+      <div class="variant-tag">
+        <strong>① 进入:课程库首页</strong>
+        点这张卡的「查看全部 ›」 ↓
+      </div>
+      <div class="phone">
+        <div class="status-bar"><div>9:41</div><div class="right">● 5G ▮</div></div>
+        <div class="nav-bar">
+          <div class="back">‹</div>
+          <div class="title">课程库</div>
+          <div class="right-icon">🔍</div>
+        </div>
+        <div class="screen">
+          <div class="v3-intro">
+            <div class="h">5633 本经过策划的书</div>
+            <div class="s">分成 9 个主题。选一个进去,或在任何卡片里直接挑一本。</div>
+          </div>
+          <div class="v3-cat" style="border: 2px solid #111; box-shadow: 0 0 0 3px rgba(0,0,0,0.04);">
+            <div class="head">
+              <div>
+                <div class="name">历史的镜像</div>
+                <div class="meta">956 本 · 古代 / 近现代 / 文明史</div>
+              </div>
+              <div class="more" style="color: #111; font-weight: 700;">查看全部 ›</div>
+            </div>
+            <div class="books">
+              <div class="v3-bk">
+                <div class="cov cat-history"><div></div><div><div class="t">史记</div><div class="a">司马迁</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-history"><div></div><div><div class="t">罗马帝国衰亡史</div><div class="a">吉本</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-history"><div></div><div><div class="t">人类简史</div><div class="a">赫拉利</div></div></div>
+                <div class="meta">80 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-history"><div></div><div><div class="t">伯罗奔尼撒战争史</div><div class="a">修昔底德</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+            </div>
+          </div>
+          <div class="v3-cat">
+            <div class="head">
+              <div>
+                <div class="name">心智理论</div>
+                <div class="meta">739 本 · 心理学 / 认知科学</div>
+              </div>
+              <div class="more">查看全部 ›</div>
+            </div>
+            <div class="books">
+              <div class="v3-bk">
+                <div class="cov cat-mind"><div></div><div><div class="t">梦的解析</div><div class="a">弗洛伊德</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+              <div class="v3-bk">
+                <div class="cov cat-mind"><div></div><div><div class="t">心理学原理</div><div class="a">威廉·詹姆斯</div></div></div>
+                <div class="meta">100 节</div>
+              </div>
+            </div>
+          </div>
+          <div style="padding: 16px 16px 30px; text-align: center; font-size: 12px; color: var(--ink-3);">还有 7 个分类 ↓</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────── 2. 分类内全部页 ─────────── -->
+    <div class="variant">
+      <div class="variant-tag">
+        <strong>② 分类全部页 · 历史的镜像</strong>
+        分类 hero(色块顶部条) + 排序 + 956 本书纯列表(同样的 row 样式,直接浏览)
+      </div>
+      <div class="phone">
+        <div class="status-bar"><div>9:41</div><div class="right">● 5G ▮</div></div>
+        <div class="nav-bar">
+          <div class="back">‹ 课程库</div>
+          <div class="title">历史的镜像</div>
+          <div class="right-icon">🔍</div>
+        </div>
+        <div class="screen">
+          <div class="v3a-hero cat-history">
+            <div class="crumb">课程库 / 历史</div>
+            <div class="name">历史的镜像</div>
+            <div class="desc">从《史记》到《人类简史》,956 本帮你看清时间长河里的人与文明。</div>
+            <div class="meta">956 本 · 古代 / 近现代 / 文明史</div>
+          </div>
+          <div class="v3a-sort">
+            <div>共 956 本</div>
+            <div style="display:flex; gap:6px;">
+              <div class="pill">推荐度 ↓</div>
+            </div>
+          </div>
+          <div class="v2-list">
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">史记</div></div>
+              <div class="info">
+                <div class="t">史记</div>
+                <div class="a">司马迁</div>
+                <div class="meta">中国古代史<span class="dot">·</span>100 节<span class="dot">·</span>★ 100</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">战国策</div></div>
+              <div class="info">
+                <div class="t">战国策</div>
+                <div class="a">刘向</div>
+                <div class="meta">中国古代史<span class="dot">·</span>100 节<span class="dot">·</span>★ 100</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">罗马帝国衰亡史</div></div>
+              <div class="info">
+                <div class="t">罗马帝国衰亡史</div>
+                <div class="a">吉本</div>
+                <div class="meta">欧洲史<span class="dot">·</span>100 节<span class="dot">·</span>★ 100</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">伯罗奔尼撒战争史</div></div>
+              <div class="info">
+                <div class="t">伯罗奔尼撒战争史</div>
+                <div class="a">修昔底德</div>
+                <div class="meta">古希腊<span class="dot">·</span>100 节<span class="dot">·</span>★ 99</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">人类简史</div></div>
+              <div class="info">
+                <div class="t">人类简史:从动物到上帝</div>
+                <div class="a">尤瓦尔·赫拉利</div>
+                <div class="meta">文明史<span class="dot">·</span>80 节<span class="dot">·</span>★ 99</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">Naturalis Historia</div></div>
+              <div class="info">
+                <div class="t">Naturalis Historia</div>
+                <div class="a">老普林尼</div>
+                <div class="meta">古罗马<span class="dot">·</span>100 节<span class="dot">·</span>★ 98</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">枪炮病菌钢铁</div></div>
+              <div class="info">
+                <div class="t">枪炮、病菌与钢铁</div>
+                <div class="a">贾雷德·戴蒙德</div>
+                <div class="meta">文明史<span class="dot">·</span>60 节<span class="dot">·</span>★ 97</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">资治通鉴</div></div>
+              <div class="info">
+                <div class="t">资治通鉴</div>
+                <div class="a">司马光</div>
+                <div class="meta">中国古代史<span class="dot">·</span>100 节<span class="dot">·</span>★ 97</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">极简欧洲史</div></div>
+              <div class="info">
+                <div class="t">极简欧洲史</div>
+                <div class="a">约翰·赫斯特</div>
+                <div class="meta">欧洲史<span class="dot">·</span>20 节<span class="dot">·</span>★ 95</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="v2-row">
+              <div class="thumb cat-history"><div class="t-mini">东方主义</div></div>
+              <div class="info">
+                <div class="t">东方主义</div>
+                <div class="a">爱德华·萨义德</div>
+                <div class="meta">思想史<span class="dot">·</span>40 节<span class="dot">·</span>★ 94</div>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div style="padding: 16px 0; text-align:center; font-size: 12px; color: var(--ink-3);">下拉加载更多 · 已显示 10 / 956</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────── 3. 单本课程详情(V2 学术风 + 知识谱系)─────────── -->
+    <div class="variant">
+      <div class="variant-tag">
+        <strong>③ 单本课程详情 · 学术风</strong>
+        Deeply 大字品牌头 + 横向书目区 + 推荐文案 + 「今天为什么读」+ <strong style="color:#111;">放大的可点知识谱系</strong>(继承自 / 启发了)
+      </div>
+      <div class="phone" style="position: relative; font-family: 'Noto Serif SC', 'PingFang SC', serif;">
+        <div class="status-bar" style="font-family: -apple-system, system-ui, sans-serif;"><div>9:41</div><div class="right">● 5G ▮</div></div>
+        <div class="screen">
+          <!-- 顶部品牌 + 副标题(参考图风格)-->
+          <div class="d-brand">
+            <div class="d-brand-row">
+              <div class="d-logo-serif">Deeply</div>
+              <div class="d-profile-icon">👤</div>
+            </div>
+            <div class="d-tagline">中国第一部纪传体通史</div>
+          </div>
+
+          <!-- 横向书目区 -->
+          <div class="d-bookline">
+            <div class="d-bookline-cover cat-history">
+              <div></div>
+              <div>
+                <div class="ct" style="font-size:13px;">史记</div>
+                <div class="ca" style="font-size:9px;">司马迁</div>
+              </div>
+            </div>
+            <div class="d-bookline-info">
+              <div class="d-title">史记</div>
+              <div class="d-author">司马迁</div>
+              <div class="d-tag">历史的镜像 · 100 节</div>
+            </div>
+          </div>
+
+          <!-- 推荐文案 -->
+          <div class="d-intro">
+            《史记》不是"中国第一部正史"这么简单 —— 司马迁用 130 篇本纪、表、书、世家、列传,把上古到汉武帝两千多年的"人"放进同一个时空。他记录的不是帝王将相的功业,而是制度褶皱里真实的人 —— 刺客、商人、屈原、项羽 —— 如何在权力之下成为自己。这门课带你重新理解:历史是被写出来的,而不是发生的。
+          </div>
+
+          <!-- TODAY'S ECHO 浅黄小卡 -->
+          <div class="d-echo">
+            <div class="d-echo-tag">TODAY'S ECHO</div>
+            <div class="d-echo-text">"如何讲述边缘人的故事",仍是当代写作的核心命题。</div>
+          </div>
+
+          <!-- CTA -->
+          <div class="d-cta-block">
+            <div class="d-cta">开始学习</div>
+          </div>
+
+          <!-- 知识谱系 · 放大 + 可点击 -->
+          <div class="d-graph">
+            <div class="d-graph-title">知识谱系</div>
+            <div class="d-graph-sub">这门课在思想长河里的位置 · 点任一本书跳过去</div>
+
+            <!-- 这本书继承自 -->
+            <div class="d-graph-section">
+              <div class="d-graph-section-label">
+                <span class="d-arrow">←</span> 这本书继承自
+              </div>
+              <div class="d-graph-cards">
+                <div class="d-graph-card">
+                  <div class="d-card-rel d-rel-inherit">继承</div>
+                  <div class="d-card-cover cat-classic"><div></div><div><div class="t">春秋</div><div class="a">孔子</div></div></div>
+                  <div class="d-card-meta">
+                    <div class="d-card-title">春秋</div>
+                    <div class="d-card-author">孔子 · 约公元前 5 世纪</div>
+                    <div class="d-card-why">编年纪事的体例传统,司马迁直接继承</div>
+                  </div>
+                </div>
+                <div class="d-graph-card">
+                  <div class="d-card-rel d-rel-inherit">继承</div>
+                  <div class="d-card-cover cat-classic"><div></div><div><div class="t">左传</div><div class="a">左丘明</div></div></div>
+                  <div class="d-card-meta">
+                    <div class="d-card-title">左传</div>
+                    <div class="d-card-author">左丘明 · 战国早期</div>
+                    <div class="d-card-why">叙事化历史的开端,人物对话与场景描写</div>
+                  </div>
+                </div>
+                <div class="d-graph-card">
+                  <div class="d-card-rel d-rel-inspire">启发</div>
+                  <div class="d-card-cover cat-classic"><div></div><div><div class="t">尚书</div><div class="a">先秦</div></div></div>
+                  <div class="d-card-meta">
+                    <div class="d-card-title">尚书</div>
+                    <div class="d-card-author">先秦</div>
+                    <div class="d-card-why">早期政事文献,司马迁笔下三代取材于此</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 这本书启发了 -->
+            <div class="d-graph-section">
+              <div class="d-graph-section-label">
+                <span class="d-arrow">→</span> 这本书启发了
+              </div>
+              <div class="d-graph-cards">
+                <div class="d-graph-card">
+                  <div class="d-card-rel d-rel-inherit">继承</div>
+                  <div class="d-card-cover cat-history"><div></div><div><div class="t">汉书</div><div class="a">班固</div></div></div>
+                  <div class="d-card-meta">
+                    <div class="d-card-title">汉书</div>
+                    <div class="d-card-author">班固 · 东汉</div>
+                    <div class="d-card-why">完整继承纪传体,首部断代正史</div>
+                  </div>
+                </div>
+                <div class="d-graph-card">
+                  <div class="d-card-rel d-rel-inherit">继承</div>
+                  <div class="d-card-cover cat-history"><div></div><div><div class="t">资治通鉴</div><div class="a">司马光</div></div></div>
+                  <div class="d-card-meta">
+                    <div class="d-card-title">资治通鉴</div>
+                    <div class="d-card-author">司马光 · 北宋</div>
+                    <div class="d-card-why">编年通史,公开向《史记》"通"的志向致敬</div>
+                  </div>
+                </div>
+                <div class="d-graph-card">
+                  <div class="d-card-rel d-rel-critique">回应</div>
+                  <div class="d-card-cover cat-classic"><div></div><div><div class="t">史通</div><div class="a">刘知几</div></div></div>
+                  <div class="d-card-meta">
+                    <div class="d-card-title">史通</div>
+                    <div class="d-card-author">刘知几 · 唐</div>
+                    <div class="d-card-why">中国第一部史学批评专著,对司马迁有褒有贬</div>
+                  </div>
+                </div>
+                <div class="d-graph-card">
+                  <div class="d-card-rel d-rel-transform">改造</div>
+                  <div class="d-card-cover cat-stars"><div></div><div><div class="t">十七史商榷</div><div class="a">王鸣盛</div></div></div>
+                  <div class="d-card-meta">
+                    <div class="d-card-title">十七史商榷</div>
+                    <div class="d-card-author">王鸣盛 · 清</div>
+                    <div class="d-card-why">考据派对《史记》的系统性补订与争辩</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div style="padding: 16px 22px 40px; text-align:center; font-size: 11px; color: var(--ink-3); font-family: -apple-system, system-ui, sans-serif;">
+            史记 · 司马迁 · 100 节
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    /* ════════════════ Variant 3 详情页 V2 学术风 ════════════════ */
+    .d-brand { padding: 24px 22px 8px; text-align: center; position: relative; }
+    .d-brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .d-logo-serif {
+      font-family: 'Playfair Display', 'Noto Serif SC', serif;
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+    }
+    .d-profile-icon {
+      position: absolute;
+      right: 0;
+      top: 4px;
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      background: var(--warm-50);
+      border: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+    .d-tagline {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 14px;
+      color: var(--ink);
+      font-weight: 700;
+      margin-top: 8px;
+    }
+    .d-bookline {
+      display: flex;
+      gap: 14px;
+      padding: 20px 22px 6px;
+      align-items: center;
+    }
+    .d-bookline-cover {
+      flex: 0 0 64px;
+      width: 64px;
+      height: 88px;
+      border-radius: 4px;
+      padding: 9px 7px;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 6px 14px -3px rgba(0,0,0,0.2);
+    }
+    .d-bookline-info { flex: 1; }
+    .d-title {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 19px;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+    }
+    .d-author {
+      font-size: 13px;
+      color: var(--ink-2);
+      margin-top: 4px;
+    }
+    .d-tag {
+      font-size: 12px;
+      color: var(--ink-3);
+      margin-top: 6px;
+      padding: 3px 9px;
+      background: var(--warm-100);
+      border-radius: 999px;
+      display: inline-block;
+    }
+    .d-intro {
+      padding: 14px 22px;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 14px;
+      line-height: 1.85;
+      color: var(--ink);
+      letter-spacing: 0.005em;
+    }
+    .d-echo {
+      margin: 4px 22px 14px;
+      padding: 14px 16px;
+      background: #FAF3E0;
+      border-left: 3px solid #C9A24D;
+      border-radius: 0 8px 8px 0;
+    }
+    .d-echo-tag {
+      font-family: -apple-system, system-ui, sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      color: #8C6A2E;
+      letter-spacing: 0.15em;
+      margin-bottom: 4px;
+    }
+    .d-echo-text {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--ink);
+    }
+    .d-cta-block { padding: 6px 22px 28px; }
+    .d-cta {
+      background: var(--accent);
+      color: white;
+      padding: 16px;
+      text-align: center;
+      border-radius: 12px;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    /* —— 知识谱系(放大 + 可点击)—— */
+    .d-graph {
+      background: linear-gradient(180deg, var(--warm-50) 0%, #FAF7F0 100%);
+      padding: 24px 0 8px;
+      border-top: 1px solid var(--line);
+    }
+    .d-graph-title {
+      font-family: 'Playfair Display', 'Noto Serif SC', serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--ink);
+      padding: 0 22px;
+      letter-spacing: -0.005em;
+    }
+    .d-graph-sub {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 12px;
+      color: var(--ink-2);
+      padding: 4px 22px 16px;
+      line-height: 1.6;
+    }
+    .d-graph-section { margin-bottom: 18px; }
+    .d-graph-section-label {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink);
+      padding: 6px 22px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .d-arrow {
+      font-size: 18px;
+      color: var(--ink-2);
+      font-weight: 400;
+    }
+    .d-graph-cards {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 4px 22px 14px;
+      scroll-snap-type: x mandatory;
+    }
+    .d-graph-cards::-webkit-scrollbar { display: none; }
+    .d-graph-card {
+      flex: 0 0 220px;
+      scroll-snap-align: start;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      gap: 10px;
+      position: relative;
+      box-shadow: 0 2px 6px -2px rgba(0,0,0,0.04);
+      cursor: pointer;
+      transition: transform 0.12s ease;
+    }
+    .d-graph-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px -2px rgba(0,0,0,0.08); }
+    .d-card-rel {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      font-family: -apple-system, system-ui, sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      letter-spacing: 0.05em;
+    }
+    .d-rel-inherit  { background: #EFEBE2; color: #6B5B36; }
+    .d-rel-inspire  { background: #E8EEEB; color: #3F5E50; }
+    .d-rel-critique { background: #F3E2E2; color: #82443F; }
+    .d-rel-respond  { background: #E8E4F0; color: #4F3F73; }
+    .d-rel-transform{ background: #F5EDE0; color: #7A5A2E; }
+    .d-card-cover {
+      flex: 0 0 50px;
+      width: 50px;
+      height: 70px;
+      border-radius: 4px;
+      padding: 6px 5px;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      box-shadow: 0 3px 8px -2px rgba(0,0,0,0.2);
+    }
+    .d-card-cover .t { font-size: 9px; font-weight: 700; line-height: 1.2; }
+    .d-card-cover .a { font-size: 8px; opacity: 0.7; }
+    .d-card-meta { flex: 1; min-width: 0; padding-top: 18px; }
+    .d-card-title {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink);
+      line-height: 1.3;
+      margin-bottom: 3px;
+    }
+    .d-card-author {
+      font-size: 10px;
+      color: var(--ink-3);
+      margin-bottom: 5px;
+    }
+    .d-card-why {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 11px;
+      color: var(--ink-2);
+      line-height: 1.5;
+    }
+    .d-graph-explore {
+      margin: 10px 16px 14px;
+      padding: 14px 16px;
+      background: white;
+      border: 1px dashed var(--line);
+      border-radius: 12px;
+      text-align: center;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .d-graph-explore-sub {
+      font-size: 11px;
+      color: var(--ink-3);
+      font-weight: 400;
+      margin-top: 3px;
+    }
+  </style>
+
+  <div style="max-width: 1180px; margin: 36px auto 0; padding: 22px 26px; background: white; border-radius: 16px; box-shadow: 0 4px 12px -4px rgba(0,0,0,0.06); font-size: 13px; line-height: 1.75; color: var(--ink-2);">
+    <strong style="color: var(--ink); font-size: 14px;">详情页 V2 学术风设计要点</strong><br />
+    <span>· <strong>顶部品牌</strong>:大字 serif "Deeply" + 副标题(每本书一句话定位),代替普通 nav-bar 标题。沉浸感强。</span><br />
+    <span>· <strong>排版</strong>:Noto Serif SC 中文衬线 + Playfair Display 英文衬线,致敬学术 / 出版调性。</span><br />
+    <span>· <strong>「TODAY'S ECHO」</strong>:浅黄边框小卡,一句"为什么这本书今天还重要"。这个是<strong>静态文案</strong>,不是每日生成,可手工写或 LLM 预生成,不是"今日精选"。</span><br />
+    <span>· <strong>知识谱系</strong>:放大成独立区块(米黄背景区分),分「这本书继承自」/「这本书启发了」两段,横滚卡片。每张卡:关系 chip(继承/启发/回应/批评/改造)+ 小封面 + 书名+作者 + 「为什么相关」一句话。<strong>可点击 → 跳到该书详情</strong>,形成"读完一本 → 想了解它的祖先 / 后裔 → 进入下一本"的连续 explore。</span><br />
+    <span>· <strong>「探索完整图谱」</strong>:底部入口,跳进可视化网络图(34819 本书的全景),给愿意深挖的用户开窗。</span><br />
+    <br />
+    <strong style="color: var(--ink); font-size: 14px;">数据基础</strong><br />
+    <span>· 节点:34,819 本(book-knowledge-graph 项目里有现成数据)</span><br />
+    <span>· 边:147,753 条 · 6 种关系(inherit 7.4w / inspire 4.3w / respond 1.4w / critique 9k / transform 5k / synthesize 1.2k)</span><br />
+    <span>· deeply 内 5633 本书 pool 是其子集,可以 join</span><br />
+    <span>· 关系"why this matters"的一句话需要 LLM 预生成或手工写</span><br />
+    <br />
+    <strong style="color: var(--ink); font-size: 14px;">下一步要拍板</strong><br />
+    <span>· 顶部 tab bar(发现 / 经典 / 助手 / 最近)<strong>不画</strong>了 —— KokoChat 已经有自己的导航,Deeply 是 mini-app,不需要自己的全局 tab。</span><br />
+    <span>· "TODAY'S ECHO" 一句话 —— 用 LLM 预生成,跟书目同时入库,不动态化(就一句话,永远显示同一句,不带"今日")。</span><br />
+    <span>· "继承自 / 启发了" 数据 —— 直接用 edges_merged.json 关系,filter 到本书的 in/out edges,按关系类型 + 影响力(PageRank)排前 3-5 条。</span>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- ④ 探索完整图谱页                                                       -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div style="max-width: 1280px; margin: 60px auto 24px;">
+    <h1 style="font-size: 20px; margin: 0 0 4px; font-weight: 700;">④ 探索完整图谱页</h1>
+    <p style="font-size: 14px; color: var(--ink-2); margin: 0; line-height: 1.55;">
+      从详情页"探索完整图谱 →"进入。手机端不直接 port 桌面力导向图(太卡 + 看不清),改成<strong>三段式</strong>:Ego-network 看邻居 / 推荐阅读路径 / 全图入口。
+    </p>
+  </div>
+
+  <style>
+    /* —— ④ 图谱页 —— */
+    .g-hero {
+      padding: 24px 22px 16px;
+      text-align: center;
+    }
+    .g-hero .g-h {
+      font-family: 'Playfair Display', 'Noto Serif SC', serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+      margin-bottom: 6px;
+    }
+    .g-hero .g-s {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 12px;
+      color: var(--ink-2);
+      letter-spacing: 0.05em;
+    }
+
+    .g-section-h {
+      padding: 22px 22px 12px;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink);
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    .g-section-sub {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 11px;
+      color: var(--ink-3);
+      font-weight: 400;
+    }
+
+    /* Ego-network 区域 */
+    .g-ego-wrap {
+      margin: 0 16px;
+      padding: 8px 12px 20px;
+      background: linear-gradient(180deg, #FBF7EE 0%, #F7F3E8 100%);
+      border-radius: 16px;
+      border: 1px solid var(--line);
+    }
+    .g-ego-svg {
+      width: 100%;
+      height: 300px;
+      display: block;
+    }
+    .g-ego-legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      padding-top: 4px;
+      font-family: -apple-system, system-ui, sans-serif;
+      font-size: 10px;
+      color: var(--ink-2);
+    }
+    .g-ego-legend .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+
+    /* 阅读路径卡 */
+    .g-path-card {
+      margin: 0 16px 12px;
+      padding: 14px 16px;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    .g-path-title {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .g-path-title .step-num {
+      font-family: -apple-system, system-ui, sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--ink-3);
+      letter-spacing: 0.1em;
+    }
+    .g-path-chain {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      padding: 6px 0 8px;
+    }
+    .g-path-chain::-webkit-scrollbar { display: none; }
+    .g-path-node {
+      flex: 0 0 auto;
+      padding: 4px 9px;
+      background: var(--warm-100);
+      border-radius: 5px;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 11px;
+      color: var(--ink);
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    .g-path-node.current {
+      background: var(--accent);
+      color: white;
+    }
+    .g-path-arrow {
+      flex: 0 0 auto;
+      color: var(--ink-4);
+      font-size: 11px;
+    }
+    .g-path-why {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--ink-2);
+      margin-top: 4px;
+    }
+    .g-path-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line-soft);
+    }
+    .g-path-meta .stat {
+      font-family: -apple-system, system-ui, sans-serif;
+      font-size: 10px;
+      color: var(--ink-3);
+    }
+    .g-path-meta .start {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    /* 全图入口 */
+    .g-full {
+      margin: 8px 16px 30px;
+    }
+    .g-full-card {
+      padding: 18px 16px;
+      background: linear-gradient(135deg, #2C2A26 0%, #4A3F36 100%);
+      color: #F2EDE3;
+      border-radius: 14px;
+    }
+    .g-full-title {
+      font-family: 'Playfair Display', 'Noto Serif SC', serif;
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .g-full-sub {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 12px;
+      opacity: 0.7;
+      margin-bottom: 14px;
+      line-height: 1.6;
+    }
+    .g-full-tags {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .g-full-tag {
+      padding: 4px 10px;
+      background: rgba(255,255,255,0.12);
+      backdrop-filter: blur(4px);
+      border-radius: 999px;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 11px;
+      font-weight: 600;
+    }
+  </style>
+
+  <div class="compare-row" style="grid-template-columns: 410px 1fr; gap: 36px;">
+    <!-- ─────────── 探索完整图谱页 mockup ─────────── -->
+    <div class="variant">
+      <div class="phone">
+        <div class="status-bar"><div>9:41</div><div class="right">● 5G ▮</div></div>
+        <div class="nav-bar">
+          <div class="back">‹ 史记</div>
+          <div class="title"></div>
+          <div class="right-icon">🔍</div>
+        </div>
+        <div class="screen" style="background: var(--frame-bg);">
+          <!-- Hero -->
+          <div class="g-hero">
+            <div class="g-h">知识网络</div>
+            <div class="g-s">34,819 本 · 147,753 个思想连接</div>
+          </div>
+
+          <!-- Section 1: Ego-network -->
+          <div class="g-section-h">
+            <div>以《史记》为中心</div>
+            <div class="g-section-sub">11 本一跳邻居 · 点节点跳过去</div>
+          </div>
+          <div class="g-ego-wrap">
+            <svg class="g-ego-svg" viewBox="0 0 320 300" xmlns="http://www.w3.org/2000/svg">
+              <!-- 边 -->
+              <line x1="160" y1="150" x2="50"  y2="60"  stroke="#8C6A2E" stroke-width="1.4"/>
+              <line x1="160" y1="150" x2="160" y2="40"  stroke="#8C6A2E" stroke-width="1.4"/>
+              <line x1="160" y1="150" x2="270" y2="60"  stroke="#3F5E50" stroke-width="1.4"/>
+              <line x1="160" y1="150" x2="290" y2="160" stroke="#8C6A2E" stroke-width="1.4"/>
+              <line x1="160" y1="150" x2="270" y2="240" stroke="#8C6A2E" stroke-width="1.4"/>
+              <line x1="160" y1="150" x2="160" y2="270" stroke="#82443F" stroke-width="1.4" stroke-dasharray="3,2"/>
+              <line x1="160" y1="150" x2="50"  y2="240" stroke="#7A5A2E" stroke-width="1.4"/>
+              <line x1="160" y1="150" x2="30"  y2="160" stroke="#3F5E50" stroke-width="1.4"/>
+
+              <!-- 节点(邻居 8 个,稍微更多)-->
+              <g>
+                <circle cx="50"  cy="60"  r="20" fill="#4A3F36"/>
+                <text x="50"  y="63"  text-anchor="middle" fill="white" font-family="Noto Serif SC, serif" font-size="9" font-weight="700">春秋</text>
+              </g>
+              <g>
+                <circle cx="160" cy="40"  r="22" fill="#4A3F36"/>
+                <text x="160" y="43"  text-anchor="middle" fill="white" font-family="Noto Serif SC, serif" font-size="9" font-weight="700">尚书</text>
+              </g>
+              <g>
+                <circle cx="270" cy="60"  r="20" fill="#586645"/>
+                <text x="270" y="63"  text-anchor="middle" fill="white" font-family="Noto Serif SC, serif" font-size="9" font-weight="700">左传</text>
+              </g>
+              <g>
+                <circle cx="290" cy="160" r="22" fill="#7A4A3E"/>
+                <text x="290" y="163" text-anchor="middle" fill="white" font-family="Noto Serif SC, serif" font-size="9" font-weight="700">汉书</text>
+              </g>
+              <g>
+                <circle cx="270" cy="240" r="22" fill="#7A4A3E"/>
+                <text x="270" y="237" text-anchor="middle" fill="white" font-family="Noto Serif SC, serif" font-size="8" font-weight="700">资治</text>
+                <text x="270" y="246" text-anchor="middle" fill="white" font-family="Noto Serif SC, serif" font-size="8" font-weight="700">通鉴</text>
+              </g>
+              <g>
+                <circle cx="160" cy="270" r="20" fill="#82443F"/>
+                <text x="160" y="273" text-anchor="middle" fill="white" font-family="Noto Serif SC, serif" font-size="9" font-weight="700">史通</text>
+              </g>
+              <g>
+                <circle cx="50"  cy="240" r="20" fill="#6F5C3E"/>
+                <text x="50"  y="237" text-anchor="middle" fill="white" font-family="Noto Serif SC, serif" font-size="7" font-weight="700">十七史</text>
+                <text x="50"  y="246" text-anchor="middle" fill="white" font-family="Noto Serif SC, serif" font-size="7" font-weight="700">商榷</text>
+              </g>
+              <g>
+                <circle cx="30"  cy="160" r="20" fill="#586645"/>
+                <text x="30"  y="163" text-anchor="middle" fill="white" font-family="Noto Serif SC, serif" font-size="8" font-weight="700">国语</text>
+              </g>
+
+              <!-- 中央节点(史记) -->
+              <g>
+                <circle cx="160" cy="150" r="38" fill="#111" stroke="#FFF" stroke-width="3"/>
+                <text x="160" y="148" text-anchor="middle" fill="white" font-family="Noto Serif SC, serif" font-size="16" font-weight="700">史记</text>
+                <text x="160" y="166" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-family="Noto Serif SC, serif" font-size="9">司马迁</text>
+              </g>
+            </svg>
+            <div class="g-ego-legend">
+              <span><span class="dot" style="background:#4A3F36;"></span>继承自(3)</span>
+              <span><span class="dot" style="background:#7A4A3E;"></span>启发(2)</span>
+              <span><span class="dot" style="background:#586645;"></span>启发(2)</span>
+              <span><span class="dot" style="background:#82443F;"></span>回应(1)</span>
+              <span><span class="dot" style="background:#6F5C3E;"></span>改造(1)</span>
+            </div>
+          </div>
+
+          <!-- Section 2: 阅读路径 -->
+          <div class="g-section-h">
+            <div>沿这本书走</div>
+            <div class="g-section-sub">3 条精选路径</div>
+          </div>
+
+          <div class="g-path-card">
+            <div class="g-path-title"><span class="step-num">PATH 01 · 4 步</span></div>
+            <div style="font-family: 'Noto Serif SC',serif; font-size:14px; font-weight:700; color:var(--ink); margin-bottom:6px;">中国正史的四千年</div>
+            <div class="g-path-chain">
+              <div class="g-path-node current">史记</div>
+              <div class="g-path-arrow">→</div>
+              <div class="g-path-node">汉书</div>
+              <div class="g-path-arrow">→</div>
+              <div class="g-path-node">资治通鉴</div>
+              <div class="g-path-arrow">→</div>
+              <div class="g-path-node">史通</div>
+            </div>
+            <div class="g-path-why">沿这条路走,你会看到"通史"与"断代史"的内在张力,以及第一部史学批评如何回望司马迁。</div>
+            <div class="g-path-meta">
+              <div class="stat">总 220 节 · 约 18 小时</div>
+              <div class="start">开始这条路径 ›</div>
+            </div>
+          </div>
+
+          <div class="g-path-card">
+            <div class="g-path-title"><span class="step-num">PATH 02 · 3 步</span></div>
+            <div style="font-family: 'Noto Serif SC',serif; font-size:14px; font-weight:700; color:var(--ink); margin-bottom:6px;">史记的源头</div>
+            <div class="g-path-chain">
+              <div class="g-path-node">尚书</div>
+              <div class="g-path-arrow">→</div>
+              <div class="g-path-node">春秋</div>
+              <div class="g-path-arrow">→</div>
+              <div class="g-path-node">左传</div>
+              <div class="g-path-arrow">→</div>
+              <div class="g-path-node current">史记</div>
+            </div>
+            <div class="g-path-why">逆流而上,看司马迁站在哪些先人的肩上 —— 从政事档案到编年纪事,再到叙事化的传记。</div>
+            <div class="g-path-meta">
+              <div class="stat">总 180 节 · 约 14 小时</div>
+              <div class="start">开始这条路径 ›</div>
+            </div>
+          </div>
+
+          <div class="g-path-card">
+            <div class="g-path-title"><span class="step-num">PATH 03 · 3 步</span></div>
+            <div style="font-family: 'Noto Serif SC',serif; font-size:14px; font-weight:700; color:var(--ink); margin-bottom:6px;">司马迁的同时代</div>
+            <div class="g-path-chain">
+              <div class="g-path-node current">史记</div>
+              <div class="g-path-arrow">·</div>
+              <div class="g-path-node">楚辞</div>
+              <div class="g-path-arrow">·</div>
+              <div class="g-path-node">淮南子</div>
+              <div class="g-path-arrow">·</div>
+              <div class="g-path-node">论衡</div>
+            </div>
+            <div class="g-path-why">不是线性继承,而是同代群星。看汉初文人如何各自用不同体裁回应"什么是真知"。</div>
+            <div class="g-path-meta">
+              <div class="stat">总 150 节 · 约 12 小时</div>
+              <div class="start">开始这条路径 ›</div>
+            </div>
+          </div>
+
+          <!-- Section 3: 全图入口 -->
+          <div class="g-section-h">
+            <div>从全景开始</div>
+          </div>
+          <div class="g-full">
+            <div class="g-full-card">
+              <div class="g-full-title">浏览完整图谱</div>
+              <div class="g-full-sub">34,819 本书 · 147,753 个连接,按你想看的角度组织。</div>
+              <div class="g-full-tags">
+                <div class="g-full-tag">按时代</div>
+                <div class="g-full-tag">按学科</div>
+                <div class="g-full-tag">按影响力</div>
+                <div class="g-full-tag">按国家</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右边说明区 -->
+    <div style="padding: 8px 0 0;">
+      <div style="background: white; border-radius: 16px; padding: 22px 26px; box-shadow: 0 4px 12px -4px rgba(0,0,0,0.06); margin-bottom: 16px;">
+        <strong style="display:block; font-size: 15px; color: var(--ink); margin-bottom: 10px;">为什么不直接 port 桌面力导向图</strong>
+        <div style="font-size: 13px; line-height: 1.75; color: var(--ink-2);">
+          桌面 ECharts 力导向图(deeply.html 那个)在小屏失灵:
+          <ul style="margin: 8px 0 0 16px; padding: 0;">
+            <li>节点重叠看不清书名</li>
+            <li>手指拖动 / 缩放 / 点中节点都很难</li>
+            <li>14.7w 边一次性渲染卡死</li>
+          </ul>
+          手机端要"碎片化进图谱",每次只看局部,跟"看长图"完全不同。
+        </div>
+      </div>
+
+      <div style="background: white; border-radius: 16px; padding: 22px 26px; box-shadow: 0 4px 12px -4px rgba(0,0,0,0.06); margin-bottom: 16px;">
+        <strong style="display:block; font-size: 15px; color: var(--ink); margin-bottom: 10px;">三段式设计</strong>
+        <div style="font-size: 13px; line-height: 1.75; color: var(--ink-2);">
+          <strong>① Ego-network</strong>:以当前书为中心,8-12 个一跳邻居围绕排列。节点大小 = PageRank,边颜色 = 关系类型。点节点跳到该书详情,中心切换重新布局。<br/>
+          → 用户感受:"史记跟它的邻居们的样子"<br/><br/>
+
+          <strong>② 推荐阅读路径</strong>:从图算法预生成的 3-5 条 N 跳路径,每条卡片显示节点链 + 一句话推荐 + "总 N 节 · 约 N 小时"。<br/>
+          → 用户感受:"沿这条路读下去会看到什么"<br/>
+          → 这是<strong>把图谱"线性化"</strong>,让"看图"变成"按一条路走"。这种方式比"在图上瞎逛"心智负担小得多。<br/><br/>
+
+          <strong>③ 全图入口</strong>:深色卡片,带按维度切的 chip(时代/学科/影响力/国家)。点进去是真的全图浏览页(那是另一个 surface,有需要再设计)。
+        </div>
+      </div>
+
+      <div style="background: white; border-radius: 16px; padding: 22px 26px; box-shadow: 0 4px 12px -4px rgba(0,0,0,0.06); margin-bottom: 16px;">
+        <strong style="display:block; font-size: 15px; color: var(--ink); margin-bottom: 10px;">数据 / 工程</strong>
+        <div style="font-size: 13px; line-height: 1.75; color: var(--ink-2);">
+          · <strong>Ego-network</strong>:filter `edges_merged.json` 里 from=当前书 或 to=当前书 的边,top by 邻居 PageRank,取 8-12 个。SVG 静态渲染就够;真要交互就用 D3 / react-native-svg。<br/>
+          · <strong>阅读路径</strong>:这是核心算法。可以是:<br/>
+          &nbsp;&nbsp;a) 预生成 — 对 PageRank top 500 本书离线跑 BFS / 主题路径算法,每本配 3-5 条;<br/>
+          &nbsp;&nbsp;b) 实时 — 用户点进图谱页时,从 edges 即时算路径,LLM 写一句"为什么这条";<br/>
+          &nbsp;&nbsp;c) AI 端到端 — LLM 看当前书 + 全图 metadata,直接出"3 条推荐路径"。<br/>
+          建议 MVP 走 (a),热门书离线预生成。<br/>
+          · <strong>全图</strong>:暂时打到一个 web view 跳转 deeply.html 类的桌面版,后期再做移动原生大图。
+        </div>
+      </div>
+
+      <div style="background: #FAF3E0; border-left: 3px solid #C9A24D; border-radius: 8px; padding: 16px 20px; font-size: 13px; line-height: 1.7; color: var(--ink);">
+        <strong style="display:block; font-size: 14px; margin-bottom: 6px;">心智模型</strong>
+        ③ 详情页里的"知识谱系"小区 = 这本书<strong>直接的 1 跳邻居</strong>。<br />
+        ④ 图谱页 = 同样的邻居 + <strong>沿这本书的多跳路径</strong> + 全图入口。<br />
+        两者关系:③ 是"用一句话讲清单本书在图谱里的位置";④ 是"把图谱本身打开"。
+      </div>
+    </div>
+  </div>
+</body>
+</html>

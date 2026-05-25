@@ -17,7 +17,9 @@ import { parseDeeplyCourseOutline, type DeeplyOutlineSection } from "./parseCour
 
 export const DEEPLY_RESEARCH_OUTLINE_BLOCK_TYPE = "koko.deeply.research.outline";
 
-const MIN_SECTIONS = 4;
+// 用户可以选 light 课程(3 节)甚至更短的主题。这里只保留"至少 2 节
+// 才能算课"的底线护栏,防 agent 给出 1 节这种 totally degenerate 输出。
+const MIN_SECTIONS = 2;
 const MAX_SECTIONS = 60;
 const MAX_TITLE_CHARS = 60;
 const MAX_INTRODUCTION_CHARS = 800;

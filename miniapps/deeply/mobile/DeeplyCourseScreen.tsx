@@ -16,6 +16,7 @@ import {
 } from "react-native";
 
 import { MarkdownText } from "@/components/MarkdownText";
+import { MessageBlockView } from "@/runtime/messageBlocks";
 import { useGatewayStore } from "@/state/gateway";
 import {
   useConversationStore,
@@ -41,6 +42,8 @@ import { inferCourseQuickReplies } from "./inferCourseQuickReplies";
 import type { DeeplyQuickReplyChip } from "./parseCourseQuickReplies";
 import { parseCourseSectionHeader } from "./parseCourseSectionHeader";
 import {
+  buildBookCandidateChosenVisibleText,
+  buildBookKickoffVisibleText,
   buildContinueSectionUserText,
   buildMaterialKickoffVisibleText,
   buildResearchKickoffVisibleText
@@ -522,43 +525,84 @@ export function DeeplyCourseScreen({
     }
   }, [conversationId, sendUserMessage]);
 
-  // Research / material kickoff:这两类 course conversation 刚创建时 messages
-  // 为空,自动 fire 第一条 user message 给 mainline session 触发 agent 准备。
+  // Research / material / book kickoff:这三类 course conversation 刚创建时
+  // messages 为空,自动 fire 第一条 user message 给 mainline session 触发 agent 准备。
   // 用 ref guard 防止 StrictMode 双跑 / messages 短暂回退到 0 / re-render
   // 导致重复 dispatch 同一条 kickoff。
   const researchKickoffFiredRef = useRef(false);
   useEffect(() => {
     if (record === null) return;
-    if (record.kind !== "research" && record.kind !== "material") return;
+    if (
+      record.kind !== "research" &&
+      record.kind !== "material" &&
+      record.kind !== "book" &&
+      record.kind !== "library"
+    ) {
+      return;
+    }
     if (conversationId === null) return;
     if (!isConnected) return;
     if (messages.length > 0) return;
     if (researchKickoffFiredRef.current) return;
-    const label = record.kind === "material"
-      ? record.materialInput?.label
-      : record.researchTopic;
-    if (label === undefined || label.trim().length === 0) return;
-    researchKickoffFiredRef.current = true;
-    if (record.kind === "material") {
-      void sendUserMessage(
-        conversationId,
-        buildMaterialKickoffVisibleText({
-          label,
-          sections: record.sections
-        }),
-        {
-          attachments: record.materialInput?.attachments ?? []
-        }
+
+    if (record.kind === "library") {
+      // 预置课程库:metadata 已经精确,直接走 book Phase B(outline 生成)
+      // → dispatch 一条"我选《XX》(作者 · 主题)"的 visible text,outbound
+      // builder 的 chosen path 会路由到 buildBookOutlinePrompt。
+      const lib = record.libraryInput;
+      if (lib === undefined || lib.title.length === 0) return;
+      researchKickoffFiredRef.current = true;
+      void dispatch(
+        buildBookCandidateChosenVisibleText({
+          title: lib.title,
+          author: lib.author,
+          subject: lib.hook.length > 0 ? lib.hook : lib.category
+        })
       );
       return;
     }
+
+    if (record.kind === "material") {
+      const label = record.materialInput?.label;
+      if (label === undefined || label.trim().length === 0) return;
+      researchKickoffFiredRef.current = true;
+      // 走 dispatch(等价 sendUserMessage,但不再传 attachments — 本地文件
+      // 入口已下线,这条路径只剩纯 URL kickoff)。
+      void dispatch(
+        buildMaterialKickoffVisibleText({
+          label,
+          sections: record.sections
+        })
+      );
+      return;
+    }
+
+    if (record.kind === "book") {
+      const book = record.bookInput;
+      if (book === undefined || book.title.trim().length === 0) return;
+      researchKickoffFiredRef.current = true;
+      void dispatch(
+        buildBookKickoffVisibleText({
+          title: book.title,
+          ...(book.author !== undefined ? { author: book.author } : {}),
+          ...(book.edition !== undefined ? { edition: book.edition } : {}),
+          sections: record.sections
+        })
+      );
+      return;
+    }
+
+    // research:fallback path
+    const topic = record.researchTopic;
+    if (topic === undefined || topic.trim().length === 0) return;
+    researchKickoffFiredRef.current = true;
     void dispatch(
       buildResearchKickoffVisibleText({
-        topic: label,
+        topic,
         sections: record.sections
       })
     );
-  }, [record, conversationId, isConnected, messages.length, dispatch, sendUserMessage]);
+  }, [record, conversationId, isConnected, messages.length, dispatch]);
 
   const archiveConversation = useConversationStore((s) => s.archive);
   const handleArchive = useCallback(() => {
@@ -679,13 +723,17 @@ export function DeeplyCourseScreen({
             <Text style={styles.bannerTitle}>
               {record.kind === "research"
                 ? "正在为你做深度调研…"
-                : "正在为你定课程目录…"}
+                : record.kind === "book" || record.kind === "library"
+                  ? "正在为你精读这本书…"
+                  : "正在为你定课程目录…"}
             </Text>
             <Text style={styles.bannerHint}>
               {conversation.bootstrap?.hint ??
                 (record.kind === "research"
                   ? "agent 正在搜资料、读资料、做综合,完成后我们就可以开始讲了。"
-                  : "agent 正在按你刚选的节数生成目录,通常 30-90 秒。")}
+                  : record.kind === "book" || record.kind === "library"
+                    ? "agent 在找这本书的章节解读 + 权威书评,通常 1-3 分钟。"
+                    : "agent 正在按你刚选的节数生成目录,通常 30-90 秒。")}
             </Text>
           </View>
         </View>
@@ -800,7 +848,9 @@ export function DeeplyCourseScreen({
               isLoadingBootstrap
                 ? record.kind === "research"
                   ? "调研中,稍等…"
-                  : "课程目录生成中,稍等…"
+                  : record.kind === "book" || record.kind === "library"
+                    ? "精读准备中,稍等…"
+                    : "课程目录生成中,稍等…"
                 : bootstrapError !== null
                   ? "课程目录生成失败,请关闭重新进入"
                   : isConnected
@@ -907,25 +957,52 @@ function renderMessage(
       </View>
     );
   }
+  // Block-only message(text 空 + 有 blocks):比如 book candidates 卡片,
+  // transformer 把每张候选拆成一条只带 blocks 的 message。要走 block render
+  // path 而不是 MarkdownText(否则界面上完全什么也看不到)。
+  const hasBlocks = item.blocks !== undefined && item.blocks.length > 0;
+  const isBlockOnly = hasBlocks && item.text.length === 0 && item.streaming !== true;
+
   return (
     <View style={styles.agentRow} key={`${conversation.id}-${item.id}`}>
       {item.error !== undefined ? (
         <Text style={styles.errorText}>⚠️ {item.error}</Text>
+      ) : isBlockOnly ? (
+        <View style={styles.agentBlocksColumn}>
+          {item.blocks!.map((block, i) => (
+            <MessageBlockView
+              key={`${block.type}:${block.version}:${i}`}
+              block={block}
+              conversation={conversation}
+            />
+          ))}
+        </View>
       ) : item.text.length === 0 && item.streaming === true ? (
         // streaming 已经开始但第一段文字还没到 —— 显示思考呼吸动画,
         // 比起一个孤零零的闪烁 cursor 更能传达"agent 在准备开口"。
         // 文字一旦开始流就会切到下面的 MarkdownText + BlinkingCursor 分支。
         <DeeplyPulse />
       ) : (
-        <MarkdownText
-          text={item.text}
-          color={DEEPLY_INK}
-          // 课程讲解整体放大一号:正文 16 → 17.6,行高 26 → 28.6,
-          // heading 同比例。Deeply 是"沉下心看长文"的场景,
-          // 比 explore chat 那种短回复需要更大的字。
-          scale={1.1}
-          trailing={item.streaming === true ? <BlinkingCursor /> : undefined}
-        />
+        <View style={styles.agentBlocksColumn}>
+          <MarkdownText
+            text={item.text}
+            color={DEEPLY_INK}
+            // 课程讲解整体放大一号:正文 16 → 17.6,行高 26 → 28.6,
+            // heading 同比例。Deeply 是"沉下心看长文"的场景,
+            // 比 explore chat 那种短回复需要更大的字。
+            scale={1.1}
+            trailing={item.streaming === true ? <BlinkingCursor /> : undefined}
+          />
+          {hasBlocks
+            ? item.blocks!.map((block, i) => (
+                <MessageBlockView
+                  key={`${block.type}:${block.version}:${i}`}
+                  block={block}
+                  conversation={conversation}
+                />
+              ))
+            : null}
+        </View>
       )}
     </View>
   );
@@ -1069,6 +1146,9 @@ const styles = StyleSheet.create({
   agentRow: {
     alignSelf: "stretch",
     marginTop: 18
+  },
+  agentBlocksColumn: {
+    gap: 0
   },
   userRow: {
     alignSelf: "flex-end",

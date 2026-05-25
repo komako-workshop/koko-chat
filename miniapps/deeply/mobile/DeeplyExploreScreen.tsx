@@ -157,7 +157,6 @@ export function DeeplyExploreScreen({
     );
     void startDeeplyMaterialCourse({
       label: materialUrl,
-      sourceKind: "url",
       url: materialUrl,
       sections,
       sectionPreset: "standard",
