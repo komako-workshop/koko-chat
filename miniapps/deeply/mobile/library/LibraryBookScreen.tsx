@@ -119,6 +119,7 @@ export function LibraryBookScreen({ bookId }: Props): React.ReactElement {
         category: book.c,
         hook: book.h,
         pitch: book.p ?? "",
+        cover: book.img,
         sections,
         parentConversationId: null
       });

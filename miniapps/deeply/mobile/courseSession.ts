@@ -483,6 +483,11 @@ export interface StartDeeplyLibraryCourseInput {
   hook: string;
   /** book.p 推荐文案。 */
   pitch: string;
+  /**
+   * book.img — 书本封面 URL(library-pool 里已经填好的)。
+   * 用作聊天列表 row 的头像;空时落回 deeply mini-app 默认头像。
+   */
+  cover?: string;
   /** AI 建议节数(从 book.s 折算的整数,大约 8-50)。 */
   sections: number;
   parentConversationId: string | null;
@@ -521,7 +526,12 @@ export async function startDeeplyLibraryCourse(
     listSnapshot: {
       title: displayLabel,
       subtitle: "课程库 · 正在准备",
-      icon: "📚"
+      icon: "📚",
+      // 用书的封面作 row avatar;空 URL 时不带 avatarUri,自动 fallback 到
+      // mini-app 默认头像(getMiniAppListImage(deeply-course))。
+      ...(input.cover !== undefined && input.cover.length > 0
+        ? { avatarUri: input.cover }
+        : {})
     },
     bootstrap: {
       status: "loading",
