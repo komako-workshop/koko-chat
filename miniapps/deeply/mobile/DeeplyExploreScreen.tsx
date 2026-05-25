@@ -79,17 +79,54 @@ const DEEPLY_RECOMMEND_BG_PRESSED = "rgba(17,17,17,0.12)";
 
 const EMPTY: ChatMessage[] = [];
 
+/**
+ * 滚动位置恢复:跟 host /chat/[id] + DeeplyCourseScreen 同构。
+ *
+ * 用 module-level Map(而非 host 那份)出于两点理由:
+ *   1. deeply 是独立 package,跨 package 拉 host module state 既不干净
+ *      也容易在 hot reload 之后出问题。
+ *   2. NEAR_BOTTOM_THRESHOLD 允许跟 host / course 有差(explore 底部
+ *      chip row + 输入框更厚,留一点缓冲更安全)。
+ */
+interface ExploreScrollSnapshot {
+  contentHeight: number;
+  viewportHeight: number;
+  offsetY: number;
+  isNearBottom: boolean;
+}
+const NEAR_BOTTOM_THRESHOLD_PX = 56;
+const exploreScrollSnapshots = new Map<string, ExploreScrollSnapshot>();
+
 export function DeeplyExploreScreen({
-  headerHeight = 0
+  conversationIdOverride = null,
+  headerHeight = 0,
+  isRouteFocused = true,
+  focusEpoch = 0
 }: {
+  /**
+   * When opened from the chat list, host navigation calls `openConversation`,
+   * which pushes `/deeply?id=<conversationId>`. Use that stable route id
+   * instead of rediscovering the singleton from store; this mirrors host
+   * `/chat/[id]` and avoids a first render with `conversationId=null`.
+   */
+  conversationIdOverride?: string | null;
   /**
    * Stack header 高度,由 host route 壳通过 `useHeaderHeight` 拿到。
    * 用于 KeyboardAvoidingView 的 keyboardVerticalOffset —— 不传的话
    * iOS 键盘弹起会把输入框遮住。
    */
   headerHeight?: number;
+  /**
+   * Host route focus state. The mini-app package cannot import expo-router /
+   * @react-navigation hooks directly without risking a second router copy, so
+   * the route shell passes focus/blur down explicitly.
+   */
+  isRouteFocused?: boolean;
+  /** Incremented by the host route every time `/deeply` receives focus. */
+  focusEpoch?: number;
 } = {}): React.ReactElement {
-  const conversationId = useSingletonConversation();
+  const singletonConversationId = useSingletonConversation(conversationIdOverride === null);
+  const conversationId = conversationIdOverride ?? singletonConversationId;
   const conversation = useConversationStore((s) =>
     s.list.find((m) => m.id === conversationId) ?? null
   );
@@ -102,12 +139,233 @@ export function DeeplyExploreScreen({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
-  // FlatList 当前 contentOffset.y,onScroll 实时更新。下面 sheet-reveal
-  // 副作用需要在它基础上加 delta scroll。
-  const scrollOffsetRef = useRef(0);
-  const handleListScroll = (e: NativeSyntheticEvent<NativeScrollEvent>): void => {
-    scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+
+  // 滚动位置恢复:跟 host /chat/[id] + DeeplyCourseScreen 同构。切到别的
+  // mini-app / 进 sheet / 后台再回来时,FlatList 重新挂载,有 snapshot
+  // 就还原到当时位置;贴底过的用户继续跟随新消息,中间位置的用户停在原处。
+  //
+  // scrollMetricsRef.offsetY 顺带承担之前那块 sheet-reveal 逻辑里
+  // scrollOffsetRef 的角色:reveal 副作用直接读它即可,不再单独维护。
+  const isNearBottomRef = useRef(true);
+  const scrollMetricsRef = useRef({
+    contentHeight: 0,
+    viewportHeight: 0,
+    offsetY: 0
+  });
+  const pendingScrollRestoreRef = useRef<ExploreScrollSnapshot | null>(
+    conversationId === null ? null : exploreScrollSnapshots.get(conversationId) ?? null
+  );
+  const hasRestoredScrollRef = useRef(pendingScrollRestoreRef.current === null);
+  const lastConversationIdRef = useRef<string | null>(conversationId);
+
+  // useSingletonConversation() can return null for the first render and then
+  // produce the real Deeply conversation id on the next render. If we wait for
+  // a useEffect to swap in that conversation's snapshot, FlatList may already
+  // emit onLayout/onContentSizeChange with isNearBottom still at its default
+  // `true`, which triggers an eager scrollToEnd and overwrites the saved
+  // position. Do the conversation-id handoff synchronously during render so
+  // the very first layout pass for the real id sees the pending snapshot.
+  if (lastConversationIdRef.current !== conversationId) {
+    lastConversationIdRef.current = conversationId;
+    const snapshot = conversationId === null
+      ? null
+      : exploreScrollSnapshots.get(conversationId) ?? null;
+    pendingScrollRestoreRef.current = snapshot;
+    hasRestoredScrollRef.current = snapshot === null;
+    if (snapshot !== null) {
+      isNearBottomRef.current = snapshot.isNearBottom;
+    }
+  }
+  if (pendingScrollRestoreRef.current !== null) {
+    isNearBottomRef.current = pendingScrollRestoreRef.current.isNearBottom;
+  }
+
+  const updateNearBottom = (): void => {
+    const { contentHeight, viewportHeight, offsetY } = scrollMetricsRef.current;
+    // metrics 不完整时(mount 后 onLayout 先到、contentSize 还没 emit)就别
+    // 改 isNearBottom。否则 mount 期 onLayout 会把 isNearBottom 强行翻成 true,
+    // 紧接其后的 messages effect 又会 scrollToEnd 抢走刚 restore 的滚动位置。
+    if (contentHeight <= 0 || viewportHeight <= 0) return;
+    const distanceToBottom = contentHeight - (offsetY + viewportHeight);
+    isNearBottomRef.current = distanceToBottom <= NEAR_BOTTOM_THRESHOLD_PX;
   };
+
+  const saveCurrentScrollSnapshot = (): void => {
+    if (conversationId === null) return;
+    const snapshot = {
+      ...scrollMetricsRef.current,
+      offsetY: Math.max(0, scrollMetricsRef.current.offsetY),
+      isNearBottom: isNearBottomRef.current
+    };
+    exploreScrollSnapshots.set(conversationId, snapshot);
+  };
+
+  const scrollToBottomSoon = (animated: boolean): void => {
+    // Programmatic scrolls do not reliably emit `onScroll` on all RN targets.
+    // If we only persist from onScroll, an auto-follow-to-bottom can leave
+    // scrollMetricsRef.offsetY stuck at an older manual position, then leaving
+    // the page saves that stale offset. Update the ref optimistically first.
+    const { contentHeight, viewportHeight } = scrollMetricsRef.current;
+    if (contentHeight > 0 && viewportHeight > 0) {
+      scrollMetricsRef.current = {
+        ...scrollMetricsRef.current,
+        offsetY: Math.max(0, contentHeight - viewportHeight)
+      };
+      updateNearBottom();
+      saveCurrentScrollSnapshot();
+    }
+    setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated });
+    }, 16);
+  };
+
+  const tryRestoreSavedScroll = (): boolean => {
+    const snapshot = pendingScrollRestoreRef.current;
+    if (snapshot === null || hasRestoredScrollRef.current) return false;
+    const { contentHeight, viewportHeight } = scrollMetricsRef.current;
+    if (contentHeight <= 0 || viewportHeight <= 0) return true;
+
+    if (snapshot.isNearBottom) {
+      hasRestoredScrollRef.current = true;
+      pendingScrollRestoreRef.current = null;
+      isNearBottomRef.current = true;
+      scrollToBottomSoon(false);
+      return true;
+    }
+    const maxOffset = Math.max(0, contentHeight - viewportHeight);
+    // RN/Expo Go can report partial content heights during remount. If we
+    // restore too early, `snapshot.offsetY` gets clamped to the bottom of that
+    // partial content, which flips `isNearBottom` to true; as more rows mount,
+    // the auto-follow logic then scrolls all the way to the real bottom. Wait
+    // until the current content is tall enough to actually represent the saved
+    // offset before marking restore as complete.
+    if (maxOffset + 1 < snapshot.offsetY) {
+      return true;
+    }
+    hasRestoredScrollRef.current = true;
+    pendingScrollRestoreRef.current = null;
+    const offset = Math.min(Math.max(0, snapshot.offsetY), maxOffset);
+    scrollMetricsRef.current = {
+      ...scrollMetricsRef.current,
+      offsetY: offset
+    };
+    updateNearBottom();
+    setTimeout(() => {
+      listRef.current?.scrollToOffset({ offset, animated: false });
+    }, 16);
+    return true;
+  };
+
+  const handleListScroll = (e: NativeSyntheticEvent<NativeScrollEvent>): void => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    scrollMetricsRef.current = {
+      contentHeight: contentSize.height,
+      viewportHeight: layoutMeasurement.height,
+      offsetY: contentOffset.y
+    };
+    updateNearBottom();
+    saveCurrentScrollSnapshot();
+  };
+
+  const handleListLayout = (height: number): void => {
+    scrollMetricsRef.current = {
+      ...scrollMetricsRef.current,
+      viewportHeight: height
+    };
+    updateNearBottom();
+    tryRestoreSavedScroll();
+  };
+
+  const handleContentSizeChange = (height: number): void => {
+    const shouldFollowBottom = isNearBottomRef.current;
+    scrollMetricsRef.current = {
+      ...scrollMetricsRef.current,
+      contentHeight: height
+    };
+    updateNearBottom();
+    if (tryRestoreSavedScroll()) return;
+    if (shouldFollowBottom && messages.length > 0) {
+      scrollToBottomSoon(false);
+    }
+  };
+
+  // 切换 conversationId 时把待恢复的 snapshot 指向新对话(同 host /chat 的
+  // 处理:同一组件实例如果跨 conversation 切,不会拿旧 snapshot 误恢复新对话)。
+  //
+  // 另外在 conversation mount / 切换的瞬间排几次 retry —— 单靠 onLayout +
+  // onContentSizeChange 在 RN web demo frame + KeyboardAvoidingView 组合下
+  // 不总是稳定:有时 contentSize 在第一次 emit 时高度还不准,scrollToOffset
+  // 命中早期帧会被 FlatList 后续的内部 layout reset 掉,人就回到底了。
+  // 多排几帧 retry,直到 hasRestoredScrollRef 翻成 true 或者用户开始滚动。
+  useEffect(() => {
+    const snapshot = conversationId === null
+      ? null
+      : exploreScrollSnapshots.get(conversationId) ?? null;
+    pendingScrollRestoreRef.current = snapshot;
+    hasRestoredScrollRef.current = snapshot === null;
+    if (snapshot !== null) {
+      isNearBottomRef.current = snapshot.isNearBottom;
+    }
+    if (snapshot === null) return;
+
+    const RESTORE_RETRY_DELAYS_MS = [16, 80, 200, 400, 800];
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    for (const delay of RESTORE_RETRY_DELAYS_MS) {
+      const t = setTimeout(() => {
+        if (hasRestoredScrollRef.current) return;
+        tryRestoreSavedScroll();
+      }, delay);
+      timers.push(t);
+    }
+    return () => {
+      for (const t of timers) clearTimeout(t);
+    };
+  }, [conversationId]);
+
+  // `launcher -> Deeply` does not always unmount this component; sometimes it
+  // is merely blurred and later focused again. Relying on cleanup / mount then
+  // misses the exact moment the user leaves. The host route forwards focus
+  // events so we can persist on blur and re-run restore on focus.
+  useEffect(() => {
+    if (conversationId === null) return;
+    if (!isRouteFocused) {
+      saveCurrentScrollSnapshot();
+      return;
+    }
+
+    const snapshot = exploreScrollSnapshots.get(conversationId) ?? null;
+    pendingScrollRestoreRef.current = snapshot;
+    hasRestoredScrollRef.current = snapshot === null;
+    if (snapshot !== null) {
+      isNearBottomRef.current = snapshot.isNearBottom;
+    }
+    if (snapshot === null) return;
+
+    const RESTORE_RETRY_DELAYS_MS = [0, 16, 80, 200, 400, 800];
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    for (const delay of RESTORE_RETRY_DELAYS_MS) {
+      const t = setTimeout(() => {
+        if (hasRestoredScrollRef.current) return;
+        tryRestoreSavedScroll();
+      }, delay);
+      timers.push(t);
+    }
+    return () => {
+      for (const t of timers) clearTimeout(t);
+    };
+    // The scroll helpers intentionally read refs and current conversation
+    // state. `focusEpoch` is the event token; don't re-run because function
+    // identities changed during ordinary renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRouteFocused, focusEpoch, conversationId]);
+
+  // 卸载之前再 save 一次兜底极端情况(没滑过但 contentSize 改过)。
+  useEffect(() => {
+    return () => {
+      saveCurrentScrollSnapshot();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
 
   // 监听 CourseDetailSheet 打开事件:卡片在 onPress 时已经把自己屏幕底边的
   // y 坐标塞进 store,这里读出来 → 算出"sheet 顶部 - 20px"作为期望卡底位置
@@ -126,8 +384,15 @@ export function DeeplyExploreScreen({
     const desiredCardBottomY = sheetTopY - COURSE_SHEET_REVEAL_GAP;
     const delta = sheetCardBottomY - desiredCardBottomY;
     if (delta <= 0) return;
+    const nextOffset = Math.max(0, scrollMetricsRef.current.offsetY + delta);
+    scrollMetricsRef.current = {
+      ...scrollMetricsRef.current,
+      offsetY: nextOffset
+    };
+    updateNearBottom();
+    saveCurrentScrollSnapshot();
     listRef.current?.scrollToOffset({
-      offset: scrollOffsetRef.current + delta,
+      offset: nextOffset,
       animated: true
     });
   }, [sheetIsOpen, sheetCardBottomY]);
@@ -140,8 +405,13 @@ export function DeeplyExploreScreen({
   // 时禁(sheet 里"开始调研"也跑不动)。
   const canOpenCustomize = isConnected;
 
+  // 新消息到达:仅在用户当前就贴底时跟随到底(跟 host /chat 同款行为)。
+  // 这避免了用户向上翻看老消息时被新消息"抢回"到最底,也保证 onContentSizeChange
+  // 还没触发的极端情况下也能滚到位。
   useEffect(() => {
     if (messages.length === 0) return;
+    if (pendingScrollRestoreRef.current !== null && !hasRestoredScrollRef.current) return;
+    if (!isNearBottomRef.current) return;
     const t = setTimeout(() => {
       listRef.current?.scrollToEnd({ animated: true });
     }, 16);
@@ -252,7 +522,13 @@ export function DeeplyExploreScreen({
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         onScroll={handleListScroll}
-        scrollEventThrottle={32}
+        scrollEventThrottle={16}
+        onLayout={(event) => {
+          handleListLayout(event.nativeEvent.layout.height);
+        }}
+        onContentSizeChange={(_width, height) => {
+          handleContentSizeChange(height);
+        }}
       />
 
       <View style={styles.inputDock}>
@@ -326,7 +602,7 @@ export function DeeplyExploreScreen({
   );
 }
 
-function useSingletonConversation(): string | null {
+function useSingletonConversation(enabled = true): string | null {
   const create = useConversationStore((s) => s.create);
   const existingId = useConversationStore((s) => {
     const found = s.list.find((m) => m.mode === DEEPLY_MINI_APP_ID);
@@ -334,6 +610,7 @@ function useSingletonConversation(): string | null {
   });
 
   useEffect(() => {
+    if (!enabled) return;
     if (existingId !== null) return;
     create({
       mode: DEEPLY_MINI_APP_ID,
@@ -344,9 +621,9 @@ function useSingletonConversation(): string | null {
         subtitle: "陪你引经据典地聊一聊"
       }
     });
-  }, [existingId, create]);
+  }, [enabled, existingId, create]);
 
-  return existingId;
+  return enabled ? existingId : null;
 }
 
 function ConnectionBanner({

@@ -62,6 +62,16 @@ interface GatewayState {
   status: ConnectionStatus;
   setup: OpenClawSetup | null;
   lastError: string | null;
+  /**
+   * Per-conversation count of in-flight agent runs.
+   *
+   * This is deliberately separate from `ChatMessage.streaming`: Koko-style
+   * split-message rendering can close the first `<msg>...</msg>` bubble while
+   * the same OpenClaw run is still thinking about the next bubble. In that
+   * gap every visible message may have `streaming:false`, but the input must
+   * remain locked until the gateway sends `state:"final"` / `state:"error"`.
+   */
+  activeAgentRuns: Record<string, number>;
 
   connect: (setup: OpenClawSetup) => Promise<void>;
   reconnectIfPossible: () => Promise<boolean>;
@@ -208,6 +218,9 @@ function applyDelta(
     applyMultiBubbleDelta(conversationId, runId, fullText, done);
   } else {
     applySingleBubbleDelta(conversationId, event, done, fullText);
+  }
+  if (done) {
+    markAgentRunFinished(conversationId);
   }
 }
 
@@ -629,6 +642,30 @@ function applyError(conversationId: string, event: ChatEventPayload): void {
     return next;
   });
   useConversationStore.getState().touch(conversationId);
+  markAgentRunFinished(conversationId);
+}
+
+function markAgentRunStarted(conversationId: string): void {
+  useGatewayStore.setState((state) => ({
+    activeAgentRuns: {
+      ...state.activeAgentRuns,
+      [conversationId]: (state.activeAgentRuns[conversationId] ?? 0) + 1
+    }
+  }));
+}
+
+function markAgentRunFinished(conversationId: string): void {
+  useGatewayStore.setState((state) => {
+    const current = state.activeAgentRuns[conversationId] ?? 0;
+    if (current <= 0) return state;
+    const next = { ...state.activeAgentRuns };
+    if (current === 1) {
+      delete next[conversationId];
+    } else {
+      next[conversationId] = current - 1;
+    }
+    return { activeAgentRuns: next };
+  });
 }
 
 async function shouldRestoreRemoteSession({
@@ -757,6 +794,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   status: "disconnected",
   setup: null,
   lastError: null,
+  activeAgentRuns: {},
 
   async connect(setup) {
     const existing = get().client;
@@ -775,7 +813,9 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       ...(storedDeviceToken !== undefined ? { deviceToken: storedDeviceToken } : {}),
       deviceSeed,
       onStatusChange: (status: ConnectionStatus) => {
-        set({ status });
+        set(status === "disconnected" || status === "error"
+          ? { status, activeAgentRuns: {} }
+          : { status });
       },
       onDeviceToken: (deviceToken: string) => {
         saveDeviceToken(deviceToken);
@@ -986,6 +1026,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       ...prev,
       { id: placeholderId, role: "agent", text: "", streaming: true }
     ]);
+    markAgentRunStarted(conversationId);
 
     const idempotencyKey = `koko-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     try {
@@ -1032,6 +1073,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
         };
         return next;
       });
+      markAgentRunFinished(conversationId);
       throw error;
     }
   },

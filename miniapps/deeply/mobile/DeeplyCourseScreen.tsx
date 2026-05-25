@@ -194,6 +194,18 @@ export function DeeplyCourseScreen({
     conversationId === null ? null : courseScrollSnapshots.get(conversationId) ?? null
   );
   const hasRestoredScrollRef = useRef(pendingScrollRestoreRef.current === null);
+  const lastConversationIdRef = useRef<string | null>(conversationId);
+  if (lastConversationIdRef.current !== conversationId) {
+    lastConversationIdRef.current = conversationId;
+    const snapshot = conversationId === null
+      ? null
+      : courseScrollSnapshots.get(conversationId) ?? null;
+    pendingScrollRestoreRef.current = snapshot;
+    hasRestoredScrollRef.current = snapshot === null;
+    if (snapshot !== null) {
+      isNearBottomRef.current = snapshot.isNearBottom;
+    }
+  }
   if (pendingScrollRestoreRef.current !== null) {
     isNearBottomRef.current = pendingScrollRestoreRef.current.isNearBottom;
   }
@@ -216,10 +228,22 @@ export function DeeplyCourseScreen({
   }, [conversationId]);
 
   const scrollToBottomSoon = useCallback((animated: boolean): void => {
+    // Programmatic scrolls may not reliably emit `onScroll` on all RN
+    // targets. Keep the snapshot ref in sync so leaving after auto-following
+    // to bottom does not persist an older manual offset.
+    const { contentHeight, viewportHeight } = scrollMetricsRef.current;
+    if (contentHeight > 0 && viewportHeight > 0) {
+      scrollMetricsRef.current = {
+        ...scrollMetricsRef.current,
+        offsetY: Math.max(0, contentHeight - viewportHeight)
+      };
+      updateNearBottom();
+      saveCurrentScrollSnapshot();
+    }
     setTimeout(() => {
       listRef.current?.scrollToEnd({ animated });
     }, 16);
-  }, []);
+  }, [saveCurrentScrollSnapshot, updateNearBottom]);
 
   const tryRestoreSavedScroll = useCallback((): boolean => {
     const snapshot = pendingScrollRestoreRef.current;
@@ -227,15 +251,21 @@ export function DeeplyCourseScreen({
     const { contentHeight, viewportHeight } = scrollMetricsRef.current;
     if (contentHeight <= 0 || viewportHeight <= 0) return true;
 
-    hasRestoredScrollRef.current = true;
-    pendingScrollRestoreRef.current = null;
-
     if (snapshot.isNearBottom) {
+      hasRestoredScrollRef.current = true;
+      pendingScrollRestoreRef.current = null;
       isNearBottomRef.current = true;
       scrollToBottomSoon(false);
       return true;
     }
     const maxOffset = Math.max(0, contentHeight - viewportHeight);
+    // During remount RN can report partial content height. Restoring before
+    // `snapshot.offsetY` is representable clamps to the temporary bottom and
+    // makes later content growth auto-follow to the real bottom. Wait until
+    // the current content can actually hold the saved offset.
+    if (maxOffset + 1 < snapshot.offsetY) return true;
+    hasRestoredScrollRef.current = true;
+    pendingScrollRestoreRef.current = null;
     const offset = Math.min(Math.max(0, snapshot.offsetY), maxOffset);
     scrollMetricsRef.current = {
       ...scrollMetricsRef.current,

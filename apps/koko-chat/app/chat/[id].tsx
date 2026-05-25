@@ -302,6 +302,9 @@ export default function ChatScreen() {
   );
   const status = useGatewayStore((s) => s.status);
   const sendUserMessage = useGatewayStore((s) => s.sendUserMessage);
+  const activeAgentRunCount = useGatewayStore((s) =>
+    conversationId !== null ? s.activeAgentRuns[conversationId] ?? 0 : 0
+  );
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -496,9 +499,14 @@ export default function ChatScreen() {
     };
   }, []);
 
+  const hasStreamingAgentMessage = messages.some(
+    (message) => message.role === "agent" && message.streaming === true
+  );
+  const isAgentResponding = activeAgentRunCount > 0 || hasStreamingAgentMessage;
+
   async function handleSend(): Promise<void> {
     if (conversationId === null) return;
-    if (sending || draft.trim().length === 0) return;
+    if (sending || isAgentResponding || draft.trim().length === 0) return;
     const text = draft;
     setDraft("");
     setSending(true);
@@ -539,6 +547,7 @@ export default function ChatScreen() {
   const bootstrapError = bootstrap?.status === "error" ? bootstrap.error ?? "加载失败" : null;
   const sendDisabled =
     sending ||
+    isAgentResponding ||
     draft.trim().length === 0 ||
     !isConnected ||
     isBootstrapping ||
@@ -631,12 +640,19 @@ export default function ChatScreen() {
                   ? "角色卡加载中…"
                   : bootstrapError !== null
                     ? "角色卡加载失败，无法发送"
-                    : isConnected
+                    : isAgentResponding
+                      ? "Koko 正在回复…"
+                      : isConnected
                       ? "说点什么…"
                       : "连接 OpenClaw 后可以聊天"
               }
               placeholderTextColor={KokoColors.inkPlaceholder}
-              editable={isConnected && !isBootstrapping && bootstrapError === null}
+              editable={
+                isConnected &&
+                !isAgentResponding &&
+                !isBootstrapping &&
+                bootstrapError === null
+              }
               multiline
               onFocus={() => {
                 if (isNearBottomRef.current) {
