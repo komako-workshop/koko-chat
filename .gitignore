@@ -57,6 +57,10 @@ docs/research/roleplay-import-sample/
 .brand/preview-result.png
 .brand/shot-*.png
 .brand/deeply-avatar-lab/out/
+# Category cover originals — full-res PNGs (~13MB total). The compressed
+# JPEGs under apps/deeply-library-server/static/category-covers/ are what
+# ship; keep the PNGs around locally for re-runs but don't bloat git.
+.brand/library-category-covers/*.png
 
 # Misc dev artifacts (screenshots / event dumps captured during iterations).
 # These get cycled often; keep code-side debug tooling under scripts/ instead.
@@ -71,3 +75,4 @@ tmp-shots/
 miniapps/deeply/scripts/out/
 miniapps/deeply/scripts/ref/
 miniapps/deeply/scripts/generation.log.jsonl
+miniapps/deeply/data/covers/

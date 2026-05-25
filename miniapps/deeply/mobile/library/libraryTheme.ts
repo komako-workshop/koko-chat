@@ -74,3 +74,28 @@ export const CATEGORY_DESC: Record<string, string> = {
   "科学的边界": "数理 / 自然 / 跨学科",
   "人类群星":   "思想家 / 实业家 / 艺术家"
 };
+
+/**
+ * 类目封面图托管 base。默认 deeply.plus(prod);本机起 library server 改图
+ * 时 export `KOKO_DEEPLY_LIBRARY_ASSETS_BASE` 覆盖(同 deeply API base 的
+ * 思路,不串住 expoConfig.extra 再加一个字段 — 类目封面是固定 9 张静态资源,
+ * 不需要每个 deployment 单独配)。
+ *
+ * 实际文件在 `apps/deeply-library-server/static/category-covers/<id>.jpg`,
+ * Caddy 在 `deeply.plus/library-assets/*` 反代到这个目录。
+ */
+const CATEGORY_COVER_BASE =
+  "https://deeply.plus/library-assets/category-covers";
+
+/**
+ * 拿一个类目的 hero 封面图 URL。9 张固定图存在 deeply-library-server/static/,
+ * 不在 library-pool.json 里(那是书本级别的数据,跟类目级别 hero 解耦)。
+ *
+ * 找不到 mapping 时返回空串 — 调用方应该 fallback 到 category 色块,
+ * 跟 BookCoverImage 一样的容错。
+ */
+export function getCategoryCoverUrl(categoryName: string): string {
+  const style = STYLE_BY_NAME[categoryName];
+  if (style === undefined) return "";
+  return `${CATEGORY_COVER_BASE}/${style.id}.jpg`;
+}

@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>Deeply Library — Category Cover Preview</title>
+<style>
+  :root { --bg: #F9F9F7; --ink: #1E293B; --ink2: #475569; --ink3: #94A3B8; --line: #E8E6E0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 40px 24px 80px; background: var(--bg); color: var(--ink);
+         font-family: -apple-system, "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+         line-height: 1.5; }
+  header { max-width: 1200px; margin: 0 auto 32px; padding: 0 8px; }
+  header h1 { margin: 0 0 8px; font-size: 28px; font-weight: 700; }
+  header p { margin: 0; color: var(--ink2); font-size: 14px; }
+  .grid { max-width: 1200px; margin: 0 auto; display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 24px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+          box-shadow: 0 4px 12px rgba(100,116,139,0.06); }
+  .cover { position: relative; aspect-ratio: 3 / 2; background: #2C2A26; overflow: hidden; }
+  .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cover .missing { display:flex; align-items:center; justify-content:center; height:100%; color:#aaa; font-size:14px; }
+  .overlay { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 20px 18px;
+             color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+             background: linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0)); }
+  .overlay h2 { margin: 0 0 4px; font-size: 22px; font-weight: 700; }
+  .overlay p { margin: 0; font-size: 13px; opacity: 0.85; }
+  .prompt { padding: 12px 16px 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink2); }
+  .prompt summary { cursor: pointer; user-select: none; }
+  .prompt pre { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                font-size: 11px; line-height: 1.4; margin: 8px 0 0; color: var(--ink2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Deeply Library — Category Cover Preview</h1>
+  <p>9 个类目封面初版 (Nano Banana 2 / google/gemini-3.1-flash-image-preview)。展示叠加文字后的实际观感。点 prompt 折叠看每张图的提示词。</p>
+</header>
+<div class="grid">
+
+  <article class="card">
+    <div class="cover"><img src="history.png?t=1779697082196" alt="历史的镜像" />
+      <div class="overlay">
+        <h2>历史的镜像</h2>
+        <p>古代 / 近现代 / 文明史</p>
+      </div>
+    </div>
+    <details class="prompt">
+      <summary>prompt</summary>
+      <pre>Editorial-style cover art for a curated history bookshelf. A weathered marble bust of an ancient philosopher half-submerged in deep shadow, catching a single sliver of warm window light from the upper-left. Beside it, two heavy leather-bound antique tomes stacked with cracked gilt spines. Color palette: deep walnut, sepia, charcoal, with a faint dusty cream highlight. Cinematic museum lighting, shallow depth of field, fine grain like a Magnum photograph. Style: dramatic still life, like a Caravaggio painting reinterpreted for a modern book magazine. No text, no captions, no logos, no watermark. Composition leaves the lower-third of the frame in a dark, near-empty space for typography to be overlaid later. 3:2 horizontal aspect.</pre>
+    </details>
+  </article>
+
+  <article class="card">
+    <div class="cover"><img src="civ.png?t=1779697082196" alt="文明的逻辑" />
+      <div class="overlay">
+        <h2>文明的逻辑</h2>
+        <p>社会学 / 制度史 / 文化</p>
+      </div>
+    </div>
+    <details class="prompt">
+      <summary>prompt</summary>
+      <pre>Editorial cover art for a "logic of civilization" bookshelf. An aerial cartography-style sketch of an imaginary ancient city's road grid fading into purple shadow, with faint architectural blueprint lines, faint river curve, and tiny gold dots representing settlements. Style: like an old hand-drawn atlas overlaid with elegant data-visualization, museum print quality. Color palette: deep aubergine, dusty violet, antique gold accents, deep ink-black. No text, no labels, no compass, no logos. Composition leaves the lower-third in dark near-empty space for typography overlay. 3:2 horizontal aspect, soft warm grain.</pre>
+    </details>
+  </article>
+
+  <article class="card">
+    <div class="cover"><img src="mind.png?t=1779697082196" alt="心智理论" />
+      <div class="overlay">
+        <h2>心智理论</h2>
+        <p>心理学 / 认知科学 / 哲学</p>
+      </div>
+    </div>
+    <details class="prompt">
+      <summary>prompt</summary>
+      <pre>Editorial cover art for a "theory of mind" bookshelf. A close-up of a single classical Greek-style sculpture head, profile, eyes closed in contemplation, inside the head a translucent overlay of faint neural pathways and softly glowing constellation-like nodes. Deep teal-and-charcoal palette with cool moonlit highlights and a single warm amber glow point near the temple. Style: half marble bust, half x-ray, museum quality, melancholic but precise. No text, no diagrams, no labels, no watermark. Composition leaves the lower-third dark and clean for typography overlay. 3:2 horizontal aspect, fine photographic grain.</pre>
+    </details>
+  </article>
+
+  <article class="card">
+    <div class="cover"><img src="wealth.png?t=1779697082196" alt="财富的逻辑" />
+      <div class="overlay">
+        <h2>财富的逻辑</h2>
+        <p>经济 / 投资 / 商业史</p>
+      </div>
+    </div>
+    <details class="prompt">
+      <summary>prompt</summary>
+      <pre>Editorial cover art for a "logic of wealth" bookshelf. A still life of an aged hand-written accounting ledger open on a dark walnut desk, with a small stack of antique gold coins, a worn brass weighing scale, and a half-burnt candle casting warm side light. A faint stock-chart curve sketched in pencil along the page margin, almost invisible. Color palette: aged paper cream, brass / antique gold, deep coffee brown, ink black. Style: Dutch golden age still life crossed with a Wall Street Journal cover photo. No text, no numbers, no logos, no watermark. Composition leaves the lower-third near-empty and dark for typography overlay. 3:2 horizontal aspect, soft natural grain.</pre>
+    </details>
+  </article>
+
+  <article class="card">
+    <div class="cover"><img src="thought.png?t=1779697082196" alt="思想的深渊" />
+      <div class="overlay">
+        <h2>思想的深渊</h2>
+        <p>哲学 / 政治思想 / 形而上学</p>
+      </div>
+    </div>
+    <details class="prompt">
+      <summary>prompt</summary>
+      <pre>Editorial cover art for a "abyss of thought" philosophy bookshelf. A single dark spiral staircase descending into a deep navy-violet void, viewed from above, faint warm light from somewhere far below, with one or two dust motes floating in the light. On the top edge, a half-open ancient book lies on a stone floor, pages turned by an unseen wind. Color palette: indigo, deep slate-blue, ink violet, with a single warm candle-amber spot deep down. Style: Piranesi etching crossed with a Tarkovsky film still, contemplative and bottomless. No text, no symbols, no logos, no watermark. Composition leaves the lower-third in dark near-empty space for typography overlay. 3:2 horizontal aspect, faint film grain.</pre>
+    </details>
+  </article>
+
+  <article class="card">
+    <div class="cover"><img src="create.png?t=1779697082196" alt="创造与表达" />
+      <div class="overlay">
+        <h2>创造与表达</h2>
+        <p>文学 / 艺术 / 写作</p>
+      </div>
+    </div>
+    <details class="prompt">
+      <summary>prompt</summary>
+      <pre>Editorial cover art for a "creation and expression" bookshelf. A half-finished oil painting on a wooden easel in a dim artist's studio, beside it an open hand-bound notebook with ink calligraphy strokes, a vintage fountain pen, and dried wildflowers in a small ceramic vase. Warm afternoon side light through a single tall window. Color palette: oxblood, dusty rose, warm cream, antique brass, ink black. Style: like a Vanity Fair feature spread on contemporary artists. Tactile, intimate, slightly imperfect. No text, no signature, no logos, no watermark. Composition leaves the lower-third clean and dark for typography overlay. 3:2 horizontal aspect, fine grain.</pre>
+    </details>
+  </article>
+
+  <article class="card">
+    <div class="cover"><img src="classic.png?t=1779697082196" alt="重读经典" />
+      <div class="overlay">
+        <h2>重读经典</h2>
+        <p>传统典籍 / 史学原典 / 长青之作</p>
+      </div>
+    </div>
+    <details class="prompt">
+      <summary>prompt</summary>
+      <pre>Editorial cover art for a "re-reading the classics" bookshelf. A small stack of three or four ancient hand-bound books with worn fabric covers and gilded edges, photographed from a low angle on a deep walnut library table. A single warm reading lamp lights the top book's spine; the rest fades into deep shadow. Faint outline of a globe and one quill pen in the dark corner. Color palette: rust-red leather, oxblood, deep mahogany, warm gold leaf, ink black. Style: like a Vogue Living library feature shot, intimate and reverent. No text on the spines, no logos, no watermark. Composition leaves the lower-third in dark near-empty space for typography overlay. 3:2 horizontal aspect, fine warm grain.</pre>
+    </details>
+  </article>
+
+  <article class="card">
+    <div class="cover"><img src="science.png?t=1779697082196" alt="科学的边界" />
+      <div class="overlay">
+        <h2>科学的边界</h2>
+        <p>数理 / 自然 / 跨学科</p>
+      </div>
+    </div>
+    <details class="prompt">
+      <summary>prompt</summary>
+      <pre>Editorial cover art for a "frontier of science" bookshelf. A laboratory still life: an ornate brass antique astrolabe and a glass beaker holding a cluster of small dried botanical specimens, plus a single open notebook with faint pencil-drawn equations fading into the margins. Soft northern daylight from a high window, casting long quiet shadows. Color palette: deep moss green, olive, antique brass, soft eggshell, ink black. Style: like the Wellcome Collection's archive photography, scientific yet poetic. No legible text, no obvious formulas, no logos, no watermark. Composition leaves the lower-third in dark near-empty space for typography overlay. 3:2 horizontal aspect, fine grain.</pre>
+    </details>
+  </article>
+
+  <article class="card">
+    <div class="cover"><img src="stars.png?t=1779697082196" alt="人类群星" />
+      <div class="overlay">
+        <h2>人类群星</h2>
+        <p>思想家 / 实业家 / 艺术家</p>
+      </div>
+    </div>
+    <details class="prompt">
+      <summary>prompt</summary>
+      <pre>Editorial cover art for a "human constellations" bookshelf about great figures. A dark navy-warm-brown night sky filled with faint pinpoint stars, in the lower foreground a row of silhouette profile cameos of nameless figures (philosopher, scientist, artist) in classical relief style, unified by a faint constellation-line connecting them like a sky chart. Color palette: deep midnight navy, warm sepia, antique brass starlight, ink black. Style: a serious Smithsonian or New Yorker editorial illustration, contemplative not whimsical. No text, no names, no labels, no logos, no watermark. Composition leaves the lower-third in dark near-empty space for typography overlay. 3:2 horizontal aspect, fine warm grain.</pre>
+    </details>
+  </article>
+</div>
+</body>
+</html>

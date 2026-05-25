@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -21,6 +22,7 @@ import {
   LIBRARY_INK_4,
   LIBRARY_LINE_SOFT,
   LIBRARY_WARM_100,
+  getCategoryCoverUrl,
   getCategoryStyle
 } from "./libraryTheme";
 
@@ -88,12 +90,12 @@ export function LibraryCategoryScreen({ categoryName }: Props): React.ReactEleme
       keyExtractor={(item) => item.id}
       ListHeaderComponent={
         <>
-          <View style={[styles.hero, { backgroundColor: style.colorStart }]}>
-            <Text style={styles.heroCrumb}>课程库 / {shortenName(categoryName)}</Text>
-            <Text style={styles.heroName}>{categoryName}</Text>
-            {desc.length > 0 ? <Text style={styles.heroDesc}>{desc}</Text> : null}
-            <Text style={styles.heroMeta}>共 {books.length} 本</Text>
-          </View>
+          <CategoryHero
+            categoryName={categoryName}
+            desc={desc}
+            count={books.length}
+            fallbackColor={style.colorStart}
+          />
 
           <View style={styles.sortBar}>
             <Text style={styles.sortBarLeft}>共 {books.length} 本</Text>
@@ -110,6 +112,46 @@ export function LibraryCategoryScreen({ categoryName }: Props): React.ReactEleme
       )}
       ItemSeparatorComponent={() => <View style={styles.divider} />}
     />
+  );
+}
+
+/**
+ * 分类详情页 hero。3:2 比例 banner,图来自 deeply.plus/library-assets/
+ * category-covers/<id>.jpg。加载失败 fallback 到 colorStart 色块,保持原有
+ * "面包屑 + 类目名 + 副标题 + 共 N 本" 版式。
+ */
+function CategoryHero({
+  categoryName,
+  desc,
+  count,
+  fallbackColor
+}: {
+  categoryName: string;
+  desc: string;
+  count: number;
+  fallbackColor: string;
+}): React.ReactElement {
+  const url = getCategoryCoverUrl(categoryName);
+  const [imageFailed, setImageFailed] = useState(false);
+  const showImage = url.length > 0 && !imageFailed;
+  return (
+    <View style={[styles.hero, { backgroundColor: fallbackColor }]}>
+      {showImage ? (
+        <Image
+          source={{ uri: url }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+          onError={() => setImageFailed(true)}
+        />
+      ) : null}
+      <View style={styles.heroScrim} />
+      <View style={styles.heroBody}>
+        <Text style={styles.heroCrumb}>课程库 / {shortenName(categoryName)}</Text>
+        <Text style={styles.heroName}>{categoryName}</Text>
+        {desc.length > 0 ? <Text style={styles.heroDesc}>{desc}</Text> : null}
+        <Text style={styles.heroMeta}>共 {count} 本</Text>
+      </View>
+    </View>
   );
 }
 
@@ -179,32 +221,60 @@ const styles = StyleSheet.create({
   retryPressed: { opacity: 0.6 },
   retryText: { color: "#FFFFFF", fontWeight: "700" },
   hero: {
+    width: "100%",
+    aspectRatio: 3 / 2,
+    overflow: "hidden",
+    justifyContent: "flex-end"
+  },
+  // 底部 60% 暗色 scrim,保证白字可读;Library Home hero 用 55%,这里
+  // 文字多一档(crumb + name + desc + meta)所以暗一些更保险。
+  heroScrim: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: "60%",
+    backgroundColor: "rgba(0,0,0,0.45)"
+  },
+  heroBody: {
     paddingHorizontal: 22,
-    paddingTop: 22,
+    paddingTop: 36,
     paddingBottom: 20
   },
   heroCrumb: {
     fontSize: 11,
-    color: "rgba(255,255,255,0.65)",
-    marginBottom: 8
+    color: "rgba(255,255,255,0.78)",
+    marginBottom: 8,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3
   },
   heroName: {
     fontSize: 26,
     fontWeight: "800",
     color: "#FFFFFF",
     letterSpacing: -0.4,
-    marginBottom: 6
+    marginBottom: 6,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4
   },
   heroDesc: {
     fontSize: 13,
-    color: "rgba(255,255,255,0.85)",
+    color: "rgba(255,255,255,0.9)",
     lineHeight: 20,
-    maxWidth: 280
+    maxWidth: 280,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3
   },
   heroMeta: {
     fontSize: 12,
-    color: "rgba(255,255,255,0.7)",
-    marginTop: 12
+    color: "rgba(255,255,255,0.8)",
+    marginTop: 12,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3
   },
   sortBar: {
     flexDirection: "row",
