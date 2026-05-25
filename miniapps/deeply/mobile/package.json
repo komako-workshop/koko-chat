@@ -10,14 +10,12 @@
   },
   "peerDependencies": {
     "expo-constants": "*",
-    "expo-router": "*",
     "react": "*",
     "react-native": "*"
   },
   "devDependencies": {
     "@types/react": "~19.1.17",
     "expo-constants": "~18.0.13",
-    "expo-router": "~6.0.23",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "typescript": "^5.9.0"

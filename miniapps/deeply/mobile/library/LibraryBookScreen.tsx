@@ -8,7 +8,8 @@ import {
   TextInput,
   View
 } from "react-native";
-import { useRouter } from "expo-router";
+
+import { openDeeplyLibraryBook } from "@/runtime/navigation";
 
 import { BookCoverImage } from "./BookCoverImage";
 import { startDeeplyLibraryCourse, type SectionPreset } from "../courseSession";
@@ -54,7 +55,6 @@ type FetchStatus = "loading" | "ready" | "error" | "not_found";
  * 列表 API 不带这些。
  */
 export function LibraryBookScreen({ bookId }: Props): React.ReactElement {
-  const router = useRouter();
   const [book, setBook] = useState<LibraryBook | null>(null);
   const [status, setStatus] = useState<FetchStatus>("loading");
   const [errorMsg, setErrorMsg] = useState<string>("");
@@ -128,12 +128,9 @@ export function LibraryBookScreen({ bookId }: Props): React.ReactElement {
     }
   }, [book, starting, sectionPreset, customSectionsNum, customSectionsValid]);
 
-  const handleRelationPress = useCallback(
-    (relatedId: string) => {
-      router.push(`/deeply/library/b/${encodeURIComponent(relatedId)}`);
-    },
-    [router]
-  );
+  const handleRelationPress = useCallback((relatedId: string) => {
+    openDeeplyLibraryBook(relatedId);
+  }, []);
 
   if (status === "loading") {
     return (

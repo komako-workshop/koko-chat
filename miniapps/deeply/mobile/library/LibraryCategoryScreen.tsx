@@ -7,7 +7,8 @@ import {
   Text,
   View
 } from "react-native";
-import { useRouter } from "expo-router";
+
+import { openDeeplyLibraryBook } from "@/runtime/navigation";
 
 import { BookCoverImage } from "./BookCoverImage";
 import { listBooksByCategory, type LibraryBook } from "./libraryData";
@@ -32,7 +33,6 @@ interface Props {
  * 数据 fetch 后 memo;同一分类再次进入 instant。
  */
 export function LibraryCategoryScreen({ categoryName }: Props): React.ReactElement {
-  const router = useRouter();
   const [books, setBooks] = useState<LibraryBook[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -106,12 +106,7 @@ export function LibraryCategoryScreen({ categoryName }: Props): React.ReactEleme
         </>
       }
       renderItem={({ item }) => (
-        <BookRow
-          book={item}
-          onPress={() =>
-            router.push(`/deeply/library/b/${encodeURIComponent(item.id)}`)
-          }
-        />
+        <BookRow book={item} onPress={() => openDeeplyLibraryBook(item.id)} />
       )}
       ItemSeparatorComponent={() => <View style={styles.divider} />}
     />

@@ -67,3 +67,21 @@ export function openTavernCardDetail(path: string): void {
 export function openTavernSettings(): void {
   router.push("/tavern/settings");
 }
+
+/**
+ * Push the Deeply library category drill-down. `name` is the Chinese
+ * category label (e.g. "文明的逻辑") — encoded into the URL by this helper.
+ *
+ * Mini-app code MUST go through here, see top-of-file rationale; calling
+ * `useRouter()` from inside `miniapps/deeply/mobile/library/` lands on
+ * the deeply workspace's own expo-router copy and crashes with
+ * "Cannot read property 'isReady' of undefined".
+ */
+export function openDeeplyLibraryCategory(name: string): void {
+  router.push(`/deeply/library/c/${encodeURIComponent(name)}`);
+}
+
+/** Push the Deeply library single-book detail page. `id` is the kg_xxx id. */
+export function openDeeplyLibraryBook(id: string): void {
+  router.push(`/deeply/library/b/${encodeURIComponent(id)}`);
+}

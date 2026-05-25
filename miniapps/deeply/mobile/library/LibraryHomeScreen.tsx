@@ -7,7 +7,11 @@ import {
   Text,
   View
 } from "react-native";
-import { useRouter } from "expo-router";
+
+import {
+  openDeeplyLibraryBook,
+  openDeeplyLibraryCategory
+} from "@/runtime/navigation";
 
 import { BookCoverImage } from "./BookCoverImage";
 import {
@@ -32,7 +36,6 @@ import {
  * fetch 后内存 memo,后续重新进入直接 instant。
  */
 export function LibraryHomeScreen(): React.ReactElement {
-  const router = useRouter();
   const [categories, setCategories] = useState<LibraryCategorySummary[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,13 +59,6 @@ export function LibraryHomeScreen(): React.ReactElement {
       cancelled = true;
     };
   }, [reloadKey]);
-
-  const goCategory = (name: string): void => {
-    router.push(`/deeply/library/c/${encodeURIComponent(name)}`);
-  };
-  const goBook = (id: string): void => {
-    router.push(`/deeply/library/b/${encodeURIComponent(id)}`);
-  };
 
   if (error !== null) {
     return (
@@ -104,8 +100,8 @@ export function LibraryHomeScreen(): React.ReactElement {
         <CategoryCard
           key={cat.name}
           cat={cat}
-          onOpenCategory={() => goCategory(cat.name)}
-          onOpenBook={goBook}
+          onOpenCategory={() => openDeeplyLibraryCategory(cat.name)}
+          onOpenBook={openDeeplyLibraryBook}
         />
       ))}
 
