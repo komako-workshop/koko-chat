@@ -49,6 +49,7 @@ function parseArgs(argv) {
     skipGoogle: false,
     skipOpenLibrary: false,
     skipImageSearch: false,
+    baikeSearch: false,
     retryMisses: false,
     llmSelect: false,
     llmModel: "deepseek/deepseek-v4-pro",
@@ -60,6 +61,7 @@ function parseArgs(argv) {
     googleIntervalMs: 1000,
     openLibraryIntervalMs: 120,
     imageSearchIntervalMs: 900,
+    baikeIntervalMs: 350,
     doubanIntervalMs: 450
   };
   for (let i = 2; i < argv.length; i += 1) {
@@ -69,6 +71,7 @@ function parseArgs(argv) {
     else if (raw === "--skip-google") args.skipGoogle = true;
     else if (raw === "--skip-openlibrary") args.skipOpenLibrary = true;
     else if (raw === "--skip-image-search") args.skipImageSearch = true;
+    else if (raw === "--baike-search") args.baikeSearch = true;
     else if (raw === "--retry-misses") args.retryMisses = true;
     else if (raw === "--llm-select") args.llmSelect = true;
     else if (raw === "--llm-model") args.llmModel = argv[++i] ?? args.llmModel;
@@ -87,6 +90,7 @@ function parseArgs(argv) {
     else if (raw.startsWith("--google-interval-ms=")) args.googleIntervalMs = Number(raw.slice("--google-interval-ms=".length));
     else if (raw.startsWith("--openlibrary-interval-ms=")) args.openLibraryIntervalMs = Number(raw.slice("--openlibrary-interval-ms=".length));
     else if (raw.startsWith("--image-search-interval-ms=")) args.imageSearchIntervalMs = Number(raw.slice("--image-search-interval-ms=".length));
+    else if (raw.startsWith("--baike-interval-ms=")) args.baikeIntervalMs = Number(raw.slice("--baike-interval-ms=".length));
     else if (raw.startsWith("--douban-interval-ms=")) args.doubanIntervalMs = Number(raw.slice("--douban-interval-ms=".length));
     else {
       throw new Error(`Unknown argument: ${raw}`);
@@ -98,6 +102,7 @@ function parseArgs(argv) {
   args.googleIntervalMs = positiveInteger(args.googleIntervalMs, 1000);
   args.openLibraryIntervalMs = positiveInteger(args.openLibraryIntervalMs, 120);
   args.imageSearchIntervalMs = positiveInteger(args.imageSearchIntervalMs, 900);
+  args.baikeIntervalMs = positiveInteger(args.baikeIntervalMs, 350);
   args.doubanIntervalMs = positiveInteger(args.doubanIntervalMs, 450);
   return args;
 }
@@ -1255,6 +1260,169 @@ async function tryTitleOnlyImageSearch(book, limiters, options) {
   return null;
 }
 
+function strippedTitleVariants(title) {
+  const out = [title];
+  const noParens = title
+    .replace(/\s*[（(][^（）()]{1,120}[）)]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  out.push(noParens);
+  return uniqueStrings(out);
+}
+
+function baikeSearchTitles(book) {
+  const aliases = bookAliases(book);
+  const out = [];
+  const seen = new Set();
+  for (const title of aliases.titles) {
+    for (const variant of strippedTitleVariants(title)) {
+      const normalized = normalizeText(variant);
+      if (normalized.length < 2) continue;
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      out.push(variant);
+      if (out.length >= 4) return out;
+    }
+  }
+  return out;
+}
+
+function isStrongBaikeTitleMatch(book, lemmaTitle) {
+  const lemma = normalizeText(lemmaTitle);
+  if (lemma.length < 2) return false;
+  return baikeSearchTitles(book)
+    .map((title) => normalizeText(title))
+    .filter((title) => title.length >= 2)
+    .some((title) => lemma === title || (title.length >= 4 && lemma.includes(title)));
+}
+
+function isBookishBaikeLemma(lemma) {
+  const text = `${lemma.lemmaTitle ?? ""} ${lemma.lemmaDesc ?? ""}`;
+  if (!/图书|书籍|出版|著作|作品|book/i.test(text)) return false;
+  if (/电影|电视剧|纪录片|动画|漫画角色|歌曲|专辑|游戏|术语|人物|公司|品牌|景点|软件/.test(text)) return false;
+  return true;
+}
+
+async function baikeSuggestResults(query, limiters) {
+  await limiters.baike();
+  const url = new URL("https://baike.baidu.com/api/searchui/suggest");
+  url.searchParams.set("enc", "utf8");
+  url.searchParams.set("wd", query);
+  const referer = new URL("https://baike.baidu.com/search");
+  referer.searchParams.set("word", query);
+  const res = await fetchWithRetry(url, {
+    headers: {
+      "Accept": "application/json,text/plain,*/*",
+      "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+      "Referer": referer.toString()
+    }
+  }, { attempts: 2, timeoutMs: 10_000 });
+  const json = JSON.parse(await res.text());
+  return Array.isArray(json.list) ? json.list : [];
+}
+
+function metaContent(html, names) {
+  const wanted = new Set(names.map((name) => name.toLowerCase()));
+  const re = /<meta\b[^>]*>/gi;
+  let match;
+  while ((match = re.exec(html)) !== null) {
+    const tag = match[0];
+    const name = (
+      tag.match(/\b(?:property|name)=["']([^"']+)["']/i)?.[1] ?? ""
+    ).toLowerCase();
+    if (!wanted.has(name)) continue;
+    const content = tag.match(/\bcontent=["']([^"']+)["']/i)?.[1];
+    if (content) return decodeHtmlAttr(content);
+  }
+  return "";
+}
+
+async function baikeCandidateFromLemma(lemma, book, limiters) {
+  const lemmaTitle = typeof lemma.lemmaTitle === "string" ? lemma.lemmaTitle : "";
+  if (!isBookishBaikeLemma(lemma) || !isStrongBaikeTitleMatch(book, lemmaTitle)) return null;
+  const lemmaId = Number(lemma.lemmaId);
+  if (!lemmaTitle || !Number.isFinite(lemmaId)) return null;
+
+  await limiters.baike();
+  const pageUrl = `https://baike.baidu.com/item/${encodeURIComponent(lemmaTitle)}/${lemmaId}`;
+  const res = await fetchWithRetry(pageUrl, {
+    headers: {
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+      "Referer": "https://baike.baidu.com/"
+    }
+  }, { attempts: 1, timeoutMs: 12_000 });
+  const html = await res.text();
+  const imageUrl = (
+    metaContent(html, ["og:image", "image", "twitter:image"]) ||
+    (typeof lemma.abstractPic === "string" ? lemma.abstractPic : "")
+  ).replace(/^http:/i, "https:");
+  if (!imageUrl) return null;
+  const pageTitle = firstMatch(/<title>([^<]+)/i, html) ?? "";
+  const description = metaContent(html, ["description"]);
+  return {
+    title: `${lemmaTitle} ${lemma.lemmaDesc ?? ""} ${pageTitle} ${description}`.trim(),
+    pageUrl,
+    imageUrl,
+    thumbnailUrl: typeof lemma.abstractPic === "string" ? lemma.abstractPic.replace(/^http:/i, "https:") : "",
+    width: null,
+    height: null
+  };
+}
+
+async function tryBaikeSearch(book, limiters, options) {
+  if (!options.visionSelect) return null;
+  const raw = [];
+  for (const query of baikeSearchTitles(book)) {
+    try {
+      raw.push(...await baikeSuggestResults(query, limiters));
+    } catch {
+      // Baike search is best-effort.
+    }
+    if (raw.length >= 12) break;
+  }
+
+  const seen = new Set();
+  const candidates = [];
+  for (const lemma of raw) {
+    const key = `${lemma.lemmaId ?? ""}|${lemma.lemmaTitle ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    try {
+      const candidate = await baikeCandidateFromLemma(lemma, book, limiters);
+      if (candidate !== null) candidates.push(candidate);
+    } catch {
+      // Ignore broken or blocked Baike pages.
+    }
+    if (candidates.length >= 6) break;
+  }
+
+  const selected = await selectVisionCandidate(book, candidates, options);
+  if (selected === null) return null;
+
+  const urls = [selected.imageUrl, selected.thumbnailUrl].filter(Boolean);
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      const image = await downloadCandidate(url, {
+        "Referer": selected.pageUrl || "https://baike.baidu.com/"
+      }, { attempts: 1, timeoutMs: 15_000 }, { minRatio: 0.42, maxRatio: 0.95 });
+      return {
+        source: "baike-vision",
+        originalUrl: image.originalUrl,
+        image,
+        candidateTitle: selected.title,
+        candidatePageUrl: selected.pageUrl,
+        selector: selected.selector
+      };
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (lastErr) throw lastErr;
+  return null;
+}
+
 async function tryImageSearch(book, limiters, options) {
   const rawCandidates = [];
   const minScore = options.llmSelect ? 0 : 7;
@@ -1558,6 +1726,15 @@ async function findCover(book, limiters, options) {
     }
   }
 
+  if (options.baikeSearch) {
+    try {
+      const baike = await tryBaikeSearch(book, limiters, options);
+      if (baike !== null) return baike;
+    } catch (err) {
+      errors.push(`baike: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   if (!options.skipDouban && !limiters.doubanDisabled) {
     try {
       const douban = await tryDouban(book, limiters);
@@ -1666,6 +1843,7 @@ async function main() {
   console.log(`openlibrary: ${args.skipOpenLibrary ? "disabled" : `enabled (${args.openLibraryIntervalMs}ms)`}`);
   console.log(`image search: ${args.skipImageSearch ? "disabled" : `enabled (${args.imageSearchIntervalMs}ms)`}`);
   console.log(`title-only image search: ${args.titleOnlyImageSearch ? `enabled${args.titleOnlyOnly ? " (only)" : ""}` : "disabled"}`);
+  console.log(`baike search: ${args.baikeSearch ? `enabled (${args.baikeIntervalMs}ms)` : "disabled"}`);
   console.log(`llm select: ${args.llmSelect ? args.llmModel : "disabled"}`);
   console.log(`vision select: ${args.visionSelect ? args.visionModel : "disabled"}`);
   console.log(`douban: ${args.skipDouban ? "disabled" : "enabled"}`);
@@ -1675,6 +1853,7 @@ async function main() {
     google: createRateLimiter(args.googleIntervalMs),
     openLibrary: createRateLimiter(args.openLibraryIntervalMs),
     imageSearch: createRateLimiter(args.imageSearchIntervalMs),
+    baike: createRateLimiter(args.baikeIntervalMs),
     douban: createRateLimiter(args.doubanIntervalMs),
     doubanBlockCount: 0
   };
