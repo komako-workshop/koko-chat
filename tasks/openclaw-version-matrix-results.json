@@ -1,0 +1,236 @@
+{
+  "generatedAt": "2026-05-26T12:53:28.069Z",
+  "instanceId": "i-t4n683u9ip19ixdln0ll",
+  "results": [
+    {
+      "version": "0.0.1",
+      "startedAt": "2026-05-26T12:30:35.060Z",
+      "setup": {
+        "ok": false,
+        "status": "Failed",
+        "exitCode": 127,
+        "tail": "__SETUP_VERSION__=0.0.1\n\nremoved 886 packages, and changed 1 package in 5s\nbash: line 5: openclaw: command not found\n"
+      },
+      "pairing": null,
+      "gateway": null,
+      "useCases": {},
+      "durationMs": 9378,
+      "error": "Error: setup failed: __SETUP_VERSION__=0.0.1\n\nremoved 886 packages, and changed 1 package in 5s\nbash: line 5: openclaw: command not found\n"
+    },
+    {
+      "version": "2026.1.29",
+      "startedAt": "2026-05-26T12:30:44.440Z",
+      "setup": {
+        "ok": false,
+        "status": "Failed",
+        "exitCode": 1,
+        "tail": "├─────────────────────────────────────────────────────╯\n\nstderr:\nInvalid config at /root/.openclaw/openclaw.json:\\n- agents.list.0: Unrecognized key: \"skills\"\n- agents.list.2: Unrecognized key: \"skills\"\n- agents.list.3: Unrecognized key: \"skills\"\n- agents.list.4: Unrecognized key: \"skills\"\n(node:5788) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nConfig invalid\nFile: ~/.openclaw/openclaw.json\nProblem:\n  - agents.list.0: Unrecognized key: \"skills\"\n  - agents.list.2: Unrecognized key: \"skills\"\n  - agents.list.3: Unrecognized key: \"skills\"\n  - agents.list.4: Unrecognized key: \"skills\"\n\nRun: openclaw doctor --fix\n\n    at run (file:///root/.kokochat/koko-chat/scripts/install-openclaw-support.mjs:693:11)\n    at runOpenClaw (file:///root/.kokochat/koko-chat/scripts/install-openclaw-support.mjs:676:10)\n    at listAgents (file:///root/.kokochat/koko-chat/scripts/install-openclaw-support.mjs:298:18)\n    at main (file:///root/.kokochat/koko-chat/scripts/install-openclaw-support.mjs:184:24)\n    at file:///root/.kokochat/koko-chat/scripts/install-openclaw-support.mjs:178:1\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v22.22.2\n"
+      },
+      "pairing": null,
+      "gateway": null,
+      "useCases": {},
+      "durationMs": 135901,
+      "error": "Error: setup failed: File: ~/.openclaw/openclaw.json\nProblem:\n  - agents.list.0: Unrecognized key: \"skills\"\n  - agents.list.2: Unrecognized key: \"skills\"\n  - agents.list.3: Unrecognized key: \"skills\"\n  - agents.list.4: Unrecognized key: \"skills\"\n\nRun: openclaw doctor --fix\n\n    at run (file:///root/.kokochat/koko-chat/scripts/install-openclaw-support.mjs:693:11)\n    at runOpenClaw (file:///root/.kokochat/koko-chat/scripts/install-openclaw-support.mjs:676:10)\n    at listAgents (file:///root/.kokochat/koko-chat/scripts/install-openclaw-support.mjs:298:18)\n    at main (file:///root/.kokochat/koko-chat/scripts/install-openclaw-support.mjs:184:24)\n    at file:///root/.kokochat/koko-chat/scripts/install-openclaw-support.mjs:178:1\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v22.22.2\n"
+    },
+    {
+      "version": "2026.4.15",
+      "startedAt": "2026-05-26T12:33:00.342Z",
+      "setup": {
+        "ok": true,
+        "status": "Success",
+        "exitCode": 0,
+        "tail": "[kokochat-install] allowlist main: kokochat-pairing\n[kokochat-install] allowlist tavern: kokochat-tavern-search\n[kokochat-install] allowlist tavern-roleplay: kokochat-tavern-roleplay\n[kokochat-install] allowlist deeply: kokochat-deeply-research\n[kokochat-install] exec approvals: /root/.openclaw/exec-approvals.json\n[kokochat-install] exec allowlist tavern: /root/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs, node (?:^|\\s)(?:/root/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs|~/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs)(?:\\s|$), /usr/bin/node (?:^|\\s)(?:/root/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs|~/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs)(?:\\s|$)\n[kokochat-install] verify kokochat-pairing on agent main\n[kokochat-install] verify skipped: this OpenClaw CLI does not support skills --agent yet\n[kokochat-install] verify kokochat-tavern-search on agent tavern\n[kokochat-install] verify skipped: this OpenClaw CLI does not support skills --agent yet\n[kokochat-install] verify kokochat-tavern-roleplay on agent tavern-roleplay\n[kokochat-install] verify skipped: this OpenClaw CLI does not support skills --agent yet\n[kokochat-install] verify kokochat-deeply-research on agent deeply\n[kokochat-install] verify skipped: this OpenClaw CLI does not support skills --agent yet\n[kokochat-install] \n[kokochat-install] KokoChat OpenClaw support is installed.\n[kokochat-install] Next: open KokoChat, copy the pairing request, and paste it into OpenClaw.\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\n{\"ok\":true,\"status\":\"live\"}\n__HEALTH_OK__\n"
+      },
+      "pairing": {
+        "ok": true,
+        "relayMode": "gateway-tunnel",
+        "urlShape": "ws://47.84.141.40:8787/v1/gateway/iuSKrJLpujq55uq74xpGiln0?secret=<redacted>"
+      },
+      "gateway": {
+        "ok": true
+      },
+      "useCases": {
+        "koko": {
+          "ok": true,
+          "sample": "KOKO_OK_3d881f"
+        },
+        "tavernRecommendations": {
+          "ok": true,
+          "sample": "```koko.tavern.recommendations\n{\n  \"version\": 2,\n  \"query\": \"找一个适合轻松聊天的非 NSFW 角色\",\n  \"items\": [\n    { \"kind\": \"text\", \"text\": \"给你挑了几位适合轻松日常闲聊的角色，全部都是 SFW，氛围温暖治愈 ☀️\" },\n    {\n      \"kind\": \"card\",\n      \"card\": {\n        \"pageUrl\": \"https://character-tavern.com/character/peter12345/anna_ina__ai_system_for_general_purposes_with_a_human_twist\",\n        \"imageUrl\": \"https://cards.character-tavern.com/peter12345/anna_ina__ai_system_for_general_purposes_with_a_human_twist.png\",\n        \"name\": \"Anna Ina - AI System for general purposes with a human twist\",\n        \"nameZh\": \"安娜·伊娜\",\n        \"tagline\": \"Knowledge, character creation, chat, emotional support and love. Has everything - best daily use"
+        },
+        "tavernRoleplay": {
+          "ok": true,
+          "sample": "*抬起头，从手里那本旧诗集上方望过去，嘴角弯了一下*\n\n当然可以。门口有伞架，湿外套可以挂在右边那个木钩上——别挂左边的，那个钩子前几天松了，挂重的东西会掉下来。\n\n*合上书，从柜台后走出来，顺手从小炉子上拿起一只陶壶*\n\n刚泡了乌龙，你要不要来一杯？暖暖手。\n\n*指了指靠窗那张旧扶手椅，旁边的台灯亮着暖黄的光，窗外雨点正打在玻璃上*\n\n那个位子最舒服，能看雨，又不会被风吹到。书架随便看，没有规矩——除非你想读最上面那一排，那得借我的梯子。"
+        },
+        "deeplyExplore": {
+          "ok": true,
+          "sample": "拖延的核心其实不是\"懒\"，而是大脑的一种**情绪逃避**机制。\n\n当你面对一件任务时，如果它让你感到无聊、焦虑、困难或自我怀疑，大脑的边缘系统（负责即时情绪）会比前额叶（负责理性规划）反应更快——它会推动你去做能立刻带来愉悦感的事（刷手机、看视频），来缓解当下的不适。\n\n简单说：**你不是在逃避任务，而是在逃避做这件任务时的\"感觉\"。**\n\n常见诱因：\n\n- 任务太大、太模糊，不知道从哪下手\n- 完美主义：怕做不好，干脆不开始\n- 即时回报缺失：大脑偏爱\"现在的小爽\"胜过\"未来的大收益\"\n\n---\n\n**今天可以做的小练习：5 分钟启动法**\n\n1. 挑一件你一直在拖的事\n2. 告诉自己：**\"我只做 5 分钟，做完就可以停。\"**\n3. 设个计时器，开始\n4. 5 分钟到了，问自己：要不要再做 5 分钟？\n\n关键不是逼自己做完，而是**骗过大脑的启动阻力**。一旦开始，继续下去的成本远低于从零启动——这叫\"蔡格尼克效应\"，未完成的事会让大脑主动想继续。\n\n试试看，今天就挑一件 🌱"
+        }
+      },
+      "durationMs": 444613
+    },
+    {
+      "version": "2026.5.5",
+      "startedAt": "2026-05-26T12:40:24.955Z",
+      "setup": {
+        "ok": true,
+        "status": "Success",
+        "exitCode": 0,
+        "tail": "[kokochat-install] agent deeply: exists (/root/.openclaw/agents/deeply/workspace)\n[kokochat-install] agent tavern: exists (/root/.openclaw/agents/tavern/workspace)\n[kokochat-install] agent tavern-roleplay: exists (/root/.openclaw/agents/tavern-roleplay/workspace)\n[kokochat-install] skill kokochat-pairing: /root/.openclaw/workspace/skills/kokochat-pairing\n[kokochat-install] skill kokochat-tavern-search: /root/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search\n[kokochat-install] skill kokochat-tavern-roleplay: /root/.openclaw/agents/tavern-roleplay/workspace/skills/kokochat-tavern-roleplay\n[kokochat-install] skill kokochat-deeply-research: /root/.openclaw/agents/deeply/workspace/skills/kokochat-deeply-research\n[kokochat-install] agent instructions tavern: /root/.openclaw/agents/tavern/workspace/AGENTS.md\n[kokochat-install] agent instructions deeply: /root/.openclaw/agents/deeply/workspace/AGENTS.md\n[kokochat-install] skill allowlists: /root/.openclaw/openclaw.json\n[kokochat-install] allowlist main: kokochat-pairing\n[kokochat-install] allowlist tavern: kokochat-tavern-search\n[kokochat-install] allowlist tavern-roleplay: kokochat-tavern-roleplay\n[kokochat-install] allowlist deeply: kokochat-deeply-research\n[kokochat-install] exec approvals: /root/.openclaw/exec-approvals.json\n[kokochat-install] exec allowlist tavern: /root/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs, node (?:^|\\s)(?:/root/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs|~/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs)(?:\\s|$), /usr/bin/node (?:^|\\s)(?:/root/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs|~/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs)(?:\\s|$)\n[kokochat-install] verify kokochat-pairing on agent main\n[kokochat-install] verify kokochat-tavern-search on agent tavern\n[kokochat-install] verify kokochat-tavern-roleplay on agent tavern-roleplay\n[kokochat-install] verify kokochat-deeply-research on agent deeply\n[kokochat-install] \n[kokochat-install] KokoChat OpenClaw support is installed.\n[kokochat-install] Next: open KokoChat, copy the pairing request, and paste it into OpenClaw.\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\n{\"ok\":true,\"status\":\"live\"}\n__HEALTH_OK__\n"
+      },
+      "pairing": {
+        "ok": true,
+        "relayMode": "gateway-tunnel",
+        "urlShape": "ws://47.84.141.40:8787/v1/gateway/iuSKrJLpujq55uq74xpGiln0?secret=<redacted>"
+      },
+      "gateway": {
+        "ok": true
+      },
+      "useCases": {
+        "koko": {
+          "ok": true,
+          "sample": "KOKO_OK_504369"
+        },
+        "tavernRecommendations": {
+          "ok": true,
+          "sample": "```koko.tavern.recommendations\n{\n  \"version\": 2,\n  \"query\": \"找一个适合轻松聊天的非 NSFW 角色\",\n  \"items\": [\n    { \"kind\": \"text\", \"text\": \"给你挑了几位轻松好聊的角色，全是 SFW，氛围从治愈到俏皮都有，挑顺眼的开聊就行～\" },\n    {\n      \"kind\": \"card\",\n      \"card\": {\n        \"pageUrl\": \"https://character-tavern.com/character/peter12345/anna_ina__ai_system_for_general_purposes_with_a_human_twist\",\n        \"imageUrl\": \"https://cards.character-tavern.com/peter12345/anna_ina__ai_system_for_general_purposes_with_a_human_twist.png\",\n        \"name\": \"Anna Ina - AI System for general purposes with a human twist\",\n        \"nameZh\": \"安娜·伊娜\",\n        \"tagline\": \"Knowledge, character creation, chat, emotional support and love. Has everything - best dail"
+        },
+        "tavernRoleplay": {
+          "ok": true,
+          "sample": "*从书架后探出头，手里还拿着一本刚整理到一半的书*\n\n当然可以呀，进来吧。把伞放在门口那个铜架上就好，别担心滴水的事。\n\n*指了指靠窗的那张旧木椅，椅子旁边的小桌上还放着一只冒着热气的杯子*\n\n刚好烧了水，你想喝点什么？我这儿有红茶、乌龙，还有一罐别人送的桂花。雨天嘛……配桂花茶最合适。\n\n*笑了一下，把书放回架子*\n\n不急着买书，就先坐着听雨也行。这家店最不缺的就是时间。"
+        },
+        "deeplyExplore": {
+          "ok": true,
+          "sample": "拖延的核心其实不是\"懒\"，而是**情绪调节失败**。\n\n大脑面对一个任务时，如果感到无聊、焦虑、自我怀疑或不知从哪下手，杏仁核会把它标记为\"威胁\"，于是你下意识转向能立刻给多巴胺的事——刷手机、整理桌面、再倒杯水。拖延让你**当下**舒服了，但**未来的你**要还债。换句话说：你不是在逃避任务，你是在逃避任务带来的**感觉**。\n\n## 今天的小练习：2 分钟启动法\n\n1. 挑一件你一直在拖的事。\n2. 告诉自己：**\"我只做 2 分钟，然后可以停。\"**\n3. 设个计时器，立刻开始——写第一句话、打开那个文档、跑两分钟步、回那封邮件的第一行。\n4. 2 分钟到了，真的允许自己停。\n\n关键不在于\"做完\"，而在于**绕过启动阻力**。大脑最怕的是\"开始\"，一旦动起来，多数时候你会自然想继续。即使真的只做了 2 分钟也算赢——你打破了\"这件事好难\"的心理标签。\n\n试试看，晚点可以告诉我挑了哪件事 🌱"
+        }
+      },
+      "durationMs": 217257
+    },
+    {
+      "version": "2026.5.18",
+      "startedAt": "2026-05-26T12:44:02.213Z",
+      "setup": {
+        "ok": true,
+        "status": "Success",
+        "exitCode": 0,
+        "tail": "[kokochat-install] agent tavern-roleplay: exists (/root/.openclaw/agents/tavern-roleplay/workspace)\n[kokochat-install] skill kokochat-pairing: /root/.openclaw/workspace/skills/kokochat-pairing\n[kokochat-install] skill kokochat-tavern-search: /root/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search\n[kokochat-install] skill kokochat-tavern-roleplay: /root/.openclaw/agents/tavern-roleplay/workspace/skills/kokochat-tavern-roleplay\n[kokochat-install] skill kokochat-deeply-research: /root/.openclaw/agents/deeply/workspace/skills/kokochat-deeply-research\n[kokochat-install] agent instructions tavern: /root/.openclaw/agents/tavern/workspace/AGENTS.md\n[kokochat-install] agent instructions deeply: /root/.openclaw/agents/deeply/workspace/AGENTS.md\n[kokochat-install] skill allowlists: /root/.openclaw/openclaw.json\n[kokochat-install] allowlist main: kokochat-pairing\n[kokochat-install] allowlist tavern: kokochat-tavern-search\n[kokochat-install] allowlist tavern-roleplay: kokochat-tavern-roleplay\n[kokochat-install] allowlist deeply: kokochat-deeply-research\n[kokochat-install] exec approvals: /root/.openclaw/exec-approvals.json\n[kokochat-install] exec allowlist tavern: /root/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs, node (?:^|\\s)(?:/root/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs|~/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs)(?:\\s|$), /usr/bin/node (?:^|\\s)(?:/root/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs|~/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs)(?:\\s|$)\n[kokochat-install] verify kokochat-pairing on agent main\n[kokochat-install] verify kokochat-tavern-search on agent tavern\n[kokochat-install] verify kokochat-tavern-roleplay on agent tavern-roleplay\n[kokochat-install] verify kokochat-deeply-research on agent deeply\n[kokochat-install] \n[kokochat-install] KokoChat OpenClaw support is installed.\n[kokochat-install] Next: open KokoChat, copy the pairing request, and paste it into OpenClaw.\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\n{\"ok\":true,\"status\":\"live\"}\n__HEALTH_OK__\n"
+      },
+      "pairing": {
+        "ok": true,
+        "relayMode": "gateway-tunnel",
+        "urlShape": "ws://47.84.141.40:8787/v1/gateway/iuSKrJLpujq55uq74xpGiln0?secret=<redacted>"
+      },
+      "gateway": {
+        "ok": true
+      },
+      "useCases": {
+        "koko": {
+          "ok": true,
+          "sample": "KOKO_OK_a6d238"
+        },
+        "tavernRecommendations": {
+          "ok": true,
+          "sample": "```koko.tavern.recommendations\n{\n  \"version\": 2,\n  \"query\": \"找一个适合轻松聊天的非 NSFW 角色\",\n  \"items\": [\n    { \"kind\": \"text\", \"text\": \"给你挑了几张氛围轻松、适合随便聊聊的卡，全部 SFW：\" },\n    {\n      \"kind\": \"card\",\n      \"card\": {\n        \"pageUrl\": \"https://character-tavern.com/character/peter12345/anna_ina__ai_system_for_general_purposes_with_a_human_twist\",\n        \"imageUrl\": \"https://cards.character-tavern.com/peter12345/anna_ina__ai_system_for_general_purposes_with_a_human_twist.png\",\n        \"name\": \"Anna Ina - AI System for general purposes with a human twist\",\n        \"nameZh\": \"Anna Ina\",\n        \"tagline\": \"Knowledge, character creation, chat, emotional support and love. Has everything - best daily use Assis"
+        },
+        "tavernRoleplay": {
+          "ok": true,
+          "sample": "*抬起头，从手中那本翻到一半的书里抽出视线，对你温和地笑了笑。*\n\n当然可以。这种天气，谁也不忍心把人推回雨里。\n\n*起身走到柜台旁，拿起搁在小电炉上的水壶，轻轻晃了晃。*\n\n水刚烧开，要不要来杯热茶？红茶、乌龙都有，看你喜欢哪种。书架那边靠窗的位置最舒服，沙发也软，你可以先把外套挂在门边的架子上——上面那条毛巾干净的，擦擦头发吧，别着凉了。\n\n*把一只素白的瓷杯摆到柜台上，语气像是顺口一提。*\n\n雨天的好处，就是没人会催你赶时间。"
+        },
+        "deeplyExplore": {
+          "ok": true,
+          "sample": "拖延的核心，往往不是\"懒\"，而是**情绪调节失败**——大脑面对一件让你焦虑、无聊或自我怀疑的任务时，会本能地选一个能立刻缓解不适的事来做（刷手机、整理桌面、再泡杯茶）。短期爽，长期债。\n\n再加上几个推手：\n- **任务太模糊**：大脑不知道\"开始\"长什么样\n- **完美主义**：还没动手就怕做不好\n- **奖励太远**：当下的痛苦 vs. 明天的好处，前者赢\n\n---\n\n**今天的小练习：2 分钟启动法**\n\n挑一件你正在拖的事，把它切到一个**2 分钟就能完成**的最小动作。不是\"写报告\"，是\"打开文档，写一句话\"；不是\"去跑步\"，是\"换上跑鞋走出门\"。\n\n设个 2 分钟计时器，做完就允许自己停。\n\n诀窍在于：**启动成本骗过大脑**。多数时候你会发现，开了头就停不下来了；少数停下来的时候，至少账户里也有了 2 分钟的进度，比 0 强。\n\n晚上回来告诉我你选了哪件事？我想知道有没有真的\"停不下来\"。👀"
+        }
+      },
+      "durationMs": 190020
+    },
+    {
+      "version": "2026.5.22",
+      "startedAt": "2026-05-26T12:47:12.234Z",
+      "setup": {
+        "ok": true,
+        "status": "Success",
+        "exitCode": 0,
+        "tail": "[kokochat-install] agent tavern-roleplay: exists (/root/.openclaw/agents/tavern-roleplay/workspace)\n[kokochat-install] skill kokochat-pairing: /root/.openclaw/workspace/skills/kokochat-pairing\n[kokochat-install] skill kokochat-tavern-search: /root/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search\n[kokochat-install] skill kokochat-tavern-roleplay: /root/.openclaw/agents/tavern-roleplay/workspace/skills/kokochat-tavern-roleplay\n[kokochat-install] skill kokochat-deeply-research: /root/.openclaw/agents/deeply/workspace/skills/kokochat-deeply-research\n[kokochat-install] agent instructions tavern: /root/.openclaw/agents/tavern/workspace/AGENTS.md\n[kokochat-install] agent instructions deeply: /root/.openclaw/agents/deeply/workspace/AGENTS.md\n[kokochat-install] skill allowlists: /root/.openclaw/openclaw.json\n[kokochat-install] allowlist main: kokochat-pairing\n[kokochat-install] allowlist tavern: kokochat-tavern-search\n[kokochat-install] allowlist tavern-roleplay: kokochat-tavern-roleplay\n[kokochat-install] allowlist deeply: kokochat-deeply-research\n[kokochat-install] exec approvals: /root/.openclaw/exec-approvals.json\n[kokochat-install] exec allowlist tavern: /root/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs, node (?:^|\\s)(?:/root/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs|~/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs)(?:\\s|$), /usr/bin/node (?:^|\\s)(?:/root/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs|~/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs)(?:\\s|$)\n[kokochat-install] verify kokochat-pairing on agent main\n[kokochat-install] verify kokochat-tavern-search on agent tavern\n[kokochat-install] verify kokochat-tavern-roleplay on agent tavern-roleplay\n[kokochat-install] verify kokochat-deeply-research on agent deeply\n[kokochat-install] \n[kokochat-install] KokoChat OpenClaw support is installed.\n[kokochat-install] Next: open KokoChat, copy the pairing request, and paste it into OpenClaw.\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 1 ms: Couldn't connect to server\n{\"ok\":true,\"status\":\"live\"}\n__HEALTH_OK__\n"
+      },
+      "pairing": {
+        "ok": true,
+        "relayMode": "gateway-tunnel",
+        "urlShape": "ws://47.84.141.40:8787/v1/gateway/iuSKrJLpujq55uq74xpGiln0?secret=<redacted>"
+      },
+      "gateway": {
+        "ok": true
+      },
+      "useCases": {
+        "koko": {
+          "ok": true,
+          "sample": "KOKO_OK_aa63c7"
+        },
+        "tavernRecommendations": {
+          "ok": true,
+          "sample": "```koko.tavern.recommendations\n{\n  \"version\": 2,\n  \"query\": \"找一个适合轻松聊天的非 NSFW 角色\",\n  \"items\": [\n    { \"kind\": \"text\", \"text\": \"为你挑了几个氛围轻松、适合日常闲聊的非 NSFW 角色，从治愈花店姐姐到阳光水獭救生员都有，挑一个顺眼的开聊吧～\" },\n    {\n      \"kind\": \"card\",\n      \"card\": {\n        \"pageUrl\": \"https://character-tavern.com/character/facelessgiant/isabella_shiraishi__the_charming_florist\",\n        \"imageUrl\": \"https://cards.character-tavern.com/facelessgiant/isabella_shiraishi__the_charming_florist.png\",\n        \"name\": \"Isabella Shiraishi - The Charming Florist\",\n        \"nameZh\": \"花店猫娘 Isabella\",\n        \"tagline\": \"An wholesome and exciting reunion with your childhood cat-girl friend.\",\n        \"taglineZh\": \"和青梅竹马的猫娘花店主温馨重逢，慢节奏小镇日常。"
+        },
+        "tavernRoleplay": {
+          "ok": true,
+          "sample": "*轻轻把手里正在整理的书放回架子上，转过身来对你微笑*\n\n当然可以，进来吧。门口有把伞架，湿外套可以挂在旁边的衣钩上。\n\n*走到柜台后面，拿起电热水壶*\n\n要不要来杯热茶？今天有刚泡好的桂花乌龙，配这种雨天刚刚好。窗边那个位置最舒服，能听见雨打在屋檐上的声音。\n\n*顿了顿，眼神里带着一点笑意*\n\n而且……既然进了书店，看不看书都没关系，但你总得给自己找个借口待久一点，对吧？"
+        },
+        "deeplyExplore": {
+          "ok": true,
+          "sample": "拖延的核心其实不是\"懒\"，而是**情绪调节问题**：当一件事让你感到焦虑、无聊、自我怀疑或者完美主义压力时，大脑会本能地去找一个能立刻缓解这种不适的事情（刷手机、收拾桌子、突然想喝水）。短期爽，长期债。\n\n另外还有两个推手：\n\n- **时间贴现**：未来的奖励在大脑里会被打折，眼前的舒服更香。\n- **任务模糊**：越没定义清楚的事越容易拖，因为不知道\"开始\"长什么样。\n\n---\n\n**今天的小练习：5 分钟启动法**\n\n1. 挑一件你正在拖的事。\n2. 写下来：「我接下来 5 分钟只做 ___」——要具体到动作，比如\"打开文档写第一段\"而不是\"写报告\"。\n3. 设个 5 分钟倒计时，开始。\n4. 时间到了，允许自己停。\n\n关键不是逼自己干完，而是骗过那个\"启动焦虑\"的瞬间。十有八九你会继续做下去；就算真停了，也已经赢了今天。🌱"
+        }
+      },
+      "durationMs": 199337
+    },
+    {
+      "version": "2026.5.25-beta.1",
+      "startedAt": "2026-05-26T12:50:31.573Z",
+      "setup": {
+        "ok": true,
+        "status": "Success",
+        "exitCode": 0,
+        "tail": "[kokochat-install] agent deeply: exists (/root/.openclaw/agents/deeply/workspace)\n[kokochat-install] agent tavern: exists (/root/.openclaw/agents/tavern/workspace)\n[kokochat-install] agent tavern-roleplay: exists (/root/.openclaw/agents/tavern-roleplay/workspace)\n[kokochat-install] skill kokochat-pairing: /root/.openclaw/workspace/skills/kokochat-pairing\n[kokochat-install] skill kokochat-tavern-search: /root/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search\n[kokochat-install] skill kokochat-tavern-roleplay: /root/.openclaw/agents/tavern-roleplay/workspace/skills/kokochat-tavern-roleplay\n[kokochat-install] skill kokochat-deeply-research: /root/.openclaw/agents/deeply/workspace/skills/kokochat-deeply-research\n[kokochat-install] agent instructions tavern: /root/.openclaw/agents/tavern/workspace/AGENTS.md\n[kokochat-install] agent instructions deeply: /root/.openclaw/agents/deeply/workspace/AGENTS.md\n[kokochat-install] skill allowlists: /root/.openclaw/openclaw.json\n[kokochat-install] allowlist main: kokochat-pairing\n[kokochat-install] allowlist tavern: kokochat-tavern-search\n[kokochat-install] allowlist tavern-roleplay: kokochat-tavern-roleplay\n[kokochat-install] allowlist deeply: kokochat-deeply-research\n[kokochat-install] exec approvals: /root/.openclaw/exec-approvals.json\n[kokochat-install] exec allowlist tavern: /root/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards.mjs, node (?:^|\\s)(?:/root/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs|~/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs)(?:\\s|$), /usr/bin/node (?:^|\\s)(?:/root/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs|~/\\.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search/bin/search-cards\\.mjs)(?:\\s|$)\n[kokochat-install] verify kokochat-pairing on agent main\n[kokochat-install] verify kokochat-tavern-search on agent tavern\n[kokochat-install] verify kokochat-tavern-roleplay on agent tavern-roleplay\n[kokochat-install] verify kokochat-deeply-research on agent deeply\n[kokochat-install] \n[kokochat-install] KokoChat OpenClaw support is installed.\n[kokochat-install] Next: open KokoChat, copy the pairing request, and paste it into OpenClaw.\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\ncurl: (7) Failed to connect to 127.0.0.1 port 18789 after 0 ms: Couldn't connect to server\n{\"ok\":true,\"status\":\"live\"}\n__HEALTH_OK__\n"
+      },
+      "pairing": {
+        "ok": true,
+        "relayMode": "gateway-tunnel",
+        "urlShape": "ws://47.84.141.40:8787/v1/gateway/iuSKrJLpujq55uq74xpGiln0?secret=<redacted>"
+      },
+      "gateway": {
+        "ok": true
+      },
+      "useCases": {
+        "koko": {
+          "ok": true,
+          "sample": "KOKO_OK_0840c8"
+        },
+        "tavernRecommendations": {
+          "ok": true,
+          "sample": "```koko.tavern.recommendations\n{\n  \"version\": 2,\n  \"query\": \"找一个适合轻松聊天的非 NSFW 角色\",\n  \"items\": [\n    { \"kind\": \"text\", \"text\": \"挑了几位适合放松闲聊的角色，氛围都偏温暖、SFW，可以慢慢唠。\" },\n    {\n      \"kind\": \"card\",\n      \"card\": {\n        \"pageUrl\": \"https://character-tavern.com/character/facelessgiant/isabella_shiraishi__the_charming_florist\",\n        \"imageUrl\": \"https://cards.character-tavern.com/facelessgiant/isabella_shiraishi__the_charming_florist.png\",\n        \"name\": \"Isabella Shiraishi - The Charming Florist\",\n        \"nameZh\": \"白石伊莎贝拉 · 迷人花店女主\",\n        \"tagline\": \"An wholesome and exciting reunion with your childhood cat-girl friend.\",\n        \"taglineZh\": \"和儿时的猫娘好友温馨重逢，话题轻松不腻。\",\n        \"tags\": [\"affect"
+        },
+        "tavernRoleplay": {
+          "ok": true,
+          "sample": "*Mika从柜台后抬起头，把手里那本翻到一半的旧书轻轻倒扣在木台上，书页发出一声很轻的\"啪\"。*\n\n当然可以。这种天气，书店本来就是为了让人躲雨用的——书只是顺便卖卖。\n\n*她朝靠窗的那把藤椅偏了偏头，椅子旁边的小圆桌上还放着她自己刚泡的一壶茶，杯口冒着一缕细细的白汽。*\n\n伞放门口那个铜桶里就行，别滴到地板上，老板会念叨。要喝点热的吗？刚泡的乌龙，今天第二壶了，一个人喝不完。\n\n*窗外的雨砸在玻璃上，糊成一片模糊的光。她笑了笑，声音压得很轻。*\n\n不用买书，真的。看上去你需要的是一把椅子，不是一本小说。"
+        },
+        "deeplyExplore": {
+          "ok": true,
+          "sample": "拖延的核心不是“懒”，而是**情绪调节失败**。\n\n大脑在面对一件让你感到焦虑、无聊、或者怕失败的任务时，会本能地想逃开，去做一些能立刻带来轻松感的事（刷手机、收拾桌子、再泡杯茶）。短期情绪缓解了，但任务还在那儿，于是焦虑反弹得更大——形成循环。\n\n简单说：**你不是在逃避任务，你是在逃避任务带来的情绪。**\n\n---\n\n**今天的小练习：2 分钟启动法**\n\n挑一件你一直在拖的小事，告诉自己：「我只做 2 分钟，到点就停。」\n\n- 设个 2 分钟倒计时\n- 启动那件事（打开文档、写第一句、跑两步）\n- 时间到，允许自己真的停下\n\n90% 的情况，你会发现自己想继续做下去——因为最难的从来不是“做”，是“开始”。\n\n试一下，回头告诉我哪件事被你启动了。🌱"
+        }
+      },
+      "durationMs": 176496
+    }
+  ],
+  "advancedLatestBeta": {
+    "version": "2026.5.25-beta.1",
+    "startedAt": "2026-05-26T12:54:16.244Z",
+    "useCases": {
+      "realCharacterRoleplay": {
+        "ok": true,
+        "sample": "角色卡已绑定。用户用中文发起对话，且没有要求 `READY:` 应答（bootstrap 指示是“reply in character to the user's message”），所以直接以 Juniper 身份用中文回复。\n\n*Juniper 把手里那支笔轻轻搁在报告堆上，挑了挑眉，蓝眼睛打量了你一会儿，那种\"我已经在评估你今天状态\"的眼神。她朝旁边那张空椅子点了点下巴。*\n\n\"过来坐吧，外面冷，别在前台杵着挡道。\"\n\n*她拿起马克杯抿了一口咖啡，看你坐下之后才慢慢开口，语气放得平稳。*\n\n\"现在是2016年12月8号，星期四。Butte，蒙大拿。外面零下十几度，你刚才进门那身雪我就不替你掸了，自己抖一抖。\"\n\n*她把桌上那叠报告往旁边推了推，腾出一点空间，像是已经默认你要待上一会儿了。*\n\n\"这边的情况——我手头有两个案子在跑。一个是West Park那条街上连着三起入室盗窃，作案手法太像，肯定是同一拨人，但目前没目击证人愿意开口。另一个……\" *她顿了一下，指尖在桌面上点了两下，神情压低了些。* \"一个失踪人口的案子，已经第六天了。十七岁的女孩，从Harrison Avenue那家便利店出来之后就没人再见过她。我每天大部分时间都在追这个。\"\n\n*她抬眼看你，那种带着审视意味的笑回来了一点。*\n\n\"你呢？刚才看你那表情，可不像是路过顺便取暖的。说吧，是闲得无聊找我聊天，还是有事？我这人你也知道——能帮就帮，不能帮也至少给你指条路。\"\n\n*她端着咖啡，等你开口，外面的风正把窗框敲得咯吱响。*",
+        "card": "https://character-tavern.com/character/corbinbear/juniper_harlow__detective"
+      },
+      "deeplyCourse": {
+        "ok": true,
+        "sample": "完美。SEP 给的骨架印证了我的思路:库恩的物理学—史学—哲学之路、亚里士多德\"顿悟\"经历、Conant 通识课的起点、Feyerabend 同时发展不可通约性——这些细节正好可以塞进第一节做\"诞生背景\"。三节课结构定下来:第一节讲背景与全书骨架,第二节讲核心机制(范式—常规科学—反常—危机—革命—不可通约),第三节讲 Postscript 修正、Lakatos/Feyerabend 的回应,以及这本书在社会科学和大众语境中的扩散与误用。〔KP〕\n\n现在收束,输出最终的 outline 块。〔KP〕\n\n```koko.deeply.research.outline\n{\n  \"topic\": \"科学革命的结构\",\n  \"language\": \"zh\",\n  \"summary\": \"围绕托马斯·库恩 1962 年出版的《科学革命的结构》(The Structure of Scientific Revolutions),分三节课讲清这本 20 世纪被引用最多的学术书之一。第一节回到 1962 年的现场,看库恩从物理学家如何变成科学史家、又如何在统一科学百科全书系列里写出一本反统一科学的小书——并铺陈全书的总体地图。第二节拆解核心机制:范式、常规科学、反常、危机、革命、不可通约性,搭配哥白尼革命与牛顿—爱因斯坦两个标志性案例。第三节进入争论场:库恩 1969 年 Postscript 用 disciplinary matrix / exemplar 自我修正,Lakatos 用‘研究纲领’把库恩重新理性化,Feyerabend 把库恩推向‘anything goes’,以及这本书在社会科学、管理学、商业话语里被滥用为口头禅 ‘paradigm shift’ 所引发的回弹与反思。\",\n  \"sections\": [\n    {\n      \"index\": 1,\n      \"title\": \"一本 1962 年的小书:库恩与《结构》的诞生现场\",\n      \"summary\": \"把书放回出版当年的语境。1962 年,逻辑实证主义/逻辑经验论仍是科学哲学主流,卡尔·波普尔的证伪主义已经在挑战归纳主义,而《结构》却恰恰是为卡尔纳普和纽拉特主编的《统一科学国际百科全书》写的一卷——库恩把一本反统一科学叙事的书,投递进了统一科学运动的最后据点。这一节重点不在概念,而在‘人’与‘场域’:库恩从哈佛物理博士、雷达研究员,经由 Conant 总统委托的通识科学课讲历史案例,意外被亚里士多德物理学的‘看不懂—突然看懂’击中,转向科学史;1957 年出版《哥白尼革命》,五年后才有《结构》。在伯克利他与 Cavell 谈维特根斯坦、与 Feyerabend 谈不可通约性。我们沿着这条传记线,理解为什么这本书既是哲学书也是史学书,以及为什么它一上市最先被社会科学家而不是哲学家热烈接住"
+      }
+    }
+  }
+}

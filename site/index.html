@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#F5A742" />
+  <title>KokoChat — Turn your OpenClaw into your pocket AI agent hub</title>
+  <meta name="description" content="KokoChat 把你的 OpenClaw 变成手机上的 AI Agent 工作台:Koko 通用助手、Deeply 深度学习、Tavern 角色扮演,三个小程序装在一个 App 里。" />
+
+  <meta property="og:title" content="KokoChat" />
+  <meta property="og:description" content="Turn your OpenClaw into your pocket AI agent hub." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="./assets/app-icon.png" />
+
+  <link rel="icon" type="image/png" href="./assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="./assets/app-icon.png" />
+
+  <style>
+    :root {
+      --bg: #FFFBF3;
+      --surface: #FFFFFF;
+      --primary: #F5A742;
+      --primary-deep: #E69228;
+      --primary-soft: #FFE9C7;
+      --ink: #1F140A;
+      --ink-secondary: #7A6248;
+      --ink-muted: #A89274;
+      --border: #EDDFC2;
+      --shadow-icon: 0 24px 60px rgba(230, 146, 40, 0.28),
+                     0 4px 12px rgba(46, 30, 16, 0.08);
+      --shadow-btn: 0 2px 8px rgba(46, 30, 16, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family:
+        -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+        "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      min-height: 100vh;
+    }
+
+    /* warm radial light behind the hero */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(900px 600px at 50% -10%, rgba(245, 167, 66, 0.18), transparent 70%),
+        radial-gradient(700px 500px at 50% 110%, rgba(245, 167, 66, 0.06), transparent 70%);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    a { color: var(--primary-deep); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .wrap {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    main {
+      flex: 1;
+      width: 100%;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 96px 28px 64px;
+      text-align: center;
+    }
+
+    /* ─── icon ─── */
+    .icon {
+      width: 104px;
+      height: 104px;
+      border-radius: 26px;
+      box-shadow: var(--shadow-icon);
+      margin: 0 auto 32px;
+      display: block;
+    }
+
+    /* ─── brand ─── */
+    .brand {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      color: var(--ink);
+      margin: 0 0 24px;
+    }
+
+    /* ─── title ─── */
+    h1 {
+      font-size: 40px;
+      line-height: 1.18;
+      font-weight: 700;
+      letter-spacing: -0.8px;
+      margin: 0 0 18px;
+      color: var(--ink);
+    }
+    h1 .accent {
+      color: var(--primary-deep);
+      white-space: nowrap;
+    }
+
+    .lede {
+      font-size: 16.5px;
+      color: var(--ink-secondary);
+      max-width: 460px;
+      margin: 0 auto 40px;
+      line-height: 1.6;
+    }
+
+    /* ─── buttons ─── */
+    .cta {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 0 auto;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 14px 22px;
+      border-radius: 999px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.1px;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+      box-shadow: var(--shadow-btn);
+      min-width: 180px;
+      justify-content: center;
+    }
+    .btn:hover { transform: translateY(-1px); text-decoration: none; }
+    .btn:active { transform: translateY(0); }
+
+    .btn--primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .btn--primary:hover { background: var(--primary-deep); }
+
+    .btn--ghost {
+      background: var(--surface);
+      color: var(--ink);
+      border: 1px solid var(--border);
+    }
+    .btn--ghost:hover { background: #FFF6E8; }
+
+    .btn__icon { width: 17px; height: 17px; flex-shrink: 0; }
+
+    /* ─── prereq ─── */
+    .note {
+      margin: 22px 0 0;
+      font-size: 13.5px;
+      color: var(--ink-muted);
+    }
+    .note a { color: var(--primary-deep); font-weight: 500; }
+
+    /* ─── mini-apps row ─── */
+    .apps {
+      margin: 64px auto 0;
+      max-width: 520px;
+      display: flex;
+      justify-content: center;
+      gap: 28px;
+      flex-wrap: wrap;
+      font-size: 14px;
+      color: var(--ink-secondary);
+    }
+    .apps b {
+      color: var(--ink);
+      font-weight: 600;
+      margin-right: 4px;
+    }
+    .apps span {
+      display: inline-flex;
+      align-items: center;
+    }
+
+    /* ─── footer ─── */
+    .footer {
+      padding: 28px 16px 36px;
+      font-size: 13px;
+      color: var(--ink-muted);
+      text-align: center;
+    }
+    .footer a { color: var(--ink-secondary); }
+
+    /* ─── responsive ─── */
+    @media (max-width: 480px) {
+      main { padding: 56px 24px 40px; }
+      .icon { width: 92px; height: 92px; border-radius: 22px; }
+      h1 { font-size: 32px; letter-spacing: -0.5px; }
+      .lede { font-size: 15.5px; }
+      .btn { min-width: 0; width: 100%; }
+      .cta { flex-direction: column; }
+      .apps { flex-direction: column; gap: 8px; margin-top: 48px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <main>
+      <img class="icon" src="./assets/app-icon.png" alt="" />
+
+      <p class="brand">KokoChat</p>
+
+      <h1>
+        Turn your <span class="accent">OpenClaw</span><br />
+        into your pocket AI agent hub.
+      </h1>
+
+      <p class="lede">
+        把你的龙虾变成口袋里的 AI Agent hub。
+      </p>
+
+      <div class="cta">
+        <a class="btn btn--primary" href="https://testflight.apple.com/join/VpTW5U75" target="_blank" rel="noopener">
+          <svg class="btn__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M16.365 1.43c0 1.14-.43 2.23-1.14 3.03-.77.89-2.06 1.57-3.08 1.49-.13-1.11.44-2.27 1.16-3.02.79-.82 2.16-1.47 3.06-1.5zM21 17.65c-.5 1.16-1.06 2.27-1.93 3.27-.92 1.05-2.21 2.36-3.81 2.38-1.6.02-2.02-1.06-4.06-1.04-2.04.02-2.5 1.07-4.1 1.04-1.6-.02-2.81-1.18-3.74-2.23-2.55-2.92-4.5-8.27-1.88-11.87 1.3-1.79 3.62-2.93 5.79-2.96 1.66-.03 3.22 1.12 4.06 1.12.83 0 2.81-1.39 4.75-1.18.81.03 3.09.33 4.55 2.49-.12.07-2.72 1.6-2.69 4.75.03 3.76 3.3 5.01 3.34 5.03-.03.07-.52 1.81-1.71 4.2z"/>
+          </svg>
+          iOS · TestFlight
+        </a>
+
+        <a class="btn btn--ghost" href="https://docs.metacreate.cc/kokochat/android/latest.apk">
+          <svg class="btn__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M17.6 9.48l1.84-3.18a.4.4 0 10-.69-.4l-1.86 3.22a11.4 11.4 0 00-9.79 0L5.24 5.9a.4.4 0 00-.69.4l1.84 3.18A10.69 10.69 0 001 18h22a10.69 10.69 0 00-5.4-8.52zM7 15.25a1 1 0 11-1-1 1 1 0 011 1zm11 0a1 1 0 11-1-1 1 1 0 011 1z"/>
+          </svg>
+          Android · APK
+        </a>
+      </div>
+
+      <p class="note">
+        需要先在电脑上跑一个
+        <a href="https://www.openclaw.com" target="_blank" rel="noopener">OpenClaw</a>,然后用手机配对。
+      </p>
+
+      <div class="apps">
+        <span><b>Koko</b>通用助手</span>
+        <span><b>Deeply</b>深度学习</span>
+        <span><b>Tavern</b>角色扮演</span>
+      </div>
+    </main>
+
+    <footer class="footer">
+      KokoChat · powered by
+      <a href="https://www.openclaw.com" target="_blank" rel="noopener">OpenClaw</a>
+    </footer>
+  </div>
+</body>
+</html>

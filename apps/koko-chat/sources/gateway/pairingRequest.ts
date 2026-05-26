@@ -47,7 +47,8 @@ export async function buildKokoChatPairingPrompt(): Promise<string> {
   const request = await buildKokoChatPairingRequest();
   const code = encodeJson(request);
   return [
-    "请查看 KokoChat 开源仓库 README 的 OpenClaw Setup，按说明安装或更新 KokoChat 支持，然后批准下面的配对请求，并只返回 KokoChat 连接码：",
+    "请查看 KokoChat 开源仓库 README 的 OpenClaw Setup，按说明安装或更新 KokoChat 支持，然后批准下面的配对请求，并只返回 KokoChat 连接码。",
+    "如果 OpenClaw 版本低于 2026.4.15，安装脚本会先升级到 2026.5.22；期间 Gateway 可能短暂断开或重启。等脚本结束并恢复连接后，再批准下面的配对请求：",
     KOKOCHAT_OPENCLAW_INSTALL_URL,
     "",
     "KokoChat 配对请求：",

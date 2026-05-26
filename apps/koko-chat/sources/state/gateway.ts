@@ -56,6 +56,7 @@ const REMOTE_SESSION_HISTORY_TIMEOUT_MS = 8_000;
 const PENDING_SESSION_SYNC_HISTORY_LIMIT = 12;
 const PENDING_SESSION_SYNC_MAX_CHARS = 80_000;
 const PENDING_SESSION_SYNC_TIMEOUT_MS = 8_000;
+const FOREGROUND_HEALTH_TIMEOUT_MS = 2_500;
 
 interface GatewayState {
   client: BrowserGatewayClient | null;
@@ -507,7 +508,7 @@ function normalizeHistoryText(value: string): string {
 
 function isRecoverableTransportError(value: string | undefined): boolean {
   if (value === undefined) return false;
-  return /websocket closed:\s*(1000|1001|1005|1006|1012|1013)\b|ws not open|not connected/i.test(value);
+  return /(^|\s)disconnect($|\s)|websocket closed:\s*(1000|1001|1005|1006|1012|1013)\b|ws not open|not connected/i.test(value);
 }
 
 function applyRecoveredAgentFinal(
@@ -966,9 +967,24 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   },
 
   async reconnectIfPossible(options) {
-    const { status, setup } = get();
+    const { client, status, setup } = get();
     if (options?.force !== true && (status === "connected" || status === "connecting" || status === "handshaking")) {
       return true;
+    }
+    if (options?.force === true && (status === "connecting" || status === "handshaking")) {
+      return true;
+    }
+    if (options?.force === true && status === "connected" && client !== null) {
+      try {
+        // iOS may suspend the JS runtime while the socket still looks connected
+        // when the app returns to foreground. Probe the existing connection
+        // first. If it is healthy, keep it: replacing the client would reject
+        // any in-flight agent.wait/chat.history RPCs as "disconnect".
+        await client.call("health", {}, FOREGROUND_HEALTH_TIMEOUT_MS);
+        return true;
+      } catch {
+        // Fall through to a real reconnect when the old socket is stale.
+      }
     }
 
     const fallbackUrl = setup?.url ?? loadGatewayUrl();

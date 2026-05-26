@@ -508,7 +508,7 @@ function looksMostlyChinese(text: string): boolean {
 
 function isRecoverableTransportError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /websocket closed:\s*(1000|1001|1005|1006|1012|1013)\b|ws not open|not connected/i.test(message);
+  return /(^|\s)disconnect($|\s)|websocket closed:\s*(1000|1001|1005|1006|1012|1013)\b|ws not open|not connected/i.test(message);
 }
 
 function slug(value: string): string {

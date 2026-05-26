@@ -79,7 +79,7 @@ docs/                    mini-app runtime / skills 设计文档
 
 KokoChat 的手机 App 只负责 UI、配对和本地聊天记录。真正的 AI 能力、角色卡搜索、角色扮演 agent 都跑在用户自己的 OpenClaw 里。第一次使用前，需要在 OpenClaw 机器上安装 KokoChat 支持。
 
-OpenClaw 机器上需要有 `git`、`node` 和 `openclaw` CLI。直接安装 / 更新:
+OpenClaw 机器上需要有 `git`、`node` 和 `openclaw` CLI。KokoChat 支持的最低 OpenClaw 版本是 `2026.4.15`；如果检测到更早版本，安装脚本会先把 OpenClaw 升级到固定版本 `2026.5.22`，再写入 KokoChat 的 agent、skill 和 allowlist 配置。直接安装 / 更新:
 
 ```bash
 KOKOCHAT_REPO="${HOME}/.kokochat/koko-chat"
@@ -91,6 +91,8 @@ else
 fi
 node "$KOKOCHAT_REPO/scripts/install-openclaw-support.mjs"
 ```
+
+低版本升级时 Gateway 可能会短暂断开并重启一次。等脚本完整结束后，再回到 KokoChat 粘贴连接码；如果手机还没恢复连接，先等十几秒，或在 OpenClaw 机器上手动运行一次 `openclaw gateway restart`。
 
 KokoChat 默认走官方 relay。手机不需要和 OpenClaw 服务器在同一局域网，OpenClaw Gateway 也不需要暴露 LAN 端口。`kokochat-pairing` 会在 OpenClaw 机器上启动一个本地 connector；手机连 relay，connector 再连本机 OpenClaw Gateway；relay 只转发 WebSocket 帧，不直接连接你的 Gateway。
 
@@ -115,16 +117,18 @@ node scripts/install-openclaw-support.mjs
 
 这个脚本会做这些事:
 
-- 确认 OpenClaw CLI 可用。
-- 创建缺失的 `koko`、`tavern`、`tavern-roleplay` agents。
+- 确认 OpenClaw CLI 可用，并在 `openclaw < 2026.4.15` 时先升级到 `2026.5.22`。
+- 创建缺失的 `koko`、`deeply`、`tavern`、`tavern-roleplay` agents。
 - 安装 `kokochat-pairing` 到默认 OpenClaw workspace。
 - 安装 `kokochat-tavern-search` 到 `tavern` agent workspace。
 - 安装 `kokochat-tavern-roleplay` 到 `tavern-roleplay` agent workspace。
+- 安装 `kokochat-deeply-research` 到 `deeply` agent workspace。
 - 自动把这些 skills 写入对应 agent 的 allowlist。
 - 自动写入 KokoChat 小程序 agent 指令，并给 `tavern` agent 开启必要的 `exec` 工具权限和脚本 allowlist。
 - 用 `openclaw skills info` 验证这些 skills 能被目标 agent 看见；旧版 OpenClaw CLI 不支持按 agent 查询时会跳过对应验证。
+- 如果脚本刚刚升级了 OpenClaw，会在配置写完后 best-effort 重启 Gateway，让正在运行的服务切到新版本。
 
-安装完成后，打开 KokoChat 的「配对 OpenClaw」页面，复制页面生成的内容发给 OpenClaw。那段内容会指向本节说明，并附带当前手机的 `kokochat.pairingRequest`。如果 OpenClaw 还没装 KokoChat 支持，先按本节安装 / 更新；装好后用 `kokochat-pairing` 批准请求并返回 KokoChat 连接码。
+安装完成后，打开 KokoChat 的「配对 OpenClaw」页面，复制页面生成的内容发给 OpenClaw。那段内容会指向本节说明，并附带当前手机的 `kokochat.pairingRequest`。如果 OpenClaw 还没装 KokoChat 支持，先按本节安装 / 更新；装好后用 `kokochat-pairing` 批准请求并返回 KokoChat 连接码。低版本自动升级后，第一次配对可能需要等待 Gateway 重连完成，再重新发送同一段配对请求。
 
 检查安装计划但不改机器:
 

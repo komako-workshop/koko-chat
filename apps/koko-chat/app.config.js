@@ -40,13 +40,16 @@ const config = {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#ffffff"
     },
+    // The current public KokoChat relay is plain ws://. Android release builds
+    // block cleartext WebSockets unless this manifest flag is enabled.
+    usesCleartextTraffic: true,
     package: "ai.komako.kokochat"
   },
   web: {
     bundler: "metro",
     output: "single"
   },
-  plugins: ["expo-router"],
+  plugins: ["expo-router", "./plugins/with-android-cleartext-traffic"],
   experiments: {
     typedRoutes: true
   },

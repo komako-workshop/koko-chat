@@ -8,8 +8,9 @@ const config = getDefaultConfig(projectRoot);
 
 // Task 04b: Metro needs to be told about the pnpm monorepo layout so it can
 // resolve workspace packages (@koko/protocol) and their transitive deps
-// through pnpm's symlink graph.
-config.watchFolders = [workspaceRoot];
+// through pnpm's symlink graph. Keep Expo's generated watch folders too:
+// Expo Doctor treats replacing them as a config drift in release builds.
+config.watchFolders = [...new Set([...(config.watchFolders ?? []), workspaceRoot])];
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
   path.resolve(workspaceRoot, "node_modules")

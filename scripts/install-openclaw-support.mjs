@@ -20,6 +20,9 @@ const skipVerify = args.has("--skip-verify");
 const openclawHome = resolve(
   process.env.OPENCLAW_CONFIG_DIR ?? process.env.OPENCLAW_HOME ?? join(homedir(), ".openclaw")
 );
+const MIN_OPENCLAW_VERSION = "2026.4.15";
+const MIN_OPENCLAW_VERSION_PARTS = [2026, 4, 15];
+const TARGET_OPENCLAW_VERSION = "2026.5.22";
 let openclawBin = "openclaw";
 
 const REQUIRED_AGENTS = [
@@ -178,8 +181,16 @@ const AGENT_DEFINITIONS = {
 main();
 
 function main() {
-  ensureOpenClawCli();
+  const openclawState = ensureOpenClawCli();
   ensureSkillSources();
+
+  if (dryRun && openclawState.needsUpgrade) {
+    log("");
+    log(
+      `Dry run stopped before agent/config changes: OpenClaw would be upgraded to ${TARGET_OPENCLAW_VERSION} first.`
+    );
+    return;
+  }
 
   const agentsBefore = listAgents();
   const agents = new Map(agentsBefore.map((agent) => [agent.id, agent]));
@@ -227,6 +238,8 @@ function main() {
     }
   }
 
+  restartGatewayAfterUpgrade(openclawState);
+
   if (dryRun) {
     log("");
     log("Dry run completed: no files or agents were changed.");
@@ -249,20 +262,48 @@ function ensureOpenClawCli() {
     );
   }
   openclawBin = found;
-  const result = spawnSync(openclawBin, ["--version"], {
-    encoding: "utf8",
-    env: childEnv()
-  });
-  if (result.status !== 0) {
+  const before = readOpenClawVersion();
+  log(before.output);
+
+  if (compareOpenClawVersions(before.version.parts, MIN_OPENCLAW_VERSION_PARTS) >= 0) {
+    return { needsUpgrade: false, upgraded: false, before, after: before };
+  }
+
+  log(
+    `OpenClaw ${before.version.raw} is older than ${MIN_OPENCLAW_VERSION}; upgrading to ${TARGET_OPENCLAW_VERSION} before installing KokoChat support.`
+  );
+  if (dryRun) {
+    log(
+      `[dry-run] would run: ${openclawBin} update --yes --tag ${TARGET_OPENCLAW_VERSION} --no-restart --json`
+    );
+    return { needsUpgrade: true, upgraded: false, before, after: before };
+  }
+
+  updateOpenClawToTarget();
+  refreshOpenClawBin();
+
+  const afterUpdate = tryReadOpenClawVersion("checking OpenClaw after update");
+  if (
+    afterUpdate !== null &&
+    compareOpenClawVersions(afterUpdate.version.parts, MIN_OPENCLAW_VERSION_PARTS) >= 0
+  ) {
+    log(`OpenClaw after update: ${afterUpdate.output}`);
+    return { needsUpgrade: true, upgraded: true, before, after: afterUpdate };
+  }
+
+  log(
+    `OpenClaw update did not reach ${MIN_OPENCLAW_VERSION}; falling back to npm install -g openclaw@${TARGET_OPENCLAW_VERSION}.`
+  );
+  installTargetOpenClawWithNpm();
+  refreshOpenClawBin();
+  const afterFallback = readOpenClawVersion();
+  if (compareOpenClawVersions(afterFallback.version.parts, MIN_OPENCLAW_VERSION_PARTS) < 0) {
     throw new Error(
-      [
-        "OpenClaw CLI was not found.",
-        "Install OpenClaw first, then rerun:",
-        "  node scripts/install-openclaw-support.mjs"
-      ].join("\n")
+      `OpenClaw is still ${afterFallback.version.raw}; KokoChat requires ${MIN_OPENCLAW_VERSION} or newer.`
     );
   }
-  log(result.stdout.trim());
+  log(`OpenClaw after npm fallback: ${afterFallback.output}`);
+  return { needsUpgrade: true, upgraded: true, before, after: afterFallback };
 }
 
 function findOpenClawBin() {
@@ -281,6 +322,106 @@ function findOpenClawBin() {
     if (result.status === 0) return candidate;
   }
   return null;
+}
+
+function refreshOpenClawBin() {
+  const found = findOpenClawBin();
+  if (found !== null) {
+    openclawBin = found;
+  }
+}
+
+function readOpenClawVersion() {
+  const result = spawnSync(openclawBin, ["--version"], {
+    encoding: "utf8",
+    env: childEnv(openclawBin)
+  });
+  if (result.error !== undefined || result.status !== 0) {
+    const reason =
+      result.error instanceof Error
+        ? result.error.message
+        : `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim();
+    throw new Error(
+      [
+        "OpenClaw CLI was not found.",
+        reason.length > 0 ? `Reason: ${reason}` : null,
+        "Install OpenClaw first, then rerun:",
+        "  node scripts/install-openclaw-support.mjs"
+      ].filter(Boolean).join("\n")
+    );
+  }
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim();
+  const version = parseOpenClawVersion(output);
+  if (version === null) {
+    throw new Error(
+      `Could not parse OpenClaw version from: ${output}\nKokoChat requires OpenClaw ${MIN_OPENCLAW_VERSION} or newer.`
+    );
+  }
+  return { output, version };
+}
+
+function tryReadOpenClawVersion(context) {
+  try {
+    return readOpenClawVersion();
+  } catch (error) {
+    log(`${context} failed: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+function parseOpenClawVersion(output) {
+  const match = output.match(/\b(\d{4})\.(\d{1,2})\.(\d{1,2})(?:[-+][0-9A-Za-z.-]+)?\b/);
+  if (match === null) return null;
+  return {
+    raw: match[0],
+    parts: [Number(match[1]), Number(match[2]), Number(match[3])]
+  };
+}
+
+function compareOpenClawVersions(left, right) {
+  for (let i = 0; i < 3; i += 1) {
+    const diff = left[i] - right[i];
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+function updateOpenClawToTarget() {
+  const command = ["update", "--yes", "--tag", TARGET_OPENCLAW_VERSION, "--no-restart", "--json"];
+  log(`upgrade: ${openclawBin} ${command.join(" ")}`);
+  const result = runOpenClaw(command, { capture: true, allowFailure: true });
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim();
+  const payload = parseFirstJsonObjectOrNull(output);
+  if (payload !== null) {
+    const status = typeof payload.status === "string" ? payload.status : "unknown";
+    const reason = typeof payload.reason === "string" ? ` (${payload.reason})` : "";
+    log(`upgrade status: ${status}${reason}`);
+  } else if (output.length > 0) {
+    log(`upgrade output: ${lastLines(output, 8)}`);
+  }
+  if (result.status !== 0) {
+    log(
+      `upgrade exited with ${result.status ?? "unknown"}; checking the installed OpenClaw version anyway.`
+    );
+  }
+}
+
+function installTargetOpenClawWithNpm() {
+  const packageName = `openclaw@${TARGET_OPENCLAW_VERSION}`;
+  log(`fallback: npm install -g ${packageName}`);
+  const result = run(
+    "npm",
+    ["install", "-g", packageName, "--no-fund", "--no-audit", "--loglevel=error"],
+    { allowFailure: true }
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      [
+        `npm install -g ${packageName} failed with exit ${result.status ?? "unknown"}.`,
+        `Please install OpenClaw ${TARGET_OPENCLAW_VERSION} manually, then rerun this script.`
+      ].join("\n")
+    );
+  }
 }
 
 function ensureSkillSources() {
@@ -333,6 +474,22 @@ function parseFirstJsonArray(value) {
   throw new Error(`openclaw agents list --json did not return a JSON array:\n${value}${suffix}`);
 }
 
+function parseFirstJsonObjectOrNull(value) {
+  let offset = 0;
+  while (offset < value.length) {
+    const start = value.indexOf("{", offset);
+    if (start < 0) break;
+    try {
+      const parsed = JSON.parse(extractJsonObjectAt(value, start));
+      if (isRecord(parsed)) return parsed;
+    } catch {
+      // Keep scanning: OpenClaw can print prose before the JSON payload.
+    }
+    offset = start + 1;
+  }
+  return null;
+}
+
 function extractJsonArrayAt(value, start) {
   let depth = 0;
   let inString = false;
@@ -365,6 +522,40 @@ function extractJsonArrayAt(value, start) {
     }
   }
   throw new Error(`openclaw agents list --json returned incomplete JSON:\n${value}`);
+}
+
+function extractJsonObjectAt(value, start) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < value.length; i += 1) {
+    const char = value[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return value.slice(start, i + 1);
+      }
+    }
+  }
+  throw new Error(`OpenClaw returned incomplete JSON object:\n${value}`);
 }
 
 function createAgent(agent) {
@@ -672,6 +863,27 @@ function agentFallbackWorkspace(agentId) {
   return join(openclawHome, "agents", agentId, "workspace");
 }
 
+function restartGatewayAfterUpgrade(openclawState) {
+  if (dryRun || openclawState.upgraded !== true) return;
+  log("OpenClaw was upgraded; restarting Gateway so the running service uses the new version.");
+  const result = runOpenClaw(["gateway", "restart"], {
+    capture: true,
+    allowFailure: true
+  });
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim();
+  if (result.status === 0) {
+    log("gateway restart: ok");
+    return;
+  }
+  log(
+    [
+      `gateway restart did not complete automatically (exit ${result.status ?? "unknown"}).`,
+      output.length > 0 ? lastLines(output, 8) : null,
+      "If the phone cannot reconnect, run `openclaw gateway restart` once and retry pairing."
+    ].filter(Boolean).join(" ")
+  );
+}
+
 function runOpenClaw(command, options = {}) {
   return run(openclawBin, command, options);
 }
@@ -682,6 +894,14 @@ function run(command, commandArgs, options = {}) {
     stdio: options.capture === true ? "pipe" : "inherit",
     env: childEnv(command)
   });
+  if (result.error !== undefined) {
+    if (options.allowFailure === true) {
+      return result;
+    }
+    throw new Error(
+      `${command} ${commandArgs.join(" ")} failed: ${result.error.message}`
+    );
+  }
   if (options.allowFailure === true) {
     return result;
   }
@@ -693,6 +913,10 @@ function run(command, commandArgs, options = {}) {
     throw new Error(`${command} ${commandArgs.join(" ")} failed with exit ${result.status}${suffix}`);
   }
   return result;
+}
+
+function lastLines(value, count) {
+  return value.split(/\r?\n/).slice(-count).join("\n");
 }
 
 function childEnv(command = openclawBin) {

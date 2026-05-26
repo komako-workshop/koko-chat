@@ -45,6 +45,7 @@ docs/research/roleplay-import-sample/
 # scripts, planning notes and the gallery HTML; ignore generated images,
 # reference image piles, and run logs. Final selected brand assets live under
 # `apps/koko-chat/assets/brand/` and ARE committed.
+.brand/app-icon-candidates/
 .brand/out/
 .brand/out_v2/
 .brand/out_v3/
@@ -67,6 +68,7 @@ docs/research/roleplay-import-sample/
 /_shot.png
 /preview.png
 /app.json
+/artifacts/
 tmp-debug/
 tmp-shots/
 

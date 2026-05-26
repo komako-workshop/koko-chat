@@ -140,14 +140,14 @@ export default function PairScreen() {
         keyboardDismissMode="interactive"
       >
         <Text style={styles.intro}>
-          把这台手机连接到你的 OpenClaw。复制请求发给 OpenClaw，拿到连接码后粘贴回来。
+          把这台手机连接到你的 OpenClaw。复制请求发给 OpenClaw，等它返回连接码后粘贴回来。
         </Text>
 
         <Text style={styles.stepLabel}>第 1 步 · 复制配对请求</Text>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>发给 OpenClaw</Text>
           <Text style={styles.cardHint}>
-            OpenClaw 会按 README 安装或更新 KokoChat 支持，然后返回连接码。
+            OpenClaw 会按 README 安装或更新 KokoChat 支持。低于 2026.4.15 的版本会先升级到 2026.5.22，期间可能短暂断开；脚本结束后再粘贴连接码。
           </Text>
           <Pressable
             accessibilityRole="button"

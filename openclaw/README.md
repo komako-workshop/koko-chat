@@ -27,7 +27,9 @@ openclaw/
 ## Installing on a fresh machine
 
 Use the repo-level installer instead of copying files by hand. The machine needs
-`git`, `node`, and the `openclaw` CLI. On a fresh OpenClaw machine:
+`git`, `node`, and the `openclaw` CLI. KokoChat requires OpenClaw `2026.4.15`
+or newer; older installs are upgraded to the fixed target `2026.5.22` before
+KokoChat writes agent / skill config. On a fresh OpenClaw machine:
 
 ```bash
 KOKOCHAT_REPO="${HOME}/.kokochat/koko-chat"
@@ -39,6 +41,10 @@ else
 fi
 node "$KOKOCHAT_REPO/scripts/install-openclaw-support.mjs"
 ```
+
+When the installer upgrades OpenClaw, Gateway can briefly disconnect. Let the
+script finish, then retry the same phone pairing request if the first attempt
+was interrupted.
 
 From a development checkout, the same installer is exposed as:
 
@@ -54,6 +60,8 @@ The installer creates the KokoChat agents if needed and syncs:
   `~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search`
 - `miniapps/tavern/openclaw/skills/kokochat-tavern-roleplay` →
   `~/.openclaw/agents/tavern-roleplay/workspace/skills/kokochat-tavern-roleplay`
+- `miniapps/deeply/openclaw/skills/kokochat-deeply-research` →
+  `~/.openclaw/agents/deeply/workspace/skills/kokochat-deeply-research`
 
 Sanity-check manually on OpenClaw versions that support `--agent`:
 
@@ -61,6 +69,7 @@ Sanity-check manually on OpenClaw versions that support `--agent`:
 openclaw skills info kokochat-pairing --agent main
 openclaw skills info kokochat-tavern-search --agent tavern
 openclaw skills info kokochat-tavern-roleplay --agent tavern-roleplay
+openclaw skills info kokochat-deeply-research --agent deeply
 ```
 
 ## Why these files are here
