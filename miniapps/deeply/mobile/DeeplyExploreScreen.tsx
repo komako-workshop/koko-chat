@@ -263,6 +263,10 @@ export function DeeplyExploreScreen({
       viewportHeight: layoutMeasurement.height,
       offsetY: contentOffset.y
     };
+    if (pendingScrollRestoreRef.current !== null && !hasRestoredScrollRef.current) {
+      tryRestoreSavedScroll();
+      return;
+    }
     updateNearBottom();
     saveCurrentScrollSnapshot();
   };

@@ -409,7 +409,13 @@ function collectPendingConversationSyncTargets(): PendingConversationSyncTarget[
       }
     }
 
-    if (conversation.bootstrap?.status === "loading" || isRecoverableTransportError(conversation.bootstrap?.error)) {
+    const needsBootstrapHistory =
+      conversation.bootstrap?.status === "loading" ||
+      isRecoverableTransportError(conversation.bootstrap?.error);
+    if (
+      needsBootstrapHistory &&
+      (recoverableIndex >= 0 || !hasSettledAgentMessage(messages))
+    ) {
       targets.push({
         conversation,
         fallbackRunId: `recovered-${conversation.id}-${Date.now()}`
@@ -455,6 +461,14 @@ function findLastRecoverableAgentIndex(messages: ChatMessage[]): number {
   return -1;
 }
 
+function hasSettledAgentMessage(messages: ChatMessage[]): boolean {
+  return messages.some((message) => {
+    if (message.role !== "agent") return false;
+    if (message.streaming === true || message.error !== undefined) return false;
+    return message.text.trim().length > 0 || (message.blocks?.length ?? 0) > 0;
+  });
+}
+
 function findLastUserBefore(
   messages: ChatMessage[],
   beforeIndex: number
@@ -484,15 +498,7 @@ function findRemoteAssistantAfterLocalUser(
     if (message === undefined || remoteMessageRole(message) !== "user") continue;
     if (!normalizeHistoryText(remoteMessageText(message)).includes(needle)) continue;
 
-    for (let j = i + 1; j < remoteMessages.length; j += 1) {
-      const candidate = remoteMessages[j];
-      if (candidate === undefined || remoteMessageRole(candidate) !== "agent") continue;
-      const text = remoteMessageText(candidate).trim();
-      if (text.length === 0) continue;
-      const runId = typeof candidate.runId === "string" ? candidate.runId : undefined;
-      return runId === undefined ? { text } : { text, runId };
-    }
-    return null;
+    return collectRemoteAssistantTurn(remoteMessages, i + 1);
   }
   return null;
 }
@@ -500,13 +506,35 @@ function findRemoteAssistantAfterLocalUser(
 function findLatestRemoteAssistant(remoteMessages: JsonRecord[]): RemoteAssistantCandidate | null {
   for (let i = remoteMessages.length - 1; i >= 0; i -= 1) {
     const message = remoteMessages[i];
-    if (message === undefined || remoteMessageRole(message) !== "agent") continue;
-    const text = remoteMessageText(message).trim();
-    if (text.length === 0) continue;
-    const runId = typeof message.runId === "string" ? message.runId : undefined;
-    return runId === undefined ? { text } : { text, runId };
+    if (message === undefined || remoteMessageRole(message) !== "user") continue;
+    return collectRemoteAssistantTurn(remoteMessages, i + 1);
   }
-  return null;
+  return collectRemoteAssistantTurn(remoteMessages, 0);
+}
+
+function collectRemoteAssistantTurn(
+  remoteMessages: JsonRecord[],
+  startIndex: number
+): RemoteAssistantCandidate | null {
+  const texts: string[] = [];
+  let runId: string | undefined;
+  for (let i = startIndex; i < remoteMessages.length; i += 1) {
+    const message = remoteMessages[i];
+    if (message === undefined) continue;
+    const role = remoteMessageRole(message);
+    if (role === "user") break;
+    if (role !== "agent") continue;
+    const text = remoteMessageText(message).trim();
+    if (text.length > 0) {
+      texts.push(text);
+    }
+    if (typeof message.runId === "string") {
+      runId = message.runId;
+    }
+  }
+  const text = texts.join("\n\n").trim();
+  if (text.length === 0) return null;
+  return runId === undefined ? { text } : { text, runId };
 }
 
 function remoteMessageRole(message: JsonRecord): "user" | "agent" | null {
@@ -516,16 +544,18 @@ function remoteMessageRole(message: JsonRecord): "user" | "agent" | null {
 }
 
 function remoteMessageText(message: JsonRecord): string {
-  if (typeof message.text === "string") return message.text;
+  if (typeof message.text === "string") return applyParagraphMarker(message.text);
   const content = message.content;
   if (!Array.isArray(content)) return "";
-  return content
+  const raw = content
     .map((part) =>
       isRecord(part) && part.type === "text" && typeof part.text === "string"
         ? part.text
         : ""
     )
-    .join("");
+    .filter((text) => text.length > 0)
+    .join("\n\n");
+  return applyParagraphMarker(raw);
 }
 
 function normalizeHistoryText(value: string): string {
@@ -547,13 +577,30 @@ function applyRecoveredAgentFinal(
 
   useConversationStore.getState().setMessages(conversationId, (prev) => {
     const pendingIndex = findLastRecoverableAgentIndex(prev);
+    const transformed = buildTransformedAgentMessages(conversationId, runId, fullText);
+    const keepStreaming = transformed === null && shouldKeepRecoveredAgentStreaming(conversationId);
+
     if (pendingIndex < 0) {
       if (hasEquivalentAgentText(prev, fullText)) return prev;
-      const transformed = buildTransformedAgentMessages(conversationId, runId, fullText);
       if (transformed !== null) {
         preview = transformed.preview;
         applied = true;
         return [...prev, ...transformed.messages];
+      }
+      const existingRunIndex = findLastAgentIndexByRunId(prev, runId);
+      if (existingRunIndex >= 0) {
+        const next = [...prev];
+        const existing = next[existingRunIndex];
+        if (existing === undefined) return prev;
+        next[existingRunIndex] = {
+          ...existing,
+          text: fullText,
+          runId,
+          streaming: keepStreaming
+        };
+        preview = previewFromText(fullText);
+        applied = true;
+        return next;
       }
       preview = previewFromText(fullText);
       applied = true;
@@ -564,12 +611,11 @@ function applyRecoveredAgentFinal(
           role: "agent",
           text: fullText,
           runId,
-          streaming: false
+          streaming: keepStreaming
         }
       ];
     }
 
-    const transformed = buildTransformedAgentMessages(conversationId, runId, fullText);
     const next = [...prev];
     if (transformed !== null) {
       preview = transformed.preview;
@@ -581,7 +627,7 @@ function applyRecoveredAgentFinal(
         ...existing,
         text: fullText,
         runId,
-        streaming: false
+        streaming: keepStreaming
       };
       preview = previewFromText(fullText);
     }
@@ -593,6 +639,19 @@ function applyRecoveredAgentFinal(
     useConversationStore.getState().touch(conversationId, preview);
   }
   return applied;
+}
+
+function shouldKeepRecoveredAgentStreaming(conversationId: string): boolean {
+  const conversation = useConversationStore.getState().list.find((m) => m.id === conversationId);
+  return conversation?.bootstrap?.status === "loading";
+}
+
+function findLastAgentIndexByRunId(messages: ChatMessage[], runId: string): number {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role === "agent" && message.runId === runId) return i;
+  }
+  return -1;
 }
 
 function hasEquivalentAgentText(messages: ChatMessage[], text: string): boolean {
@@ -1058,13 +1117,17 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     const setupDeviceToken = setup.deviceToken;
     const storedDeviceToken = setupDeviceToken ?? loadDeviceToken();
 
-    const client = new BrowserGatewayClient({
+    let client: BrowserGatewayClient;
+    client = new BrowserGatewayClient({
       url: setup.url,
       ...(setup.token !== undefined ? { token: setup.token } : {}),
       ...(setup.bootstrapToken !== undefined ? { bootstrapToken: setup.bootstrapToken } : {}),
       ...(storedDeviceToken !== undefined ? { deviceToken: storedDeviceToken } : {}),
       deviceSeed,
       onStatusChange: (status: ConnectionStatus) => {
+        if (get().client !== client) {
+          return;
+        }
         if (status === "disconnected" || status === "error") {
           endAllAgentRunBackgroundTasks();
           set({ status, activeAgentRuns: {} });
@@ -1138,16 +1201,22 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
 
     try {
       await client.connect();
+      if (get().client !== client) {
+        await client.disconnect();
+        return;
+      }
       if (setupDeviceToken !== undefined) {
         saveDeviceToken(setupDeviceToken);
       }
       saveGatewayUrl(setup.url);
     } catch (error) {
-      set({
-        client: null,
-        status: "disconnected",
-        lastError: error instanceof Error ? error.message : String(error)
-      });
+      if (get().client === client) {
+        set({
+          client: null,
+          status: "disconnected",
+          lastError: error instanceof Error ? error.message : String(error)
+        });
+      }
       throw error;
     }
   },
@@ -1158,7 +1227,12 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       return true;
     }
     if (options?.force === true && (status === "connecting" || status === "handshaking")) {
-      return true;
+      try {
+        await client?.disconnect();
+      } catch {
+        // The old foreground handshake is already unusable; continue into a
+        // fresh connection attempt using the persisted setup below.
+      }
     }
     if (options?.force === true && status === "connected" && client !== null) {
       try {

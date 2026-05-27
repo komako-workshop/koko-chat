@@ -81,6 +81,8 @@ const noopLogger: Logger = {
   error: () => undefined
 };
 
+const HANDSHAKE_TIMEOUT_MS = 30_000;
+
 /** Browser/RN-compatible Gateway client. Minimal: open, handshake, call, on. */
 export class BrowserGatewayClient {
   private ws: WebSocket | null = null;
@@ -113,44 +115,84 @@ export class BrowserGatewayClient {
     }
     this.setStatus("connecting");
 
-    const ws = new WebSocket(this.options.url);
-    this.ws = ws;
-    ws.onmessage = (event) => this.handleMessage(event.data);
-    ws.onerror = (event) => {
-      this.logger.warn("ws error", event);
-    };
-    ws.onclose = (event) => {
-      this.logger.info("ws closed", { code: event.code, reason: event.reason });
+    let ws: WebSocket | null = null;
+    try {
+      const socket = new WebSocket(this.options.url);
+      ws = socket;
+      this.ws = socket;
+      socket.onmessage = (event) => this.handleMessage(event.data);
+      socket.onerror = (event) => {
+        this.logger.warn("ws error", event);
+      };
+      socket.onclose = (event) => {
+        this.logger.info("ws closed", { code: event.code, reason: event.reason });
+        this.setStatus("disconnected");
+        this.ws = null;
+        this.rejectAllPending(new Error(`websocket closed: ${event.code}`));
+      };
+
+      await new Promise<void>((resolve, reject) => {
+        const cleanup = (): void => {
+          clearTimeout(timer);
+          socket.removeEventListener("open", onOpen);
+          socket.removeEventListener("error", onErrorEvent);
+        };
+        const onOpen = (): void => {
+          cleanup();
+          resolve();
+        };
+        const onErrorEvent = (): void => {
+          cleanup();
+          reject(new Error("websocket failed to open"));
+        };
+        const timer = setTimeout(() => {
+          cleanup();
+          try {
+            socket.close();
+          } catch {
+            /* ignore close races */
+          }
+          reject(new Error("timed out opening websocket"));
+        }, HANDSHAKE_TIMEOUT_MS);
+        socket.addEventListener("open", onOpen);
+        socket.addEventListener("error", onErrorEvent);
+      });
+
+      this.setStatus("handshaking");
+      await this.performHandshake();
+      this.setStatus("connected");
+    } catch (error) {
+      if (this.ws === ws) {
+        this.ws = null;
+      }
+      this.rejectAllPending(error instanceof Error ? error : new Error(String(error)));
+      try {
+        if (
+          ws !== null &&
+          ws.readyState !== WebSocket.CLOSING &&
+          ws.readyState !== WebSocket.CLOSED
+        ) {
+          ws.close(1000, "connect failed");
+        }
+      } catch {
+        /* ignore close races */
+      }
       this.setStatus("disconnected");
-      this.ws = null;
-      this.rejectAllPending(new Error(`websocket closed: ${event.code}`));
-    };
-
-    await new Promise<void>((resolve, reject) => {
-      const onOpen = (): void => {
-        ws.removeEventListener("open", onOpen);
-        ws.removeEventListener("error", onErrorEvent);
-        resolve();
-      };
-      const onErrorEvent = (): void => {
-        ws.removeEventListener("open", onOpen);
-        ws.removeEventListener("error", onErrorEvent);
-        reject(new Error("websocket failed to open"));
-      };
-      ws.addEventListener("open", onOpen);
-      ws.addEventListener("error", onErrorEvent);
-    });
-
-    this.setStatus("handshaking");
-    await this.performHandshake();
-    this.setStatus("connected");
+      throw error;
+    }
   }
 
   async disconnect(): Promise<void> {
     this.rejectAllPending(new Error("disconnect"));
     const ws = this.ws;
-    if (ws !== null && ws.readyState === WebSocket.OPEN) {
-      ws.close(1000, "client disconnect");
+    if (ws !== null) {
+      try {
+        if (ws.readyState !== WebSocket.CLOSING && ws.readyState !== WebSocket.CLOSED) {
+          ws.close(1000, "client disconnect");
+        }
+      } catch {
+        /* ignore close races */
+      }
     }
     this.ws = null;
     this.setStatus("disconnected");
@@ -190,7 +232,7 @@ export class BrowserGatewayClient {
       client: clientMeta
     });
 
-    const response = await this.sendRequest("connect", params);
+    const response = await this.sendRequest("connect", params, HANDSHAKE_TIMEOUT_MS);
     const hello = assertHelloOkPayload(response);
 
     const maxPayload = maxPayloadFromHelloOk(hello);
@@ -236,7 +278,7 @@ export class BrowserGatewayClient {
       // following the long requestTimeoutMs used for agent runs.
       const timer = setTimeout(() => {
         reject(new Error("timed out waiting for connect.challenge"));
-      }, 30_000);
+      }, HANDSHAKE_TIMEOUT_MS);
 
       const listener = (payload: JsonRecord): void => {
         if (typeof payload.nonce !== "string") {

@@ -74,6 +74,7 @@ interface QuickRepliesEntry {
  */
 const QUICK_REPLIES_STALE_MS = 35_000;
 const QUICK_REPLIES_WATCHDOG_TICK_MS = 3_000;
+const quickRepliesCache = new Map<string, QuickRepliesEntry>();
 
 const DEEPLY_BG = "#F9F9F7";
 const DEEPLY_INK = "#111111";
@@ -352,10 +353,14 @@ export function DeeplyCourseScreen({
         viewportHeight: layoutMeasurement.height,
         offsetY: contentOffset.y
       };
+      if (pendingScrollRestoreRef.current !== null && !hasRestoredScrollRef.current) {
+        tryRestoreSavedScroll();
+        return;
+      }
       updateNearBottom();
       saveCurrentScrollSnapshot();
     },
-    [saveCurrentScrollSnapshot, updateNearBottom]
+    [saveCurrentScrollSnapshot, tryRestoreSavedScroll, updateNearBottom]
   );
 
   const handleListLayout = useCallback(
@@ -518,6 +523,14 @@ export function DeeplyCourseScreen({
   const fireQuickReplies = useCallback((lastAgent: ChatMessage) => {
     const runId = lastAgent.runId;
     if (runId === undefined) return;
+    const cached = quickRepliesCache.get(runId);
+    if (cached !== undefined) {
+      setQuickRepliesByRunId((prev) => ({
+        ...prev,
+        [runId]: cached
+      }));
+      return;
+    }
     const currentRecord = recordRef.current;
     const currentOutline = outlineRef.current;
     if (currentRecord === null || currentOutline === null) return;
@@ -541,6 +554,14 @@ export function DeeplyCourseScreen({
         sectionTitle,
         lastAgentText: lastAgent.text
       });
+      const nextEntry: QuickRepliesEntry = result.ok
+        ? { runId, status: "ready", chips: result.chips, generation }
+        : { runId, status: "error", generation };
+      if (result.ok) {
+        quickRepliesCache.set(runId, nextEntry);
+      } else if (typeof __DEV__ === "undefined" || __DEV__ === true) {
+        console.warn("[deeply-course] quick replies failed", result.error);
+      }
       setQuickRepliesByRunId((prev) => {
         const current = prev[runId];
         // generation 对不上 → 是被 watchdog 抢先重发后,旧那次的 promise
@@ -548,24 +569,34 @@ export function DeeplyCourseScreen({
         if (current === undefined || current.generation !== generation) return prev;
         return {
           ...prev,
-          [runId]: result.ok
-            ? { runId, status: "ready", chips: result.chips, generation }
-            : { runId, status: "error", generation }
+          [runId]: nextEntry
         };
       });
+      quickRepliesInflightRef.current.delete(runId);
     })();
   }, []);
 
   useEffect(() => {
+    if (!isRouteFocused) return;
     if (conversationId === null) return;
     if (record === null || outline === null) return;
     const lastAgent = findLastSettledAgentMessage(messages);
     if (lastAgent === null) return;
     const runId = lastAgent.runId;
     if (runId === undefined) return;
+    const existing = quickRepliesStateRef.current[runId] ?? quickRepliesCache.get(runId);
+    if (existing !== undefined) {
+      if (quickRepliesStateRef.current[runId] === undefined) {
+        setQuickRepliesByRunId((prev) => ({
+          ...prev,
+          [runId]: existing
+        }));
+      }
+      return;
+    }
     if (quickRepliesInflightRef.current.has(runId)) return;
     fireQuickReplies(lastAgent);
-  }, [messages, conversationId, record, outline, fireQuickReplies]);
+  }, [messages, conversationId, record, outline, fireQuickReplies, isRouteFocused]);
 
   /**
    * Watchdog:每 3 秒扫一次 quickRepliesByRunId,如果有 loading entry 的
@@ -577,6 +608,7 @@ export function DeeplyCourseScreen({
    * 别的章节,新 turn 已经覆盖),直接 drop 旧 entry,不重发。
    */
   useEffect(() => {
+    if (!isRouteFocused) return;
     const interval = setInterval(() => {
       const state = quickRepliesStateRef.current;
       const now = Date.now();
@@ -612,7 +644,7 @@ export function DeeplyCourseScreen({
       fireQuickReplies(lastAgent);
     }, QUICK_REPLIES_WATCHDOG_TICK_MS);
     return () => clearInterval(interval);
-  }, [fireQuickReplies]);
+  }, [fireQuickReplies, isRouteFocused]);
 
   // 渲染:当前的 quick replies 取最后一条 settled agent 主线消息对应的 runId。
   const currentQuickReplies = useMemo(() => {
@@ -620,7 +652,7 @@ export function DeeplyCourseScreen({
     if (lastAgent === null) return null;
     if (lastAgent.runId === undefined) return null;
     if (parseCourseSectionHeader(lastAgent.text) === null) return null;
-    return quickRepliesByRunId[lastAgent.runId] ?? null;
+    return quickRepliesByRunId[lastAgent.runId] ?? quickRepliesCache.get(lastAgent.runId) ?? null;
   }, [messages, quickRepliesByRunId]);
 
   // 消息流跟随:只在"用户当前贴底"时才跟,跟 standard chat 一致。
@@ -923,7 +955,7 @@ export function DeeplyCourseScreen({
               pressed && canContinue && styles.continueChipPressed
             ]}
           >
-            <Text style={styles.continueChipText}>
+            <Text numberOfLines={1} style={styles.continueChipText}>
               {progress.currentSection === 0
                 ? `开始第 1 节${nextSectionTitle ? ` · ${nextSectionTitle}` : ""}`
                 : expectedNextSection > totalSections
@@ -953,8 +985,12 @@ export function DeeplyCourseScreen({
                     pressed && !inputLocked && styles.quickReplyChipPressed
                   ]}
                 >
-                  <Text style={styles.quickReplyChipLabel}>{chip.label}</Text>
-                  <Text style={styles.quickReplyChipContent}>{chip.sendText}</Text>
+                  <Text numberOfLines={1} style={styles.quickReplyChipLabel}>
+                    {chip.label}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.quickReplyChipContent}>
+                    {chip.sendText}
+                  </Text>
                 </Pressable>
               ))
             : null}
@@ -1310,12 +1346,14 @@ const styles = StyleSheet.create({
     paddingVertical: 2
   },
   continueChip: {
+    maxWidth: 300,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 999,
     backgroundColor: DEEPLY_CONTINUE_BG
   },
   quickReplyChip: {
+    maxWidth: 280,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -1333,12 +1371,14 @@ const styles = StyleSheet.create({
   quickReplyChipLabel: {
     color: DEEPLY_INK,
     fontSize: 13,
-    fontWeight: "700"
+    fontWeight: "700",
+    flexShrink: 0
   },
   quickReplyChipContent: {
     color: DEEPLY_INK_MUTED,
     fontSize: 13,
-    fontWeight: "500"
+    fontWeight: "500",
+    flexShrink: 1
   },
   quickReplyLoading: {
     flexDirection: "row",

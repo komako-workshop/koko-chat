@@ -32,31 +32,12 @@ import { KokoColors, KokoRadius } from "@/theme/koko";
 
 const KOKO_CHAT_AVATAR = require("../../assets/brand/chat-avatar.png");
 const NEAR_BOTTOM_THRESHOLD_PX = 44;
-
-interface ChatScrollSnapshot {
-  contentHeight: number;
-  viewportHeight: number;
-  offsetY: number;
-  isNearBottom: boolean;
-}
-
-const chatScrollSnapshots = new Map<string, ChatScrollSnapshot>();
+const BOTTOM_SCROLL_RETRY_DELAYS_MS = [0, 16, 80, 200, 400, 800] as const;
+const STANDARD_BOTTOM_REVEAL_MS = 180;
+const TAVERN_BOTTOM_REVEAL_MS = 900;
 
 function messageKey(message: ChatMessage): string {
   return `${message.role}:${message.runId ?? "local"}:${message.id}`;
-}
-
-function saveChatScrollSnapshot(
-  conversationId: string | null,
-  metrics: ChatScrollSnapshot
-): void {
-  if (conversationId === null) return;
-  chatScrollSnapshots.set(conversationId, {
-    contentHeight: metrics.contentHeight,
-    viewportHeight: metrics.viewportHeight,
-    offsetY: Math.max(0, metrics.offsetY),
-    isNearBottom: metrics.isNearBottom
-  });
 }
 
 /**
@@ -335,34 +316,25 @@ export default function ChatScreen() {
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [listReady, setListReady] = useState(messages.length === 0);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const headerHeight = useHeaderHeight();
+  const messagesLengthRef = useRef(messages.length);
   const isNearBottomRef = useRef(true);
   const scrollMetricsRef = useRef({
     contentHeight: 0,
     viewportHeight: 0,
     offsetY: 0
   });
-  const pendingScrollRestoreRef = useRef<ChatScrollSnapshot | null>(
-    conversationId === null ? null : chatScrollSnapshots.get(conversationId) ?? null
-  );
-  const hasRestoredScrollRef = useRef(pendingScrollRestoreRef.current === null);
   const lastConversationIdRef = useRef<string | null>(conversationId);
-  const focusRestoreTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const bottomScrollTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const listRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  messagesLengthRef.current = messages.length;
 
   if (lastConversationIdRef.current !== conversationId) {
     lastConversationIdRef.current = conversationId;
-    const snapshot = conversationId === null
-      ? null
-      : chatScrollSnapshots.get(conversationId) ?? null;
-    pendingScrollRestoreRef.current = snapshot;
-    hasRestoredScrollRef.current = snapshot === null;
-    if (snapshot !== null) {
-      isNearBottomRef.current = snapshot.isNearBottom;
-    }
-  }
-  if (pendingScrollRestoreRef.current !== null) {
-    isNearBottomRef.current = pendingScrollRestoreRef.current.isNearBottom;
+    isNearBottomRef.current = true;
   }
 
   function updateNearBottom(): void {
@@ -374,13 +346,6 @@ export default function ChatScreen() {
     isNearBottomRef.current = distanceToBottom <= NEAR_BOTTOM_THRESHOLD_PX;
   }
 
-  function saveCurrentScrollSnapshot(): void {
-    saveChatScrollSnapshot(conversationId, {
-      ...scrollMetricsRef.current,
-      isNearBottom: isNearBottomRef.current
-    });
-  }
-
   function scrollToBottomSoon(animated: boolean): void {
     const { contentHeight, viewportHeight } = scrollMetricsRef.current;
     if (contentHeight > 0 && viewportHeight > 0) {
@@ -389,48 +354,38 @@ export default function ChatScreen() {
         offsetY: Math.max(0, contentHeight - viewportHeight)
       };
       updateNearBottom();
-      saveCurrentScrollSnapshot();
     }
     setTimeout(() => {
       listRef.current?.scrollToEnd({ animated });
     }, 16);
   }
 
-  function tryRestoreSavedScroll(): boolean {
-    const snapshot = pendingScrollRestoreRef.current;
-    if (snapshot === null || hasRestoredScrollRef.current) return false;
-
-    const { contentHeight, viewportHeight } = scrollMetricsRef.current;
-    if (contentHeight <= 0 || viewportHeight <= 0) return true;
-
-    if (snapshot.isNearBottom) {
-      hasRestoredScrollRef.current = true;
-      pendingScrollRestoreRef.current = null;
-      isNearBottomRef.current = true;
-      scrollToBottomSoon(false);
-      return true;
+  function clearBottomScrollTimers(): void {
+    for (const timer of bottomScrollTimersRef.current) clearTimeout(timer);
+    bottomScrollTimersRef.current = [];
+    if (listRevealTimerRef.current !== null) {
+      clearTimeout(listRevealTimerRef.current);
+      listRevealTimerRef.current = null;
     }
+  }
 
-    const maxOffset = Math.max(0, contentHeight - viewportHeight);
-    if (
-      contentHeight + 1 < snapshot.contentHeight &&
-      maxOffset + 1 < snapshot.offsetY
-    ) {
-      return true;
+  function scheduleBottomEntryScroll(revealAfterScroll: boolean): void {
+    clearBottomScrollTimers();
+    isNearBottomRef.current = true;
+    if (revealAfterScroll && messagesLengthRef.current > 0) {
+      setListReady(false);
+      listRevealTimerRef.current = setTimeout(() => {
+        listRevealTimerRef.current = null;
+        setListReady(true);
+      }, conversation?.mode === "tavern" ? TAVERN_BOTTOM_REVEAL_MS : STANDARD_BOTTOM_REVEAL_MS);
+    } else {
+      setListReady(true);
     }
-    hasRestoredScrollRef.current = true;
-    pendingScrollRestoreRef.current = null;
-    const offset = Math.min(Math.max(0, snapshot.offsetY), maxOffset);
-    scrollMetricsRef.current = {
-      ...scrollMetricsRef.current,
-      offsetY: offset
-    };
-    updateNearBottom();
-
-    setTimeout(() => {
-      listRef.current?.scrollToOffset({ offset, animated: false });
-    }, 16);
-    return true;
+    bottomScrollTimersRef.current = BOTTOM_SCROLL_RETRY_DELAYS_MS.map((delay) =>
+      setTimeout(() => {
+        scrollToBottomSoon(false);
+      }, delay)
+    );
   }
 
   function handleListScroll(event: NativeSyntheticEvent<NativeScrollEvent>): void {
@@ -441,7 +396,6 @@ export default function ChatScreen() {
       offsetY: contentOffset.y
     };
     updateNearBottom();
-    saveCurrentScrollSnapshot();
   }
 
   function handleListLayout(height: number): void {
@@ -450,7 +404,9 @@ export default function ChatScreen() {
       viewportHeight: height
     };
     updateNearBottom();
-    tryRestoreSavedScroll();
+    if (isNearBottomRef.current && messages.length > 0) {
+      scrollToBottomSoon(false);
+    }
   }
 
   function handleContentSizeChange(height: number): void {
@@ -460,7 +416,6 @@ export default function ChatScreen() {
       contentHeight: height
     };
     updateNearBottom();
-    if (tryRestoreSavedScroll()) return;
     if (shouldFollowBottom && messages.length > 0) {
       scrollToBottomSoon(false);
     }
@@ -508,65 +463,32 @@ export default function ChatScreen() {
   }, [conversation?.title, navigation, showBrowseShortcut]);
 
   useEffect(() => {
-    const snapshot = conversationId === null
-      ? null
-      : chatScrollSnapshots.get(conversationId) ?? null;
-    pendingScrollRestoreRef.current = snapshot;
-    hasRestoredScrollRef.current = snapshot === null;
-    if (snapshot !== null) {
-      isNearBottomRef.current = snapshot.isNearBottom;
-    }
-    if (snapshot === null) return;
-
-    const restoreRetryDelaysMs = [16, 80, 200, 400, 800];
-    const timers = restoreRetryDelaysMs.map((delay) =>
-      setTimeout(() => {
-        if (hasRestoredScrollRef.current) return;
-        tryRestoreSavedScroll();
-      }, delay)
-    );
+    scheduleBottomEntryScroll(true);
     return () => {
-      for (const timer of timers) clearTimeout(timer);
+      clearBottomScrollTimers();
     };
-  }, [conversationId]);
+  }, [conversationId, conversation?.mode]);
 
   useEffect(() => {
     if (conversationId === null) return;
-    const clearFocusRestoreTimers = (): void => {
-      for (const timer of focusRestoreTimersRef.current) clearTimeout(timer);
-      focusRestoreTimersRef.current = [];
-    };
     const unsubscribeBlur = navigation.addListener("blur", () => {
-      clearFocusRestoreTimers();
-      saveCurrentScrollSnapshot();
+      clearBottomScrollTimers();
+      if (messagesLengthRef.current > 0) {
+        setListReady(false);
+      }
     });
     const unsubscribeFocus = navigation.addListener("focus", () => {
-      clearFocusRestoreTimers();
-      const snapshot = chatScrollSnapshots.get(conversationId) ?? null;
-      pendingScrollRestoreRef.current = snapshot;
-      hasRestoredScrollRef.current = snapshot === null;
-      if (snapshot !== null) {
-        isNearBottomRef.current = snapshot.isNearBottom;
-      }
-      if (snapshot === null) return;
-      const restoreRetryDelaysMs = [0, 16, 80, 200, 400, 800];
-      focusRestoreTimersRef.current = restoreRetryDelaysMs.map((delay) =>
-        setTimeout(() => {
-          if (hasRestoredScrollRef.current) return;
-          tryRestoreSavedScroll();
-        }, delay)
-      );
+      scheduleBottomEntryScroll(true);
     });
     return () => {
-      clearFocusRestoreTimers();
+      clearBottomScrollTimers();
       unsubscribeBlur();
       unsubscribeFocus();
     };
-  }, [conversationId, navigation]);
+  }, [conversationId, conversation?.mode, navigation]);
 
   useEffect(() => {
     if (messages.length === 0) return;
-    if (pendingScrollRestoreRef.current !== null && !hasRestoredScrollRef.current) return;
     if (!isNearBottomRef.current) return;
     const timer = setTimeout(() => {
       listRef.current?.scrollToEnd({ animated: false });
@@ -575,10 +497,10 @@ export default function ChatScreen() {
   }, [messages]);
 
   useEffect(() => {
-    return () => {
-      saveCurrentScrollSnapshot();
-    };
-  }, [conversationId]);
+    if (messages.length === 0) {
+      setListReady(true);
+    }
+  }, [messages.length]);
 
   useEffect(() => {
     const appStateSubscription = AppState.addEventListener("change", (nextState) => {
@@ -748,6 +670,7 @@ export default function ChatScreen() {
         <FlatList
           ref={listRef}
           data={messages}
+          style={[styles.flex, !listReady && styles.listHidden]}
           keyExtractor={messageKey}
           renderItem={({ item, index }: ListRenderItemInfo<ChatMessage>) => {
             const retryableError =
@@ -853,7 +776,11 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingVertical: 16
+    paddingTop: 16,
+    paddingBottom: 0
+  },
+  listHidden: {
+    opacity: 0
   },
   agentRow: {
     flexDirection: "row",

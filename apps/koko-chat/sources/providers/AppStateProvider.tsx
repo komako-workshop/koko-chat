@@ -19,15 +19,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
     void recoverGatewayState();
 
-    let sawBackground = AppState.currentState === "background";
+    let sawInactive = AppState.currentState !== "active";
     const subscription = AppState.addEventListener("change", (status) => {
-      if (status === "background") {
-        sawBackground = true;
+      if (status !== "active") {
+        sawInactive = true;
       }
       if (status === "active") {
-        const wasBackground = sawBackground;
-        sawBackground = false;
-        void recoverGatewayState({ force: wasBackground });
+        const wasInactive = sawInactive;
+        sawInactive = false;
+        void recoverGatewayState({ force: wasInactive });
       }
     });
 
