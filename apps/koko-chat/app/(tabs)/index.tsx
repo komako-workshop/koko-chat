@@ -124,15 +124,22 @@ export default function ChatsTabScreen(): React.ReactElement {
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>聊天</Text>
+        <Text style={styles.headerTitle}>KokoChat</Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="新建会话"
           onPress={handleNewChat}
           hitSlop={12}
-          style={styles.headerButton}
+          style={({ pressed }) => [
+            styles.headerPlus,
+            pressed && styles.headerPlusPressed
+          ]}
         >
-          <Ionicons name="add-circle-outline" size={28} color={KokoColors.ink} />
+          {/* Geometric plus icon — two crossing bars rather than a glyph,
+              so it sits dead-centre regardless of font baseline (see
+              mobile-playful-v3 mockup). */}
+          <View style={styles.headerPlusBarH} />
+          <View style={styles.headerPlusBarV} />
         </Pressable>
       </View>
 
@@ -362,18 +369,50 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 12
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: "700",
+    // RN's "800" maps closer to SF Pro "Heavy", which matches the playful
+    // mockup's display weight without needing a custom font bundle.
+    fontWeight: "800",
+    letterSpacing: -0.5,
     color: KokoColors.ink
   },
-  headerButton: {
-    padding: 4,
-    borderRadius: KokoRadius.pill
+  // Brand "+" CTA: warm-orange filled circle + soft glow shadow. This is
+  // the only saturated colour element on the surface, so it naturally
+  // reads as the primary action.
+  headerPlus: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: "#FF8C2A",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#FF8C2A",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    elevation: 6
+  },
+  headerPlusPressed: {
+    opacity: 0.85
+  },
+  headerPlusBarH: {
+    position: "absolute",
+    width: 16,
+    height: 2.5,
+    borderRadius: 2,
+    backgroundColor: "#fff"
+  },
+  headerPlusBarV: {
+    position: "absolute",
+    width: 2.5,
+    height: 16,
+    borderRadius: 2,
+    backgroundColor: "#fff"
   },
   list: {
     backgroundColor: KokoColors.bg

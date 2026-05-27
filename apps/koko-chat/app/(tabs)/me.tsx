@@ -16,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useGatewayStore } from "@/state/gateway";
 import { useConversationStore } from "@/state/conversations";
-import { KokoColors, KokoRadius } from "@/theme/koko";
+import { KokoColors } from "@/theme/koko";
 
 const appLogo = require("../../assets/brand/app-logo.png");
 
@@ -74,8 +74,24 @@ export default function MeTabScreen(): React.ReactElement {
     );
   }
 
+  // Gateway state, in Chinese, plain language. Original showed the raw
+  // English status enum ("connected" / "connecting" / "disconnected") which
+  // reads as debug output to non-technical users.
+  const gatewayStatusLabel: { text: string; tone: "good" | "warn" | "muted" } =
+    gatewayStatus === "connected"
+      ? { text: "已连接", tone: "good" }
+      : gatewayStatus === "connecting" || gatewayStatus === "handshaking"
+        ? { text: "连接中", tone: "warn" }
+        : gatewayStatus === "error"
+          ? { text: "异常", tone: "warn" }
+          : { text: "未连接", tone: "muted" };
+
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>我</Text>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.profile}>
           <View style={styles.profileAvatar}>
@@ -94,8 +110,8 @@ export default function MeTabScreen(): React.ReactElement {
           <Row
             icon="link"
             label="Gateway 状态"
-            value={gatewayStatus}
-            valueTone={gatewayStatus === "connected" ? "good" : "warn"}
+            value={gatewayStatusLabel.text}
+            valueTone={gatewayStatusLabel.tone}
           />
           <Link href="/pair" asChild>
             <Row icon="link-outline" label="配对 OpenClaw" chevron last={gatewayStatus !== "connected"} />
@@ -111,17 +127,14 @@ export default function MeTabScreen(): React.ReactElement {
           ) : null}
         </Group>
 
-        {/* Group: about + dev tools */}
+        {/* Group: about. Network self-test moved out — it was a debug door
+            that produced more confusion than answers for normal users. */}
         <Group>
           <Row
             icon="information-circle-outline"
             label="关于 KokoChat"
             value={`v${appVersion}`}
-            // In production "关于" is the only row in this group, so it
-            // owns the `last` flag (no trailing separator below it). In
-            // dev the runtime self-test row sits below it and takes
-            // `last` instead.
-            last={!__DEV__}
+            last
             onPress={() => {
               Alert.alert(
                 "KokoChat",
@@ -136,9 +149,6 @@ export default function MeTabScreen(): React.ReactElement {
               );
             }}
           />
-          <Link href="/network-test" asChild>
-            <Row icon="pulse-outline" label="网络连接测试" chevron last />
-          </Link>
         </Group>
 
         {/* Danger zone */}
@@ -168,7 +178,7 @@ type RowProps = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   value?: string;
-  valueTone?: "default" | "good" | "warn";
+  valueTone?: "default" | "good" | "warn" | "muted";
   chevron?: boolean;
   destructive?: boolean;
   last?: boolean;
@@ -192,7 +202,9 @@ const Row = ({
       ? KokoColors.success
       : valueTone === "warn"
         ? KokoColors.danger
-        : KokoColors.inkMuted;
+        : valueTone === "muted"
+          ? KokoColors.inkMuted
+          : KokoColors.inkMuted;
 
   return (
     <Pressable
@@ -206,7 +218,15 @@ const Row = ({
       <Ionicons name={icon} size={20} color={iconColor} />
       <Text style={[styles.rowLabel, { color: labelColor }]}>{label}</Text>
       {value !== undefined ? (
-        <Text style={[styles.rowValue, { color: valueColor }]}>{value}</Text>
+        <View style={styles.rowValueWrap}>
+          {/* Add a coloured leading dot for status-style values (Gateway
+              good / warn) so the state reads at a glance instead of
+              requiring the user to parse the Chinese text. */}
+          {valueTone === "good" || valueTone === "warn" ? (
+            <View style={[styles.rowValueDot, { backgroundColor: valueColor }]} />
+          ) : null}
+          <Text style={[styles.rowValue, { color: valueColor }]}>{value}</Text>
+        </View>
       ) : null}
       {chevron === true ? (
         <Ionicons
@@ -223,26 +243,54 @@ const Row = ({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: KokoColors.bg
+    // Slightly tinted ground (vs pure white on the chat list) so the white
+    // group cards lift off the page like iOS Settings.
+    backgroundColor: KokoColors.surfaceMuted
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 14
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+    color: KokoColors.ink
   },
   scroll: {
-    paddingBottom: 48
+    paddingBottom: 48,
+    paddingHorizontal: 14
   },
   profile: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: KokoColors.surface,
     paddingHorizontal: 16,
-    paddingVertical: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: KokoColors.hairline
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginBottom: 18,
+    // Soft single-pixel lift, no hairline border. Cards on tinted ground
+    // need almost nothing to feel separated.
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 1,
+    elevation: 1
   },
   profileAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: KokoRadius.lg,
+    width: 60,
+    height: 60,
+    borderRadius: 16,
     overflow: "hidden",
-    backgroundColor: KokoColors.primarySoft
+    backgroundColor: KokoColors.primarySoft,
+    // Warm-orange elevation glow — mirrors the chat list "+" button so the
+    // brand colour appears once per tab and never feels arbitrary.
+    shadowColor: "#FF8C2A",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 14,
+    elevation: 5
   },
   profileAvatarImage: {
     width: "100%",
@@ -253,41 +301,56 @@ const styles = StyleSheet.create({
     flex: 1
   },
   profileTitle: {
-    fontSize: 20,
-    fontWeight: "600",
+    fontSize: 19,
+    fontWeight: "700",
     color: KokoColors.ink
   },
   profileSubtitle: {
-    marginTop: 3,
-    fontSize: 12,
+    marginTop: 4,
+    fontSize: 13,
     color: KokoColors.inkSecondary
   },
   group: {
-    marginTop: 14,
-    marginHorizontal: 12,
-    borderRadius: KokoRadius.lg,
+    marginBottom: 16,
+    borderRadius: 14,
     overflow: "hidden",
     backgroundColor: KokoColors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: KokoColors.hairline
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 1,
+    elevation: 1
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 13
   },
   rowSeparator: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: KokoColors.hairline
+    borderBottomColor: KokoColors.hairline,
+    // Indent the hairline past the icon, matches iOS Settings rows.
+    marginLeft: 0
   },
   rowLabel: {
     flex: 1,
     marginLeft: 12,
-    fontSize: 16
+    fontSize: 15.5,
+    fontWeight: "500"
+  },
+  rowValueWrap: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  rowValueDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    marginRight: 6
   },
   rowValue: {
-    fontSize: 13
+    fontSize: 13.5
   },
   rowChevron: {
     marginLeft: 8
@@ -297,7 +360,8 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   footerText: {
-    fontSize: 11,
-    color: KokoColors.inkMuted
+    fontSize: 11.5,
+    color: KokoColors.inkMuted,
+    letterSpacing: 0.2
   }
 });
