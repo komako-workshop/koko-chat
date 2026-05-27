@@ -25,6 +25,7 @@ import { CachedImage } from "@/components/CachedImage";
 import { MarkdownText } from "@/components/MarkdownText";
 import { useGatewayStore } from "@/state/gateway";
 import { useConversationStore, type ChatMessage, type ConversationMeta } from "@/state/conversations";
+import { getBootstrapRetryHandler } from "@/runtime/bootstrapRetries";
 import { MessageBlockView } from "@/runtime/messageBlocks";
 import { getMiniAppListImage } from "@/runtime/miniApps";
 import { KokoColors, KokoRadius } from "@/theme/koko";
@@ -235,9 +236,17 @@ interface MessageRowProps {
   item: ChatMessage;
   conversation: ConversationMeta;
   isContinuation: boolean;
+  onRetry?: () => void;
+  retryDisabled?: boolean;
 }
 
-function MessageRow({ item, conversation, isContinuation }: MessageRowProps): React.ReactElement {
+function MessageRow({
+  item,
+  conversation,
+  isContinuation,
+  onRetry,
+  retryDisabled
+}: MessageRowProps): React.ReactElement {
   const isAgent = item.role === "agent";
   const hasBlocks = item.blocks !== undefined && item.blocks.length > 0;
   const blockOnly = isBlockOnlyMessage(item);
@@ -262,7 +271,24 @@ function MessageRow({ item, conversation, isContinuation }: MessageRowProps): Re
       ]}
     >
       {item.error !== undefined ? (
-        <Text style={styles.errorText}>⚠️ {item.error}</Text>
+        <View style={styles.errorBody}>
+          <Text style={styles.errorText}>⚠️ {item.error}</Text>
+          {onRetry !== undefined ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="重试发送"
+              disabled={retryDisabled === true}
+              onPress={onRetry}
+              style={({ pressed }) => [
+                styles.retryButton,
+                retryDisabled === true && styles.retryButtonDisabled,
+                pressed && retryDisabled !== true && styles.retryButtonPressed
+              ]}
+            >
+              <Text style={styles.retryButtonText}>重试</Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : hasBlocks ? (
         <View style={styles.blocksColumn}>
           {renderMessageBlocks(item, conversation)}
@@ -302,6 +328,7 @@ export default function ChatScreen() {
   );
   const status = useGatewayStore((s) => s.status);
   const sendUserMessage = useGatewayStore((s) => s.sendUserMessage);
+  const retryFailedUserMessage = useGatewayStore((s) => s.retryFailedUserMessage);
   const activeAgentRunCount = useGatewayStore((s) =>
     conversationId !== null ? s.activeAgentRuns[conversationId] ?? 0 : 0
   );
@@ -519,6 +546,19 @@ export default function ChatScreen() {
     }
   }
 
+  async function handleRetryFailedMessage(errorMessageId: string): Promise<void> {
+    if (conversationId === null) return;
+    if (sending || isAgentResponding || status !== "connected") return;
+    setSending(true);
+    try {
+      await retryFailedUserMessage(conversationId, errorMessageId);
+    } catch (error) {
+      console.error("retry failed", error);
+    } finally {
+      setSending(false);
+    }
+  }
+
   if (conversationId === null || conversation === null) {
     return (
       <SafeAreaView style={styles.screen}>
@@ -545,6 +585,13 @@ export default function ChatScreen() {
   const bootstrap = conversation.bootstrap;
   const isBootstrapping = bootstrap?.status === "loading";
   const bootstrapError = bootstrap?.status === "error" ? bootstrap.error ?? "加载失败" : null;
+  const bootstrapRetryHandler = getBootstrapRetryHandler(conversation.mode);
+  const canRetryBootstrap =
+    bootstrapRetryHandler !== undefined &&
+    isConnected &&
+    !sending &&
+    !isAgentResponding &&
+    !isBootstrapping;
   const sendDisabled =
     sending ||
     isAgentResponding ||
@@ -552,6 +599,20 @@ export default function ChatScreen() {
     !isConnected ||
     isBootstrapping ||
     bootstrapError !== null;
+
+  async function handleRetryBootstrap(): Promise<void> {
+    if (conversationId === null || bootstrapRetryHandler === undefined || !canRetryBootstrap) {
+      return;
+    }
+    setSending(true);
+    try {
+      await bootstrapRetryHandler(conversationId);
+    } catch (error) {
+      console.error("bootstrap retry failed", error);
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
@@ -576,6 +637,20 @@ export default function ChatScreen() {
           <View style={styles.banner}>
             <Text style={styles.bannerTitle}>角色卡加载失败</Text>
             <Text style={styles.bannerHint}>{bootstrapError}</Text>
+            {bootstrapRetryHandler !== undefined ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="重新加载角色卡"
+                disabled={!canRetryBootstrap}
+                onPress={() => void handleRetryBootstrap()}
+                style={[
+                  styles.bannerActionButton,
+                  !canRetryBootstrap && styles.bannerActionButtonDisabled
+                ]}
+              >
+                <Text style={styles.bannerActionButtonText}>重试</Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : isRecoveringConnection ? (
           <View style={styles.banner}>
@@ -596,13 +671,25 @@ export default function ChatScreen() {
           ref={listRef}
           data={messages}
           keyExtractor={messageKey}
-          renderItem={({ item, index }: ListRenderItemInfo<ChatMessage>) => (
-            <MessageRow
-              item={item}
-              conversation={conversation}
-              isContinuation={isAgentContinuation(messages[index - 1], item)}
-            />
-          )}
+          renderItem={({ item, index }: ListRenderItemInfo<ChatMessage>) => {
+            const retryableError =
+              item.role === "agent" &&
+              item.error !== undefined &&
+              messages.slice(0, index).some((message) => message.role === "user");
+            return (
+              <MessageRow
+                item={item}
+                conversation={conversation}
+                isContinuation={isAgentContinuation(messages[index - 1], item)}
+                {...(retryableError
+                  ? {
+                      onRetry: () => void handleRetryFailedMessage(item.id),
+                      retryDisabled: !isConnected || sending || isAgentResponding
+                    }
+                  : {})}
+              />
+            );
+          }}
           contentContainerStyle={styles.listContent}
           onLayout={(event) => {
             handleListLayout(event.nativeEvent.layout.height);
@@ -774,6 +861,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: KokoColors.danger
   },
+  errorBody: {
+    rowGap: 8
+  },
+  retryButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: KokoRadius.pill,
+    backgroundColor: KokoColors.primary
+  },
+  retryButtonPressed: {
+    opacity: 0.72
+  },
+  retryButtonDisabled: {
+    backgroundColor: KokoColors.primarySoft
+  },
+  retryButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF"
+  },
   headerButton: {
     paddingHorizontal: 8,
     paddingVertical: 6,
@@ -859,6 +967,22 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: KokoColors.inkSecondary
+  },
+  bannerActionButton: {
+    alignSelf: "flex-start",
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: KokoRadius.pill,
+    backgroundColor: KokoColors.primary
+  },
+  bannerActionButtonDisabled: {
+    backgroundColor: KokoColors.primarySoft
+  },
+  bannerActionButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF"
   },
   bannerRow: {
     flexDirection: "row",

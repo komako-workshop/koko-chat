@@ -244,6 +244,10 @@ function transformDeeplyCourseAgentResponse({
     const candidatesParsed = parseDeeplyBookCandidates(text);
     if (!candidatesParsed.ok) {
       console.warn("[deeply-course] book.candidates parse failed:", candidatesParsed.error);
+      useConversationStore.getState().setBootstrap(conversation.id, {
+        status: "error",
+        error: `候选书目格式没能解析:${truncate(candidatesParsed.error, 120)}`
+      });
       const messages: ChatMessage[] = [];
       if (prose.length > 0) {
         messages.push({
@@ -331,6 +335,10 @@ function transformDeeplyCourseAgentResponse({
 
   if (!parsed.ok) {
     console.warn("[deeply-course] research outline parse failed:", parsed.error);
+    useConversationStore.getState().setBootstrap(conversation.id, {
+      status: "error",
+      error: `调研结果格式没能解析:${truncate(parsed.error, 120)}`
+    });
     const messages: ChatMessage[] = [];
     if (prose.length > 0) {
       messages.push({

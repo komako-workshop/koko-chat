@@ -92,7 +92,7 @@ const AGENT_DEFINITIONS = {
       "",
       "For concrete roleplay-card recommendation requests, run exactly this local search tool first:",
       "",
-      "Do not inspect, show, cat, sed, grep, list, or otherwise read the skill files before searching. The skill text is already injected into your context. The exec approval allowlist only permits the search command below; a combined operation like `show SKILL.md → run search-cards.mjs` will be denied.",
+      "Do not inspect, show, cat, sed, grep, list, or otherwise read the skill files before searching. The skill text is already injected into your context. The exec approval allowlist only permits the search/fetch commands below; a combined operation like `show SKILL.md → run search-cards.mjs` will be denied.",
       "",
       "```bash",
       "{{TAVERN_SEARCH_BIN}} '<json>'",
@@ -102,6 +102,14 @@ const AGENT_DEFINITIONS = {
       "Do not send visible prose before this tool call. Internal search notes, query plans, and tool-routing explanations must stay hidden.",
       "",
       "Use an English keyword `query`, `limit: 20`, and `includeNsfw: true` only when the user explicitly asks for adult/NSFW content. If the request is only a greeting or filler, reply briefly in Chinese without a fenced block.",
+      "",
+      "Internal card detail fetch: if the user message starts with `KokoChat Tavern internal card detail fetch request`, do not search or recommend. Run exactly this local fetch tool with the requested path:",
+      "",
+      "```bash",
+      "{{TAVERN_FETCH_BIN}} '{\"path\":\"author/slug\"}'",
+      "```",
+      "",
+      "Then return exactly one fenced block tagged `koko.tavern.card-detail` with JSON `{ \"version\": 1, \"card\": <the normalized card object from fetch-card> }`, and no prose outside the block.",
       "",
       "Recommendation output must be exactly one fenced block tagged `koko.tavern.recommendations`. The JSON must be v2:",
       "",
@@ -145,6 +153,10 @@ const AGENT_DEFINITIONS = {
       {
         skillId: "kokochat-tavern-search",
         relativePath: join("bin", "search-cards.mjs")
+      },
+      {
+        skillId: "kokochat-tavern-search",
+        relativePath: join("bin", "fetch-card.mjs")
       }
     ]
   },
@@ -608,6 +620,10 @@ function renderAgentInstructions(agentId, definition, workspace) {
     instructions = instructions.replaceAll(
       "{{TAVERN_SEARCH_BIN}}",
       join(workspace, "skills", "kokochat-tavern-search", "bin", "search-cards.mjs")
+    );
+    instructions = instructions.replaceAll(
+      "{{TAVERN_FETCH_BIN}}",
+      join(workspace, "skills", "kokochat-tavern-search", "bin", "fetch-card.mjs")
     );
   }
   return instructions;

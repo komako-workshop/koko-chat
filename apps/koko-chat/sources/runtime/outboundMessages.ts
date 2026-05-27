@@ -5,6 +5,8 @@ export interface OutboundMessageInput {
   visibleText: string;
   /** Host-provided hint only. Mini-app storage remains authoritative. */
   isFirstUserTurn: boolean;
+  /** Local messages already visible before this user turn is appended. */
+  messagesBeforeTurn: ChatMessage[];
 }
 
 export interface OutboundMessage {
@@ -14,6 +16,8 @@ export interface OutboundMessage {
   gatewayText: string;
   /** True when the message should update local UI but skip Gateway send. */
   localOnly?: boolean;
+  /** Called only after OpenClaw accepts the outbound message. */
+  onSendAccepted?: () => void | Promise<void>;
 }
 
 export type OutboundMessageBuilder = (input: OutboundMessageInput) => Promise<OutboundMessage>;

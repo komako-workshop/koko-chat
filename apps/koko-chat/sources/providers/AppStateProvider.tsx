@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
-import { AppState, type AppStateStatus } from "react-native";
+import { AppState } from "react-native";
 
 import { useGatewayStore } from "@/state/gateway";
 
@@ -19,11 +19,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
     void recoverGatewayState();
 
-    let previousState: AppStateStatus = AppState.currentState;
-    const subscription = AppState.addEventListener("change", (status: AppStateStatus) => {
-      const wasBackground = previousState === "background";
-      previousState = status;
+    let sawBackground = AppState.currentState === "background";
+    const subscription = AppState.addEventListener("change", (status) => {
+      if (status === "background") {
+        sawBackground = true;
+      }
       if (status === "active") {
+        const wasBackground = sawBackground;
+        sawBackground = false;
         void recoverGatewayState({ force: wasBackground });
       }
     });
@@ -39,18 +42,30 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (AppState.currentState !== "active") return;
 
     let cancelled = false;
-    const timer = setTimeout(() => {
+    let reconnecting = false;
+
+    const recover = (): void => {
       if (cancelled) return;
+      if (reconnecting) return;
+      reconnecting = true;
       void (async () => {
-        const connected = await reconnectIfPossible();
-        if (cancelled || !connected) return;
-        await syncPendingConversations();
+        try {
+          const connected = await reconnectIfPossible();
+          if (cancelled || !connected) return;
+          await syncPendingConversations();
+        } finally {
+          reconnecting = false;
+        }
       })();
-    }, 750);
+    };
+
+    const timer = setTimeout(recover, 750);
+    const interval = setInterval(recover, 2_500);
 
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      clearInterval(interval);
     };
   }, [status, reconnectIfPossible, syncPendingConversations]);
 

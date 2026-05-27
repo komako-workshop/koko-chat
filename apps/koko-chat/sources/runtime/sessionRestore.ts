@@ -1,4 +1,5 @@
 import type { ChatMessage, ConversationMeta } from "@/state/conversations";
+import type { JsonRecord } from "@koko/openclaw-client/protocol";
 
 export interface SessionRestoreInput {
   conversation: ConversationMeta;
@@ -10,17 +11,35 @@ export type SessionRestoreBuilder = (
   input: SessionRestoreInput
 ) => Promise<string | null | undefined> | string | null | undefined;
 
+export interface RemoteSessionRestoreDecisionInput {
+  conversation: ConversationMeta;
+  localMessages: ChatMessage[];
+  remoteMessages: JsonRecord[] | null;
+}
+
+export type RemoteSessionRestoreDecider = (
+  input: RemoteSessionRestoreDecisionInput
+) => boolean;
+
 const RESTORE_MAX_MESSAGES = 18;
 const RESTORE_MAX_CHARS = 7_000;
 const RESTORE_MAX_CHARS_PER_MESSAGE = 1_600;
 
 const builders: Partial<Record<ConversationMeta["mode"], SessionRestoreBuilder>> = {};
+const deciders: Partial<Record<ConversationMeta["mode"], RemoteSessionRestoreDecider>> = {};
 
 export function registerSessionRestoreBuilder(
   mode: ConversationMeta["mode"],
   builder: SessionRestoreBuilder
 ): void {
   builders[mode] = builder;
+}
+
+export function registerRemoteSessionRestoreDecider(
+  mode: ConversationMeta["mode"],
+  decider: RemoteSessionRestoreDecider
+): void {
+  deciders[mode] = decider;
 }
 
 export async function buildSessionRestoreMessage(
@@ -33,6 +52,11 @@ export async function buildSessionRestoreMessage(
     ? buildDefaultSessionRestoreMessage(input)
     : await builder(input);
   return normalizeRestoreMessage(message);
+}
+
+export function shouldForceSessionRestore(input: RemoteSessionRestoreDecisionInput): boolean {
+  const decider = deciders[input.conversation.mode];
+  return decider?.(input) === true;
 }
 
 export function hasRestorableLocalHistory(messages: ChatMessage[]): boolean {

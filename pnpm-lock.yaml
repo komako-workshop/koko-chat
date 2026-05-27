@@ -52,6 +52,9 @@ importers:
       expo-linking:
         specifier: ~8.0.12
         version: 8.0.12(expo@54.0.34)(react-native@0.81.5(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+      expo-modules-core:
+        specifier: ~3.0.30
+        version: 3.0.30(react-native@0.81.5(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       expo-router:
         specifier: ~6.0.23
         version: 6.0.23(8a0f7e9f01d43cc72812b3626b9c4c96)
@@ -64,6 +67,9 @@ importers:
       expo-system-ui:
         specifier: ~6.0.9
         version: 6.0.9(expo@54.0.34)(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.1.0))
+      koko-background-task:
+        specifier: file:./modules/koko-background-task
+        version: file:apps/koko-chat/modules/koko-background-task(expo-modules-core@3.0.30(react-native@0.81.5(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(expo@54.0.34)
       react:
         specifier: 19.1.0
         version: 19.1.0
@@ -2775,6 +2781,12 @@ packages:
   kleur@3.0.3:
     resolution: {integrity: sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==}
     engines: {node: '>=6'}
+
+  koko-background-task@file:apps/koko-chat/modules/koko-background-task:
+    resolution: {directory: apps/koko-chat/modules/koko-background-task, type: directory}
+    peerDependencies:
+      expo: '*'
+      expo-modules-core: '*'
 
   lan-network@0.2.1:
     resolution: {integrity: sha512-ONPnazC96VKDntab9j9JKwIWhZ4ZUceB4A9Epu4Ssg0hYFmtHZSeQ+n15nIwTFmcBUKtExOer8WTJ4GF9MO64A==}
@@ -7264,6 +7276,11 @@ snapshots:
   json5@2.2.3: {}
 
   kleur@3.0.3: {}
+
+  koko-background-task@file:apps/koko-chat/modules/koko-background-task(expo-modules-core@3.0.30(react-native@0.81.5(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(expo@54.0.34):
+    dependencies:
+      expo: 54.0.34(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(react-native@0.81.5(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
+      expo-modules-core: 3.0.30(react-native@0.81.5(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
 
   lan-network@0.2.1: {}
 

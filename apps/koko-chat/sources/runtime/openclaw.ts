@@ -4,6 +4,7 @@ import type { BrowserGatewayClient } from "@/gateway/BrowserGatewayClient";
 import { useGatewayStore } from "@/state/gateway";
 import type { MiniAppId } from "@/state/conversations";
 import { resolveMiniAppAgentId } from "@/runtime/miniApps";
+import { runWithBackgroundTask } from "@/runtime/backgroundTasks";
 
 const DEFAULT_INFER_TIMEOUT_MS = 3_600_000;
 const DEFAULT_HISTORY_LIMIT = 8;
@@ -13,10 +14,21 @@ export interface OpenClawRpcClient {
   call(method: string, params?: JsonRecord): Promise<JsonRecord>;
 }
 
+interface OpenClawStreamingRpcClient extends OpenClawRpcClient {
+  on(event: string, callback: (payload: JsonRecord) => void): () => void;
+}
+
 export interface BuildKokoChatSessionKeyInput {
   miniAppId: MiniAppId | string;
   scope: string;
   agentId?: string;
+}
+
+export interface InferOnceStreamEvent {
+  sessionKey: string;
+  runId?: string;
+  state: "delta" | "final";
+  text: string;
 }
 
 export interface InferOnceInput {
@@ -26,6 +38,13 @@ export interface InferOnceInput {
   timeoutMs?: number;
   cleanup?: boolean;
   client?: OpenClawRpcClient;
+  /**
+   * Optional cumulative text stream for user-visible one-shot work.
+   *
+   * The returned promise still resolves from `chat.history` after final, so
+   * structured callers can keep parsing the final answer exactly as before.
+   */
+  onDelta?: (event: InferOnceStreamEvent) => void;
 }
 
 export interface InferOnceResult {
@@ -157,6 +176,10 @@ export function buildKokoChatSessionKey({
 }
 
 export async function inferOnce(input: InferOnceInput): Promise<InferOnceResult> {
+  return runWithBackgroundTask("KokoChat OpenClaw inference", () => inferOnceWithGateway(input));
+}
+
+async function inferOnceWithGateway(input: InferOnceInput): Promise<InferOnceResult> {
   const prompt = input.prompt.trim();
   if (prompt.length === 0) {
     throw new Error("inferOnce prompt is empty");
@@ -171,8 +194,21 @@ export async function inferOnce(input: InferOnceInput): Promise<InferOnceResult>
   const idempotencyKey = `koko-oneshot-${Date.now()}-${randomId()}`;
   let cleanupError: string | undefined;
   let result: InferOnceResult | undefined;
+  let unsubscribe: (() => void) | undefined;
 
   try {
+    if (input.onDelta !== undefined && isStreamingRpcClient(client)) {
+      unsubscribe = client.on("chat", (payload) => {
+        const event = parseInferOnceStreamEvent(payload, sessionKey);
+        if (event === null) return;
+        try {
+          input.onDelta?.(event);
+        } catch {
+          // A UI callback should not break the underlying inference.
+        }
+      });
+    }
+
     const send = await client.call("chat.send", {
       sessionKey,
       message: prompt,
@@ -206,6 +242,7 @@ export async function inferOnce(input: InferOnceInput): Promise<InferOnceResult>
       message
     };
   } finally {
+    unsubscribe?.();
     if (input.cleanup !== false) {
       try {
         await deleteAgentSession({ sessionKey, client });
@@ -386,6 +423,45 @@ export function findLastAssistantMessage(
     if (message?.role === "assistant" || message?.role === "agent") return message;
   }
   return null;
+}
+
+function isStreamingRpcClient(client: OpenClawRpcClient): client is OpenClawStreamingRpcClient {
+  return typeof (client as { on?: unknown }).on === "function";
+}
+
+function parseInferOnceStreamEvent(
+  payload: JsonRecord,
+  expectedSessionKey: string
+): InferOnceStreamEvent | null {
+  if (payload.sessionKey !== expectedSessionKey) return null;
+  if (payload.state !== "delta" && payload.state !== "final") return null;
+  const text = extractChatEventText(payload);
+  if (text.length === 0) return null;
+  return {
+    sessionKey: expectedSessionKey,
+    ...(typeof payload.runId === "string" ? { runId: payload.runId } : {}),
+    state: payload.state,
+    text
+  };
+}
+
+function extractChatEventText(payload: JsonRecord): string {
+  const message = isRecord(payload.message) ? payload.message : null;
+  const content = Array.isArray(message?.content) ? message.content : [];
+  const raw = content
+    .map((part) => {
+      if (!isRecord(part)) return "";
+      if (part.type !== "text") return "";
+      return typeof part.text === "string" ? part.text : "";
+    })
+    .filter((text) => text.length > 0)
+    .join("\n\n");
+  return applyParagraphMarker(raw);
+}
+
+function applyParagraphMarker(text: string): string {
+  if (!text.includes("〔KP〕")) return text;
+  return text.replace(/\s*〔KP〕\s*/g, "\n\n").trim();
 }
 
 function getConnectedGatewayClient(): BrowserGatewayClient {

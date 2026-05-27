@@ -5,14 +5,19 @@ import {
   registerOutboundMessageBuilder,
   type OutboundMessageBuilder
 } from "@/runtime/outboundMessages";
+import { registerBootstrapRetryHandler } from "@/runtime/bootstrapRetries";
+import { runWithBackgroundTask } from "@/runtime/backgroundTasks";
+import { extractFencedBlock } from "@/runtime/messageBlocks";
 import { inferOnce } from "@/runtime/openclaw";
 import {
   buildDefaultSessionRestoreMessage,
   formatRecentTranscript,
+  registerRemoteSessionRestoreDecider,
   registerSessionRestoreBuilder,
   type SessionRestoreBuilder
 } from "@/runtime/sessionRestore";
 import { useConversationStore } from "@/state/conversations";
+import { useGatewayStore } from "@/state/gateway";
 
 import { resolvePersonaName } from "@/state/tavernPersona";
 
@@ -42,6 +47,10 @@ import { applyTavernMacros } from "../../tavern/mobile/macros";
 
 const MINI_APP_ID = "tavern-roleplay";
 const STORAGE = getMiniAppStorage(MINI_APP_ID);
+const CARD_DETAIL_BLOCK_TYPE = "koko.tavern.card-detail";
+const CHARACTER_TAVERN_CARD_FETCH_TIMEOUT_MS = 15_000;
+const CARD_FETCH_MAX_ATTEMPTS = 3;
+const CARD_FETCH_RETRY_DELAYS_MS = [1_500, 3_500];
 
 let registered = false;
 
@@ -82,6 +91,18 @@ export interface TavernRoleplayCardSummary {
     firstMessage?: string;
     firstMessageZh?: string;
   };
+}
+
+interface TavernRoleplaySessionState {
+  cardPath: string;
+  /**
+   * Legacy local flag. Older builds set this before `chat.send` completed,
+   * so it cannot be trusted as proof that OpenClaw received the card.
+   */
+  bootstrapped: boolean;
+  /** True only after OpenClaw accepts a send that included card/restore context. */
+  remoteBootstrapped?: boolean;
+  summary?: TavernRoleplayCardSummary;
 }
 
 /**
@@ -135,8 +156,10 @@ export function startTavernRoleplaySession(summary: TavernRoleplayCardSummary): 
 
   STORAGE.setJson(`session.${meta.id}`, {
     cardPath: summary.path,
-    bootstrapped: false
-  });
+    bootstrapped: false,
+    remoteBootstrapped: false,
+    summary
+  } satisfies TavernRoleplaySessionState);
 
   openConversation(meta.id);
 
@@ -152,6 +175,29 @@ export function startTavernRoleplaySession(summary: TavernRoleplayCardSummary): 
   // Recommendation-card entry (酒馆助手): we only have a card summary; need
   // to fetch the full card + translate first_mes from character-tavern.
   void bootstrapInBackground(meta.id, summary);
+}
+
+export function retryTavernRoleplayBootstrap(conversationId: string): void {
+  const state = STORAGE.getJson<TavernRoleplaySessionState>(`session.${conversationId}`);
+  if (state?.summary === undefined) {
+    useConversationStore.getState().setBootstrap(conversationId, {
+      status: "error",
+      error: "角色卡加载失败：缺少可重试的角色卡信息。"
+    });
+    return;
+  }
+  STORAGE.setJson(`session.${conversationId}`, {
+    ...state,
+    bootstrapped: false,
+    remoteBootstrapped: false
+  } satisfies TavernRoleplaySessionState);
+  const store = useConversationStore.getState();
+  store.setMessages(conversationId, () => []);
+  store.setBootstrap(conversationId, {
+    status: "loading",
+    hint: "正在重新拉角色卡 + 准备开场白。"
+  });
+  void bootstrapInBackground(conversationId, state.summary);
 }
 
 function hasUsablePrefetch(p: NonNullable<TavernRoleplayCardSummary["prefetched"]>): boolean {
@@ -227,9 +273,18 @@ async function bootstrapInBackground(
   conversationId: string,
   summary: TavernRoleplayCardSummary
 ): Promise<void> {
+  return runWithBackgroundTask("KokoChat Tavern roleplay bootstrap", async () => {
+    await runTavernRoleplayBootstrap(conversationId, summary);
+  });
+}
+
+async function runTavernRoleplayBootstrap(
+  conversationId: string,
+  summary: TavernRoleplayCardSummary
+): Promise<void> {
   const store = useConversationStore.getState();
   try {
-    const card = await fetchFullCard(summary.path);
+    const card = await fetchFullCardForBootstrap(conversationId, summary.path);
 
     const characterName = card.inChatName || card.name || summary.nameZh || summary.name;
     // SillyTavern macros (`{{user}}` / `{{char}}`) live throughout the card
@@ -253,17 +308,16 @@ async function bootstrapInBackground(
     };
     STORAGE.setJson(`card.${summary.path}`, expandedCard);
 
-    const localizedFirstMes = await translateFirstMes(expandedCard, characterName);
+    const localizedFirstMes = await translateFirstMes(expandedCard, characterName, (partial) => {
+      const renderedPartial = applyTavernMacros(partial, uiCtx);
+      if (renderedPartial.trim().length > 0) {
+        upsertOpeningMessage(conversationId, renderedPartial, true);
+      }
+    });
     const renderedFirstMes = applyTavernMacros(localizedFirstMes, uiCtx);
 
     if (renderedFirstMes.trim().length > 0) {
-      store.setMessages(conversationId, () => [
-        {
-          id: `tavern-roleplay-firstmes-${conversationId}`,
-          role: "agent",
-          text: renderedFirstMes
-        }
-      ]);
+      upsertOpeningMessage(conversationId, renderedFirstMes, false);
       store.touch(conversationId, renderedFirstMes.slice(0, 120));
     }
 
@@ -282,24 +336,152 @@ async function bootstrapInBackground(
 
 type PartialFetchedCard = FetchedCard;
 
-const tavernRoleplayOutboundBuilder: OutboundMessageBuilder = async ({ conversation, visibleText }) => {
-  const state = STORAGE.getJson<{ cardPath: string; bootstrapped: boolean }>(`session.${conversation.id}`);
+function upsertOpeningMessage(
+  conversationId: string,
+  text: string,
+  streaming: boolean
+): void {
+  const messageId = `tavern-roleplay-firstmes-${conversationId}`;
+  useConversationStore.getState().setMessages(conversationId, (prev) => {
+    const idx = prev.findIndex((message) => message.id === messageId);
+    if (idx < 0) {
+      return [
+        ...prev,
+        {
+          id: messageId,
+          role: "agent",
+          text,
+          streaming
+        }
+      ];
+    }
+    const existing = prev[idx];
+    if (existing === undefined) return prev;
+    const next = [...prev];
+    next[idx] = { ...existing, text, streaming };
+    return next;
+  });
+}
+
+async function fetchFullCardForBootstrap(
+  conversationId: string,
+  path: string
+): Promise<FetchedCard> {
+  const cleanPath = normalizeCharacterTavernPath(path);
+  if (cleanPath.length === 0) throw new Error("角色卡 path 为空");
+
+  try {
+    return await fetchFullCardFromCharacterTavern(cleanPath);
+  } catch (error) {
+    if (__DEV__) {
+      console.warn(
+        "[tavern-roleplay] direct Character Tavern card fetch failed; falling back to OpenClaw:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+    useConversationStore.getState().setBootstrap(conversationId, {
+      status: "loading",
+      hint: "手机直连角色卡失败，正在改用 OpenClaw 拉取。"
+    });
+    return fetchFullCardWithTransportRetry(conversationId, cleanPath);
+  }
+}
+
+async function fetchFullCardFromCharacterTavern(path: string): Promise<FetchedCard> {
+  const cleanPath = normalizeCharacterTavernPath(path);
+  if (cleanPath.length === 0) throw new Error("fetchFullCardFromCharacterTavern: empty path");
+
+  const payload = await fetchJsonWithTimeout(
+    `https://character-tavern.com/api/character/${encodeCharacterTavernPath(cleanPath)}`,
+    CHARACTER_TAVERN_CARD_FETCH_TIMEOUT_MS
+  );
+  if (!isPlainObject(payload)) {
+    throw new Error("Character Tavern 返回的角色卡详情不可用");
+  }
+
+  const card = normalizeCharacterTavernApiCard(payload.card, cleanPath);
+  if (card === null) throw new Error("Character Tavern 未返回可用角色卡");
+  return card;
+}
+
+async function fetchFullCardWithTransportRetry(
+  conversationId: string,
+  path: string
+): Promise<FetchedCard> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= CARD_FETCH_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetchFullCard(path);
+    } catch (error) {
+      lastError = error;
+      if (!isRecoverableTransportError(error) || attempt >= CARD_FETCH_MAX_ATTEMPTS) {
+        throw error;
+      }
+      if (__DEV__) {
+        console.warn(
+          `[tavern-roleplay] card fetch transport error; retrying ${attempt + 1}/${CARD_FETCH_MAX_ATTEMPTS}:`,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+      useConversationStore.getState().setBootstrap(conversationId, {
+        status: "loading",
+        hint: `连接中断，正在重试角色卡加载（${attempt + 1}/${CARD_FETCH_MAX_ATTEMPTS}）…`
+      });
+      await useGatewayStore.getState().reconnectIfPossible({ force: true }).catch(() => false);
+      await sleep(CARD_FETCH_RETRY_DELAYS_MS[attempt - 1] ?? CARD_FETCH_RETRY_DELAYS_MS.at(-1) ?? 1_500);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+function isRecoverableTransportError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /(^|\s)disconnect($|\s)|websocket closed:\s*(1000|1001|1005|1006|1012|1013)\b|ws not open|not connected/i.test(
+    message
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const tavernRoleplayOutboundBuilder: OutboundMessageBuilder = async ({
+  conversation,
+  visibleText,
+  isFirstUserTurn
+}) => {
+  const state = STORAGE.getJson<TavernRoleplaySessionState>(`session.${conversation.id}`);
   if (state === undefined) {
     // Conversation was created outside startTavernRoleplaySession (e.g. legacy
     // record); fall back to host default behaviour.
     return { visibleText, gatewayText: visibleText };
   }
-  if (state.bootstrapped) {
+  if (state.remoteBootstrapped === true) {
     return { visibleText, gatewayText: visibleText };
   }
   const card = STORAGE.getJson<unknown>(`card.${state.cardPath}`);
   if (card === undefined) {
     return { visibleText, gatewayText: visibleText };
   }
-  STORAGE.setJson(`session.${conversation.id}`, { ...state, bootstrapped: true });
+  const markAccepted = (): void => {
+    const latest = STORAGE.getJson<TavernRoleplaySessionState>(`session.${conversation.id}`) ?? state;
+    STORAGE.setJson(`session.${conversation.id}`, {
+      ...latest,
+      bootstrapped: true,
+      remoteBootstrapped: true
+    } satisfies TavernRoleplaySessionState);
+  };
+  if (!isFirstUserTurn) {
+    return {
+      visibleText,
+      gatewayText: visibleText,
+      onSendAccepted: markAccepted
+    };
+  }
   return {
     visibleText,
-    gatewayText: buildBootstrapPrefix(card) + "\n\n" + visibleText
+    gatewayText: buildBootstrapPrefix(card) + "\n\n" + visibleText,
+    onSendAccepted: markAccepted
   };
 };
 
@@ -319,7 +501,7 @@ function buildBootstrapPrefix(card: unknown): string {
 }
 
 const tavernRoleplaySessionRestoreBuilder: SessionRestoreBuilder = (input) => {
-  const state = STORAGE.getJson<{ cardPath: string; bootstrapped: boolean }>(`session.${input.conversation.id}`);
+  const state = STORAGE.getJson<TavernRoleplaySessionState>(`session.${input.conversation.id}`);
   if (state === undefined) return buildDefaultSessionRestoreMessage(input);
 
   const card = STORAGE.getJson<unknown>(`card.${state.cardPath}`);
@@ -345,71 +527,157 @@ const tavernRoleplaySessionRestoreBuilder: SessionRestoreBuilder = (input) => {
   ].join("\n");
 };
 
+function shouldRestoreTavernRoleplaySession(input: {
+  conversation: { id: string };
+}): boolean {
+  const state = STORAGE.getJson<TavernRoleplaySessionState>(`session.${input.conversation.id}`);
+  if (state === undefined) return false;
+  if (state.remoteBootstrapped === true) return false;
+  return STORAGE.getJson<unknown>(`card.${state.cardPath}`) !== undefined;
+}
+
 async function fetchFullCard(path: string): Promise<FetchedCard> {
-  // V0: KokoChat fetches the Character Tavern detail endpoint directly from
-  // the device. This is fine on the iOS simulator and on networks that can
-  // reach character-tavern.com; in restricted networks the fetch will fail
-  // and the call will surface the error to the user.
-  //
-  // A future iteration should route this through an OpenClaw bin (see
-  // `kokochat-tavern-search/bin/fetch-card.mjs`) so the request goes out from
-  // the Mac instead of the device.
-  const cleanPath = path.trim().replace(/^\/+|\/+$/g, "");
+  const cleanPath = normalizeCharacterTavernPath(path);
   if (cleanPath.length === 0) throw new Error("fetchFullCard: empty path");
-  const url = `https://character-tavern.com/api/character/${cleanPath}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30_000);
-  let payload: { card?: Record<string, unknown> };
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: { accept: "application/json" },
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      throw new Error(`character-tavern HTTP ${response.status}`);
-    }
-    payload = (await response.json()) as { card?: Record<string, unknown> };
-  } finally {
-    clearTimeout(timer);
+
+  const result = await inferOnce({
+    miniAppId: "tavern",
+    prompt: buildFetchCardPrompt(cleanPath),
+    timeoutMs: 180_000
+  });
+  const fenced = extractFencedBlock(result.text, CARD_DETAIL_BLOCK_TYPE);
+  if (fenced === null) {
+    throw new Error("OpenClaw 未返回角色卡详情块");
   }
-  const card = normalizeCharacterTavernDetail(payload?.card);
-  if (card === null) throw new Error("character-tavern detail response missing card");
+  let payload: unknown;
+  try {
+    payload = JSON.parse(fenced.body);
+  } catch (error) {
+    throw new Error(
+      `角色卡详情 JSON 解析失败: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  if (!isPlainObject(payload) || payload.version !== 1) {
+    throw new Error("角色卡详情块版本不正确");
+  }
+  if (typeof payload.error === "string" && payload.error.trim().length > 0) {
+    throw new Error(payload.error.trim());
+  }
+  const card = normalizeFetchedCard(payload.card);
+  if (card === null) throw new Error("OpenClaw 返回的角色卡详情不可用");
   return card;
 }
 
-function normalizeCharacterTavernDetail(raw: unknown): FetchedCard | null {
+function buildFetchCardPrompt(path: string): string {
+  return [
+    "KokoChat Tavern internal card detail fetch request.",
+    "Run the kokochat-tavern-search fetch-card tool for this Character Tavern path.",
+    "Do not recommend other cards. Do not roleplay.",
+    "Return exactly one fenced block tagged koko.tavern.card-detail, with JSON:",
+    '{"version":1,"card":<the normalized card object from fetch-card>}',
+    "No prose outside the fenced block.",
+    "",
+    "Path:",
+    path
+  ].join("\n");
+}
+
+function normalizeFetchedCard(raw: unknown): FetchedCard | null {
   if (raw === null || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const path = stringOr(r.path, "").trim();
   if (path.length === 0) return null;
+  const data = isPlainObject(r.data) ? r.data : {};
   return {
-    source: "character_tavern",
+    source: stringOr(r.source, "character_tavern"),
     id: stringOr(r.id, path),
     path,
-    pageUrl: `https://character-tavern.com/character/${path}`,
-    imageUrl: `https://cards.character-tavern.com/${path}.png`,
+    pageUrl: stringOr(r.pageUrl, `https://character-tavern.com/character/${path}`),
+    imageUrl: stringOr(r.imageUrl, `https://cards.character-tavern.com/${path}.png`),
     name: stringOr(r.name, ""),
     inChatName: stringOr(r.inChatName, "") || stringOr(r.name, ""),
     tagline: stringOr(r.tagline, ""),
-    pageDescription: stringOr(r.description, ""),
+    pageDescription: stringOr(r.pageDescription, ""),
     isNSFW: r.isNSFW === true,
     isOC: r.isOC === true,
     tokenTotal: numberOr(r.tokenTotal, 0),
     data: {
-      name: stringOr(r.inChatName, "") || stringOr(r.name, ""),
-      description: stringOr(r.definition_character_description, ""),
-      personality: stringOr(r.definition_personality, ""),
-      scenario: stringOr(r.definition_scenario, ""),
-      first_mes: stringOr(r.definition_first_message, ""),
-      mes_example: stringOr(r.definition_example_messages, ""),
-      system_prompt: stringOr(r.definition_system_prompt, ""),
-      post_history_instructions: stringOr(r.definition_post_history_prompt, ""),
-      alternate_greetings: arrayOfStrings(r.alternate_greetings),
-      character_book: isPlainObject(r.character_book) ? r.character_book : null,
-      tags: arrayOfStrings(r.tags)
+      name: stringOr(data.name, "") || stringOr(r.inChatName, "") || stringOr(r.name, ""),
+      description: stringOr(data.description, ""),
+      personality: stringOr(data.personality, ""),
+      scenario: stringOr(data.scenario, ""),
+      first_mes: stringOr(data.first_mes, ""),
+      mes_example: stringOr(data.mes_example, ""),
+      system_prompt: stringOr(data.system_prompt, ""),
+      post_history_instructions: stringOr(data.post_history_instructions, ""),
+      alternate_greetings: arrayOfStrings(data.alternate_greetings),
+      character_book: isPlainObject(data.character_book) ? data.character_book : null,
+      tags: arrayOfStrings(data.tags)
     }
   };
+}
+
+function normalizeCharacterTavernApiCard(raw: unknown, requestedPath: string): FetchedCard | null {
+  if (!isPlainObject(raw)) return null;
+  const path = normalizeCharacterTavernPath(stringOr(raw.path, requestedPath));
+  if (path.length === 0) return null;
+  return normalizeFetchedCard({
+    source: "character_tavern",
+    id: stringOr(raw.id, path),
+    path,
+    pageUrl: `https://character-tavern.com/character/${path}`,
+    imageUrl: `https://cards.character-tavern.com/${path}.png`,
+    name: stringOr(raw.name, ""),
+    inChatName: stringOr(raw.inChatName, "") || stringOr(raw.name, ""),
+    tagline: stringOr(raw.tagline, ""),
+    pageDescription: stringOr(raw.description, ""),
+    isNSFW: raw.isNSFW === true,
+    isOC: raw.isOC === true,
+    tokenTotal: numberOr(raw.tokenTotal, 0),
+    data: {
+      name: stringOr(raw.inChatName, "") || stringOr(raw.name, ""),
+      description: stringOr(raw.definition_character_description, ""),
+      personality: stringOr(raw.definition_personality, ""),
+      scenario: stringOr(raw.definition_scenario, ""),
+      first_mes: stringOr(raw.definition_first_message, ""),
+      mes_example: stringOr(raw.definition_example_messages, ""),
+      system_prompt: stringOr(raw.definition_system_prompt, ""),
+      post_history_instructions: stringOr(raw.definition_post_history_prompt, ""),
+      alternate_greetings: arrayOfStrings(raw.alternate_greetings),
+      character_book: isPlainObject(raw.character_book) ? raw.character_book : null,
+      tags: arrayOfStrings(raw.tags)
+    }
+  });
+}
+
+async function fetchJsonWithTimeout(url: string, timeoutMs: number): Promise<unknown> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function normalizeCharacterTavernPath(value: string): string {
+  const withoutQuery =
+    value
+      .trim()
+      .replace(/^https?:\/\/character-tavern\.com\/character\//, "")
+      .split(/[?#]/)[0] ?? "";
+  return withoutQuery
+    .trim()
+    .replace(/^\/+|\/+$/g, "");
+}
+
+function encodeCharacterTavernPath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
 }
 
 function stringOr(value: unknown, fallback: string): string {
@@ -463,7 +731,11 @@ interface FetchedCard {
   };
 }
 
-async function translateFirstMes(card: FetchedCard, characterName: string): Promise<string> {
+async function translateFirstMes(
+  card: FetchedCard,
+  characterName: string,
+  onDelta?: (text: string) => void
+): Promise<string> {
   const original = typeof card.data?.first_mes === "string" ? card.data.first_mes.trim() : "";
   if (original.length === 0) return "";
   if (looksMostlyChinese(original)) return original;
@@ -482,21 +754,25 @@ async function translateFirstMes(card: FetchedCard, characterName: string): Prom
         "原文：",
         original
       ].join("\n"),
-      timeoutMs: 300_000
+      timeoutMs: 300_000,
+      ...(onDelta !== undefined
+        ? {
+            onDelta: (event) => {
+              if (event.text.trim().length > 0) onDelta(event.text);
+            }
+          }
+        : {})
     });
     const translated = result.text.trim();
     return translated.length > 0 ? translated : original;
   } catch (error) {
-    if (isRecoverableTransportError(error)) {
-      if (__DEV__) {
-        console.warn(
-          "[tavern-roleplay] first_mes translation transport failed; falling back to original:",
-          error instanceof Error ? error.message : String(error)
-        );
-      }
-      return original;
+    if (__DEV__) {
+      console.warn(
+        "[tavern-roleplay] first_mes translation failed; falling back to original:",
+        error instanceof Error ? error.message : String(error)
+      );
     }
-    throw error;
+    return original;
   }
 }
 
@@ -504,11 +780,6 @@ function looksMostlyChinese(text: string): boolean {
   const cjk = (text.match(/[\u3400-\u9fff\uf900-\ufaff]/g) ?? []).length;
   const letters = (text.match(/[A-Za-z]/g) ?? []).length;
   return cjk > 0 && cjk >= letters * 0.2;
-}
-
-function isRecoverableTransportError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /(^|\s)disconnect($|\s)|websocket closed:\s*(1000|1001|1005|1006|1012|1013)\b|ws not open|not connected/i.test(message);
 }
 
 function slug(value: string): string {
@@ -536,4 +807,6 @@ export function registerTavernRoleplayMiniApp(): void {
 
   registerOutboundMessageBuilder(MINI_APP_ID, tavernRoleplayOutboundBuilder);
   registerSessionRestoreBuilder(MINI_APP_ID, tavernRoleplaySessionRestoreBuilder);
+  registerRemoteSessionRestoreDecider(MINI_APP_ID, shouldRestoreTavernRoleplaySession);
+  registerBootstrapRetryHandler(MINI_APP_ID, retryTavernRoleplayBootstrap);
 }

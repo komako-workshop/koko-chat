@@ -114,6 +114,60 @@ interface CourseScrollSnapshot {
 const NEAR_BOTTOM_THRESHOLD_PX = 64;
 const courseScrollSnapshots = new Map<string, CourseScrollSnapshot>();
 
+function buildBootstrapKickoffVisibleText(
+  record: DeeplyCourseSessionRecord
+): string | null {
+  if (record.kind === "library") {
+    const lib = record.libraryInput;
+    if (lib === undefined || lib.title.length === 0) return null;
+    return buildBookCandidateChosenVisibleText({
+      title: lib.title,
+      author: lib.author,
+      subject: lib.hook.length > 0 ? lib.hook : lib.category
+    });
+  }
+  if (record.kind === "material") {
+    const label = record.materialInput?.label;
+    if (label === undefined || label.trim().length === 0) return null;
+    return buildMaterialKickoffVisibleText({
+      label,
+      sections: record.sections
+    });
+  }
+  if (record.kind === "book") {
+    const book = record.bookInput;
+    if (book === undefined || book.title.trim().length === 0) return null;
+    return buildBookKickoffVisibleText({
+      title: book.title,
+      ...(book.author !== undefined ? { author: book.author } : {}),
+      ...(book.edition !== undefined ? { edition: book.edition } : {}),
+      sections: record.sections
+    });
+  }
+  if (record.kind === "research") {
+    const topic = record.researchTopic;
+    if (topic === undefined || topic.trim().length === 0) return null;
+    return buildResearchKickoffVisibleText({
+      topic,
+      sections: record.sections
+    });
+  }
+  return null;
+}
+
+function retryBootstrapHint(record: DeeplyCourseSessionRecord): string {
+  if (record.kind === "research") {
+    return "正在重新启动调研任务,通常需要 3-10 分钟。";
+  }
+  if (record.kind === "book" || record.kind === "library") {
+    return "正在重新确认书目并准备目录。";
+  }
+  if (record.kind === "material") {
+    return "正在重新读取链接资料并准备目录。";
+  }
+  return "正在重新为你定课程目录,稍等一下。";
+}
+
 function saveCourseScrollSnapshot(
   conversationId: string | null,
   snapshot: CourseScrollSnapshot
@@ -541,7 +595,10 @@ export function DeeplyCourseScreen({
   const canSend = !inputLocked && draft.trim().length > 0;
   const canContinue = !inputLocked && expectedNextSection > 0 && expectedNextSection <= totalSections;
 
-  const dispatch = useCallback(async (text: string) => {
+  const dispatch = useCallback(async (
+    text: string,
+    options?: { bootstrapKickoff?: boolean }
+  ) => {
     if (conversationId === null) return;
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
@@ -550,6 +607,12 @@ export function DeeplyCourseScreen({
       await sendUserMessage(conversationId, trimmed);
     } catch (error) {
       console.error("[deeply-course] send failed", error);
+      if (options?.bootstrapKickoff === true) {
+        useConversationStore.getState().setBootstrap(conversationId, {
+          status: "error",
+          error: `课程准备请求发送失败:${error instanceof Error ? error.message : String(error)}`
+        });
+      }
     } finally {
       setSending(false);
     }
@@ -575,63 +638,10 @@ export function DeeplyCourseScreen({
     if (messages.length > 0) return;
     if (researchKickoffFiredRef.current) return;
 
-    if (record.kind === "library") {
-      // 预置课程库:metadata 已经精确,直接走 book Phase B(outline 生成)
-      // → dispatch 一条"我选《XX》(作者 · 主题)"的 visible text,outbound
-      // builder 的 chosen path 会路由到 buildBookOutlinePrompt。
-      const lib = record.libraryInput;
-      if (lib === undefined || lib.title.length === 0) return;
-      researchKickoffFiredRef.current = true;
-      void dispatch(
-        buildBookCandidateChosenVisibleText({
-          title: lib.title,
-          author: lib.author,
-          subject: lib.hook.length > 0 ? lib.hook : lib.category
-        })
-      );
-      return;
-    }
-
-    if (record.kind === "material") {
-      const label = record.materialInput?.label;
-      if (label === undefined || label.trim().length === 0) return;
-      researchKickoffFiredRef.current = true;
-      // 走 dispatch(等价 sendUserMessage,但不再传 attachments — 本地文件
-      // 入口已下线,这条路径只剩纯 URL kickoff)。
-      void dispatch(
-        buildMaterialKickoffVisibleText({
-          label,
-          sections: record.sections
-        })
-      );
-      return;
-    }
-
-    if (record.kind === "book") {
-      const book = record.bookInput;
-      if (book === undefined || book.title.trim().length === 0) return;
-      researchKickoffFiredRef.current = true;
-      void dispatch(
-        buildBookKickoffVisibleText({
-          title: book.title,
-          ...(book.author !== undefined ? { author: book.author } : {}),
-          ...(book.edition !== undefined ? { edition: book.edition } : {}),
-          sections: record.sections
-        })
-      );
-      return;
-    }
-
-    // research:fallback path
-    const topic = record.researchTopic;
-    if (topic === undefined || topic.trim().length === 0) return;
+    const kickoffText = buildBootstrapKickoffVisibleText(record);
+    if (kickoffText === null) return;
     researchKickoffFiredRef.current = true;
-    void dispatch(
-      buildResearchKickoffVisibleText({
-        topic,
-        sections: record.sections
-      })
-    );
+    void dispatch(kickoffText, { bootstrapKickoff: true });
   }, [record, conversationId, isConnected, messages.length, dispatch]);
 
   const archiveConversation = useConversationStore((s) => s.archive);
@@ -640,10 +650,24 @@ export function DeeplyCourseScreen({
     archiveConversation(conversationId);
   }, [archiveConversation, conversationId]);
 
-  const handleRetryOutline = useCallback(() => {
-    if (conversationId === null) return;
-    retryDeeplyCourseOutline(conversationId);
-  }, [conversationId]);
+  const handleRetryBootstrap = useCallback(() => {
+    if (conversationId === null || record === null) return;
+    if (record.kind !== "research" && record.kind !== "material" && record.kind !== "book" && record.kind !== "library") {
+      retryDeeplyCourseOutline(conversationId);
+      return;
+    }
+    const kickoffText = buildBootstrapKickoffVisibleText(record);
+    if (kickoffText === null) return;
+    useConversationStore.getState().setMessages(conversationId, () => []);
+    useConversationStore.getState().setBootstrap(conversationId, {
+      status: "loading",
+      hint: retryBootstrapHint(record)
+    });
+    researchKickoffFiredRef.current = false;
+    if (!isConnected) return;
+    researchKickoffFiredRef.current = true;
+    void dispatch(kickoffText, { bootstrapKickoff: true });
+  }, [conversationId, dispatch, isConnected, record]);
 
   // Sanity check:从 storage 里读到的 sessionKey 跟当前 mode 默认 agent 不一致
   // 时,Gateway 会报 "agent xxx no longer exists" — 通常是 dev 阶段我们改过
@@ -779,7 +803,7 @@ export function DeeplyCourseScreen({
           </View>
           <View style={styles.bannerActionsCol}>
             <Pressable
-              onPress={handleRetryOutline}
+              onPress={handleRetryBootstrap}
               accessibilityRole="button"
               accessibilityLabel="重试生成目录"
               style={({ pressed }) => [

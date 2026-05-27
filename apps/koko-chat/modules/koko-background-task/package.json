@@ -1,0 +1,12 @@
+{
+  "name": "koko-background-task",
+  "version": "0.0.1",
+  "description": "KokoChat iOS background task bridge.",
+  "license": "UNLICENSED",
+  "private": true,
+  "expo-module": "expo-module.config.json",
+  "peerDependencies": {
+    "expo": "*",
+    "expo-modules-core": "*"
+  }
+}

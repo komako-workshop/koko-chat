@@ -32,9 +32,11 @@ import {
 } from "@/runtime/conversationModes";
 import { buildOutboundMessage, isFirstUserTurn } from "@/runtime/outboundMessages";
 import { parseMessageBoundaries } from "@/runtime/messageBoundary";
+import { startBackgroundTask } from "@/runtime/backgroundTasks";
 import {
   buildSessionRestoreMessage,
   hasRestorableLocalHistory,
+  shouldForceSessionRestore,
   wrapGatewayTextWithSessionRestore
 } from "@/runtime/sessionRestore";
 import { useConversationStore, type ChatMessage, type ConversationMeta } from "@/state/conversations";
@@ -56,6 +58,8 @@ const REMOTE_SESSION_HISTORY_TIMEOUT_MS = 8_000;
 const PENDING_SESSION_SYNC_HISTORY_LIMIT = 12;
 const PENDING_SESSION_SYNC_MAX_CHARS = 80_000;
 const PENDING_SESSION_SYNC_TIMEOUT_MS = 8_000;
+const PENDING_SESSION_SYNC_RETRY_MS = 5_000;
+const PENDING_SESSION_SYNC_MAX_RETRIES = 36;
 const FOREGROUND_HEALTH_TIMEOUT_MS = 2_500;
 
 interface GatewayState {
@@ -87,6 +91,7 @@ interface GatewayState {
       attachments?: OpenClawChatAttachment[];
     }
   ) => Promise<void>;
+  retryFailedUserMessage: (conversationId: string, errorMessageId: string) => Promise<void>;
   resetError: () => void;
 }
 
@@ -109,6 +114,9 @@ interface RemoteAssistantCandidate {
 }
 
 let pendingSyncPromise: Promise<void> | null = null;
+let pendingSyncRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingSyncRetriesRemaining = PENDING_SESSION_SYNC_MAX_RETRIES;
+const activeAgentRunBackgroundTasks = new Map<string, Array<() => void>>();
 
 let nextMessageId = 1;
 function newMessageId(): string {
@@ -409,6 +417,24 @@ function collectPendingConversationSyncTargets(): PendingConversationSyncTarget[
     }
   }
   return targets;
+}
+
+function schedulePendingConversationSyncRetry(): void {
+  if (pendingSyncRetryTimer !== null) return;
+  if (pendingSyncRetriesRemaining <= 0) return;
+  pendingSyncRetriesRemaining -= 1;
+  pendingSyncRetryTimer = setTimeout(() => {
+    pendingSyncRetryTimer = null;
+    void useGatewayStore.getState().syncPendingConversations();
+  }, PENDING_SESSION_SYNC_RETRY_MS);
+}
+
+function clearPendingConversationSyncRetry(): void {
+  if (pendingSyncRetryTimer !== null) {
+    clearTimeout(pendingSyncRetryTimer);
+    pendingSyncRetryTimer = null;
+  }
+  pendingSyncRetriesRemaining = PENDING_SESSION_SYNC_MAX_RETRIES;
 }
 
 function findLastPendingAgentIndex(messages: ChatMessage[]): number {
@@ -715,6 +741,11 @@ function applyError(conversationId: string, event: ChatEventPayload): void {
 }
 
 function markAgentRunStarted(conversationId: string): void {
+  const endBackgroundTask = startBackgroundTask(`KokoChat agent reply ${conversationId}`);
+  const backgroundTasks = activeAgentRunBackgroundTasks.get(conversationId) ?? [];
+  backgroundTasks.push(endBackgroundTask);
+  activeAgentRunBackgroundTasks.set(conversationId, backgroundTasks);
+
   useGatewayStore.setState((state) => ({
     activeAgentRuns: {
       ...state.activeAgentRuns,
@@ -724,9 +755,11 @@ function markAgentRunStarted(conversationId: string): void {
 }
 
 function markAgentRunFinished(conversationId: string): void {
+  let shouldEndBackgroundTask = false;
   useGatewayStore.setState((state) => {
     const current = state.activeAgentRuns[conversationId] ?? 0;
     if (current <= 0) return state;
+    shouldEndBackgroundTask = true;
     const next = { ...state.activeAgentRuns };
     if (current === 1) {
       delete next[conversationId];
@@ -735,14 +768,37 @@ function markAgentRunFinished(conversationId: string): void {
     }
     return { activeAgentRuns: next };
   });
+  if (shouldEndBackgroundTask) {
+    endOneAgentRunBackgroundTask(conversationId);
+  }
+}
+
+function endOneAgentRunBackgroundTask(conversationId: string): void {
+  const backgroundTasks = activeAgentRunBackgroundTasks.get(conversationId);
+  const endBackgroundTask = backgroundTasks?.pop();
+  if (backgroundTasks !== undefined && backgroundTasks.length === 0) {
+    activeAgentRunBackgroundTasks.delete(conversationId);
+  }
+  endBackgroundTask?.();
+}
+
+function endAllAgentRunBackgroundTasks(): void {
+  for (const backgroundTasks of activeAgentRunBackgroundTasks.values()) {
+    for (const endBackgroundTask of backgroundTasks) {
+      endBackgroundTask();
+    }
+  }
+  activeAgentRunBackgroundTasks.clear();
 }
 
 async function shouldRestoreRemoteSession({
   client,
+  conversation,
   sessionKey,
   localMessages
 }: {
   client: BrowserGatewayClient;
+  conversation: ConversationMeta;
   sessionKey: string;
   localMessages: ChatMessage[];
 }): Promise<boolean> {
@@ -753,9 +809,25 @@ async function shouldRestoreRemoteSession({
       readRemoteSessionMessages(client, sessionKey),
       REMOTE_SESSION_HISTORY_TIMEOUT_MS
     );
-    return remoteMessages.length === 0;
+    return (
+      remoteMessages.length === 0 ||
+      shouldForceSessionRestore({
+        conversation,
+        localMessages,
+        remoteMessages
+      })
+    );
   } catch (error) {
     if (isMissingRemoteSessionError(error)) return true;
+    if (
+      shouldForceSessionRestore({
+        conversation,
+        localMessages,
+        remoteMessages: null
+      })
+    ) {
+      return true;
+    }
     if (__DEV__) {
       console.warn(
         "[koko] remote session history check failed; skipping restore:",
@@ -858,6 +930,117 @@ function isMissingRemoteSessionError(error: unknown): boolean {
   return /(session|history).*(missing|not found|not exist|unknown)|no such session/i.test(message);
 }
 
+interface DispatchUserMessageInput {
+  conversationId: string;
+  text: string;
+  attachments?: OpenClawChatAttachment[];
+  appendUserMessage: boolean;
+  outboundContextMessages?: ChatMessage[];
+}
+
+async function dispatchUserMessage(
+  get: () => GatewayState,
+  input: DispatchUserMessageInput
+): Promise<void> {
+  const { client } = get();
+  if (client === null) {
+    throw new Error("not connected");
+  }
+  const meta = useConversationStore
+    .getState()
+    .list.find((m) => m.id === input.conversationId);
+  if (meta === undefined) {
+    throw new Error(`unknown conversation: ${input.conversationId}`);
+  }
+  const trimmed = input.text.trim();
+  if (trimmed.length === 0) return;
+
+  const messagesBeforeTurn =
+    input.outboundContextMessages ??
+    useConversationStore.getState().getMessages(input.conversationId);
+  const outbound = await buildOutboundMessage({
+    conversation: meta,
+    visibleText: trimmed,
+    isFirstUserTurn: isFirstUserTurn(messagesBeforeTurn),
+    messagesBeforeTurn
+  });
+  const visibleText = outbound.visibleText.trim();
+  const gatewayText = outbound.gatewayText.trim();
+  if (visibleText.length === 0) return;
+
+  if (input.appendUserMessage) {
+    useConversationStore.getState().setMessages(input.conversationId, (prev) => [
+      ...prev,
+      { id: newMessageId(), role: "user", text: visibleText }
+    ]);
+  }
+  useConversationStore.getState().touch(input.conversationId, visibleText.slice(0, 120));
+
+  if (outbound.localOnly === true) return;
+  if (gatewayText.length === 0) {
+    throw new Error("outbound gatewayText is empty");
+  }
+
+  // Pre-insert a blank streaming placeholder so the chat surface can render the
+  // breathing-pulse animation immediately. The first delta event from the
+  // gateway will claim this row (see applyDelta).
+  const placeholderId = newMessageId();
+  useConversationStore.getState().setMessages(input.conversationId, (prev) => [
+    ...prev,
+    { id: placeholderId, role: "agent", text: "", streaming: true }
+  ]);
+  markAgentRunStarted(input.conversationId);
+
+  const idempotencyKey = `koko-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  try {
+    const needsRestore = await shouldRestoreRemoteSession({
+      client,
+      conversation: meta,
+      sessionKey: meta.sessionKey,
+      localMessages: messagesBeforeTurn
+    });
+    const restoreMessage = needsRestore
+      ? await buildBestEffortSessionRestoreMessage({
+          conversationId: input.conversationId,
+          conversation: meta,
+          messages: messagesBeforeTurn,
+          currentGatewayText: gatewayText
+        })
+      : null;
+    const messageToSend = restoreMessage === null
+      ? gatewayText
+      : wrapGatewayTextWithSessionRestore(restoreMessage, gatewayText);
+    await client.call("chat.send", {
+      sessionKey: meta.sessionKey,
+      message: messageToSend,
+      ...(input.attachments !== undefined && input.attachments.length > 0
+        ? { attachments: input.attachments }
+        : {}),
+      idempotencyKey
+    });
+    await outbound.onSendAccepted?.();
+  } catch (error) {
+    // If chat.send failed before any delta arrived, the placeholder is still
+    // unclaimed (no runId). Surface the error on it so the user gets feedback
+    // instead of a pulse that never stops.
+    useConversationStore.getState().setMessages(input.conversationId, (prev) => {
+      const idx = prev.findIndex((m) => m.id === placeholderId && m.runId === undefined);
+      if (idx < 0) return prev;
+      const existing = prev[idx];
+      if (existing === undefined) return prev;
+      const next = [...prev];
+      next[idx] = {
+        ...existing,
+        streaming: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+      return next;
+    });
+    markAgentRunFinished(input.conversationId);
+    throw error;
+  }
+}
+
 export const useGatewayStore = create<GatewayState>((set, get) => ({
   client: null,
   status: "disconnected",
@@ -882,9 +1065,12 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       ...(storedDeviceToken !== undefined ? { deviceToken: storedDeviceToken } : {}),
       deviceSeed,
       onStatusChange: (status: ConnectionStatus) => {
-        set(status === "disconnected" || status === "error"
-          ? { status, activeAgentRuns: {} }
-          : { status });
+        if (status === "disconnected" || status === "error") {
+          endAllAgentRunBackgroundTasks();
+          set({ status, activeAgentRuns: {} });
+          return;
+        }
+        set({ status });
       },
       onDeviceToken: (deviceToken: string) => {
         saveDeviceToken(deviceToken);
@@ -1011,8 +1197,12 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       if (client === null || status !== "connected") return;
 
       const targets = collectPendingConversationSyncTargets();
-      if (targets.length === 0) return;
+      if (targets.length === 0) {
+        clearPendingConversationSyncRetry();
+        return;
+      }
 
+      let needsRetry = false;
       for (const target of targets) {
         try {
           const remoteMessages = await readRemoteSessionMessages(
@@ -1027,13 +1217,20 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           const assistant = target.localUserText === undefined
             ? findLatestRemoteAssistant(remoteMessages)
             : findRemoteAssistantAfterLocalUser(remoteMessages, target.localUserText);
-          if (assistant === null) continue;
-          applyRecoveredAgentFinal(
+          if (assistant === null) {
+            needsRetry = true;
+            continue;
+          }
+          const applied = applyRecoveredAgentFinal(
             target.conversation.id,
             assistant.runId ?? target.fallbackRunId,
             assistant.text
           );
+          if (!applied) {
+            needsRetry = true;
+          }
         } catch (error) {
+          needsRetry = true;
           if (__DEV__) {
             console.warn(
               `[koko] pending session sync failed for ${target.conversation.id}:`,
@@ -1041,6 +1238,14 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
             );
           }
         }
+      }
+
+      if (collectPendingConversationSyncTargets().length === 0) {
+        clearPendingConversationSyncRetry();
+        return;
+      }
+      if (needsRetry) {
+        schedulePendingConversationSyncRetry();
       }
     })().finally(() => {
       pendingSyncPromise = null;
@@ -1053,6 +1258,8 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     const client = get().client;
     if (client === null) return;
     await client.disconnect();
+    clearPendingConversationSyncRetry();
+    endAllAgentRunBackgroundTasks();
     set({ client: null, status: "disconnected", setup: null });
   },
 
@@ -1066,99 +1273,51 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   },
 
   async sendUserMessage(conversationId, text, options) {
-    const { client } = get();
-    if (client === null) {
-      throw new Error("not connected");
-    }
-    const meta = useConversationStore.getState().list.find((m) => m.id === conversationId);
-    if (meta === undefined) {
-      throw new Error(`unknown conversation: ${conversationId}`);
-    }
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-
-    const messages = useConversationStore.getState().getMessages(conversationId);
-    const outbound = await buildOutboundMessage({
-      conversation: meta,
-      visibleText: trimmed,
-      isFirstUserTurn: isFirstUserTurn(messages)
+    await dispatchUserMessage(get, {
+      conversationId,
+      text,
+      ...(options?.attachments !== undefined ? { attachments: options.attachments } : {}),
+      appendUserMessage: true
     });
-    const visibleText = outbound.visibleText.trim();
-    const gatewayText = outbound.gatewayText.trim();
-    if (visibleText.length === 0) return;
+  },
 
-    useConversationStore.getState().setMessages(conversationId, (prev) => [
-      ...prev,
-      { id: newMessageId(), role: "user", text: visibleText }
-    ]);
-    useConversationStore.getState().touch(conversationId, visibleText.slice(0, 120));
-
-    if (outbound.localOnly === true) return;
-    if (gatewayText.length === 0) {
-      throw new Error("outbound gatewayText is empty");
+  async retryFailedUserMessage(conversationId, errorMessageId) {
+    const messages = useConversationStore.getState().getMessages(conversationId);
+    const errorIndex = messages.findIndex(
+      (message) =>
+        message.id === errorMessageId &&
+        message.role === "agent" &&
+        message.error !== undefined
+    );
+    if (errorIndex < 0) {
+      throw new Error("failed message is no longer retryable");
     }
 
-    // Pre-insert a blank streaming placeholder so the chat surface can
-    // render the breathing-pulse animation immediately. The first delta
-    // event from the gateway will claim this row (see applyDelta).
-    // Particularly noticeable for tavern-roleplay, where the first turn
-    // carries a multi-KB card JSON prefix and the model can take 5-30
-    // seconds before emitting the first token.
-    const placeholderId = newMessageId();
-    useConversationStore.getState().setMessages(conversationId, (prev) => [
-      ...prev,
-      { id: placeholderId, role: "agent", text: "", streaming: true }
-    ]);
-    markAgentRunStarted(conversationId);
-
-    const idempotencyKey = `koko-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    try {
-      const needsRestore = await shouldRestoreRemoteSession({
-        client,
-        sessionKey: meta.sessionKey,
-        localMessages: messages
-      });
-      const restoreMessage = needsRestore
-        ? await buildBestEffortSessionRestoreMessage({
-            conversationId,
-            conversation: meta,
-            messages,
-            currentGatewayText: gatewayText
-          })
-        : null;
-      const messageToSend = restoreMessage === null
-        ? gatewayText
-        : wrapGatewayTextWithSessionRestore(restoreMessage, gatewayText);
-      await client.call("chat.send", {
-        sessionKey: meta.sessionKey,
-        message: messageToSend,
-        ...(options?.attachments !== undefined && options.attachments.length > 0
-          ? { attachments: options.attachments }
-          : {}),
-        idempotencyKey
-      });
-    } catch (error) {
-      // If chat.send failed before any delta arrived, the placeholder is
-      // still unclaimed (no runId). Surface the error on it so the user
-      // gets feedback instead of a pulse that never stops.
-      useConversationStore.getState().setMessages(conversationId, (prev) => {
-        const idx = prev.findIndex(
-          (m) => m.id === placeholderId && m.runId === undefined
-        );
-        if (idx < 0) return prev;
-        const existing = prev[idx];
-        if (existing === undefined) return prev;
-        const next = [...prev];
-        next[idx] = {
-          ...existing,
-          streaming: false,
-          error: error instanceof Error ? error.message : String(error)
-        };
-        return next;
-      });
-      markAgentRunFinished(conversationId);
-      throw error;
+    let userIndex = -1;
+    for (let i = errorIndex - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (message?.role === "user" && message.error === undefined && message.text.trim().length > 0) {
+        userIndex = i;
+        break;
+      }
     }
+    if (userIndex < 0) {
+      throw new Error("could not find the user message to retry");
+    }
+    const userMessage = messages[userIndex];
+    if (userMessage === undefined) {
+      throw new Error("could not find the user message to retry");
+    }
+
+    useConversationStore.getState().setMessages(conversationId, (prev) =>
+      prev.filter((message) => message.id !== errorMessageId)
+    );
+    await dispatchUserMessage(get, {
+      conversationId,
+      text: userMessage.text,
+      appendUserMessage: false,
+      outboundContextMessages: messages.slice(0, userIndex)
+    });
   },
 
   resetError() {
