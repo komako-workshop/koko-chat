@@ -127,6 +127,7 @@ node scripts/install-openclaw-support.mjs
 - 安装 `kokochat-deeply-research` 到 `deeply` agent workspace。
 - 自动把这些 skills 写入对应 agent 的 allowlist。
 - 自动写入 KokoChat 小程序 agent 指令，并给 `tavern` agent 开启必要的 `exec` 工具权限和脚本 allowlist。
+- 如果用户没有配置 `tools.web.search.provider`，默认写入免 key 的 `duckduckgo`，让 Deeply 调研课程不依赖用户自备搜索 API key。
 - 用 `openclaw skills info` 验证这些 skills 能被目标 agent 看见；旧版 OpenClaw CLI 不支持按 agent 查询时会跳过对应验证。
 - 如果脚本刚刚升级了 OpenClaw，会在配置写完后 best-effort 重启 Gateway，让正在运行的服务切到新版本。
 

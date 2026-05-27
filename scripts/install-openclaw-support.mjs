@@ -23,6 +23,7 @@ const openclawHome = resolve(
 const MIN_OPENCLAW_VERSION = "2026.4.15";
 const MIN_OPENCLAW_VERSION_PARTS = [2026, 4, 15];
 const TARGET_OPENCLAW_VERSION = "2026.5.22";
+const DEFAULT_WEB_SEARCH_PROVIDER = "duckduckgo";
 let openclawBin = "openclaw";
 
 const REQUIRED_AGENTS = [
@@ -172,8 +173,8 @@ const AGENT_DEFINITIONS = {
       "",
       "The web research tools available to this agent are:",
       "",
-      "- `web_search` — run a query via the gateway-configured search provider (currently Brave). Args: `{ \"query\": \"<EN keywords>\", \"count\": <1–10> }`. Call 1–3 times per research turn with different angles.",
-      "- `web_fetch` — pull the main content of a specific URL as readable text. Args: `{ \"url\": \"<https://...>\" }`. Use sparingly for high-value pages where the snippet from `web_search` is not enough.",
+      "- `web_search` — run a query via the gateway-configured search provider (defaults to key-free DuckDuckGo unless the user configured another provider). Args: `{ \"query\": \"<EN keywords>\", \"count\": <1–10> }`. Call at most 3 times total per research turn with different angles. Do not batch multiple searches in one assistant turn, and do not pass provider-specific args like `domain_filter`, `date_after`, `freshness`, `country`, `language`, `max_tokens`, or `max_tokens_per_page`.",
+      "- `web_fetch` — pull the main content of a specific URL as readable text. Args: `{ \"url\": \"<https://...>\" }`. Use at most once per preparation turn, only for an http(s) URL returned by a successful `web_search`; never fetch `file://`, skill files, workspace docs, or invented URLs. If it fails, continue from search snippets instead of retrying other URLs.",
       "",
       "Every URL in the final `sources` array MUST come from a real `web_search` / `web_fetch` result — do not invent URLs. If a topic has no good hits, narrate that honestly and cite fewer sources rather than fabricating any.",
       "",
@@ -610,7 +611,14 @@ function installAgentDefinitions(workspaceByAgent) {
     log(`agent instructions ${agentId}: ${target}`);
     if (dryRun) continue;
     mkdirSync(workspace, { recursive: true });
-    upsertManagedBlock(target, `KOKOCHAT:${agentId}`, renderAgentInstructions(agentId, definition, workspace));
+    upsertManagedBlock(
+      target,
+      `KOKOCHAT:${agentId}`,
+      renderAgentInstructions(agentId, definition, workspace),
+      { position: "top" }
+    );
+    installKokoChatIdentityFiles(agentId, workspace);
+    removeDefaultOpenClawBootstrap(agentId, workspace);
   }
 }
 
@@ -626,10 +634,73 @@ function renderAgentInstructions(agentId, definition, workspace) {
       join(workspace, "skills", "kokochat-tavern-search", "bin", "fetch-card.mjs")
     );
   }
-  return instructions;
+  return [
+    "## KokoChat Runtime Contract",
+    "",
+    "This workspace is already initialized for KokoChat mini-app use.",
+    "Do not run the generic OpenClaw first-run / BOOTSTRAP.md identity onboarding flow in KokoChat sessions.",
+    "Do not ask KokoChat users to name you or define your identity; follow the per-turn KokoChat prompt and the mini-app contract below.",
+    "",
+    instructions
+  ].join("\n");
 }
 
-function upsertManagedBlock(path, marker, body) {
+function installKokoChatIdentityFiles(agentId, workspace) {
+  upsertManagedBlock(
+    join(workspace, "IDENTITY.md"),
+    `KOKOCHAT:${agentId}:IDENTITY`,
+    renderKokoChatIdentity(agentId),
+    { position: "top" }
+  );
+  upsertManagedBlock(
+    join(workspace, "USER.md"),
+    `KOKOCHAT:${agentId}:USER`,
+    renderKokoChatUserContext(),
+    { position: "top" }
+  );
+}
+
+function renderKokoChatIdentity(agentId) {
+  return [
+    "## KokoChat Managed Identity",
+    "",
+    `- Name: KokoChat ${agentId} agent`,
+    "- Role: task-specific runtime agent for the KokoChat app",
+    "- Startup state: already initialized; never ask the app user to configure identity",
+    "- Interaction rule: follow KokoChat's injected per-turn prompt"
+  ].join("\n");
+}
+
+function renderKokoChatUserContext() {
+  return [
+    "## KokoChat Managed User Context",
+    "",
+    "- The human is the current KokoChat app user.",
+    "- Treat each app turn as task context supplied by KokoChat.",
+    "- Do not ask the user to initialize this OpenClaw workspace."
+  ].join("\n");
+}
+
+function removeDefaultOpenClawBootstrap(agentId, workspace) {
+  const target = join(workspace, "BOOTSTRAP.md");
+  if (!existsSync(target)) return;
+  const body = readFileSync(target, "utf8");
+  if (!isDefaultOpenClawBootstrap(body)) {
+    log(`bootstrap ${agentId}: kept custom BOOTSTRAP.md`);
+    return;
+  }
+  rmSync(target, { force: true });
+  log(`bootstrap ${agentId}: removed default OpenClaw first-run BOOTSTRAP.md`);
+}
+
+function isDefaultOpenClawBootstrap(body) {
+  return (
+    body.includes("# BOOTSTRAP.md - Hello, World") &&
+    body.includes("Who am I? Who are you?")
+  );
+}
+
+function upsertManagedBlock(path, marker, body, options = {}) {
   const start = `<!-- ${marker}:BEGIN -->`;
   const end = `<!-- ${marker}:END -->`;
   const block = `${start}\n${body.trim()}\n${end}`;
@@ -637,6 +708,8 @@ function upsertManagedBlock(path, marker, body) {
   const pattern = new RegExp(`${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}`, "m");
   const next = pattern.test(existing)
     ? existing.replace(pattern, block)
+    : options.position === "top"
+      ? `${block}${existing.length > 0 ? `\n\n${existing}` : ""}`
     : `${existing}${existing.length > 0 ? "\n\n" : ""}${block}`;
   writeFileSync(path, `${next}\n`);
 }
@@ -657,6 +730,8 @@ function configureAgentOpenClawConfig(installed) {
   if (dryRun) return;
 
   const config = readJsonObject(configPath);
+  ensureDefaultWebSearchProvider(config);
+
   const agents = isRecord(config.agents) ? config.agents : {};
   config.agents = agents;
   const list = Array.isArray(agents.list) ? agents.list : [];
@@ -736,6 +811,24 @@ function readJsonObject(path) {
     throw new Error(`${path} must contain a JSON object`);
   }
   return parsed;
+}
+
+function ensureDefaultWebSearchProvider(config) {
+  const tools = isRecord(config.tools) ? config.tools : {};
+  config.tools = tools;
+  const web = isRecord(tools.web) ? tools.web : {};
+  tools.web = web;
+  const search = isRecord(web.search) ? web.search : {};
+  web.search = search;
+
+  const provider = typeof search.provider === "string" ? search.provider.trim() : "";
+  if (provider.length > 0) {
+    log(`web_search provider: keep existing ${provider}`);
+    return;
+  }
+
+  search.provider = DEFAULT_WEB_SEARCH_PROVIDER;
+  log(`web_search provider: default ${DEFAULT_WEB_SEARCH_PROVIDER} (key-free)`);
 }
 
 function ensureAgentConfigEntry(list, agentId) {

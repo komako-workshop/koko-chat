@@ -91,10 +91,12 @@ export function isDeeplyResearchOutlineStream(text: string): boolean {
  * 课程目录的最小信息(outlineMarkdown 或 sections),就算成功**,
  * 其它字段缺就用合理 fallback。
  *
- * - title alias: `courseTitle` | `title` | `name`
- * - introduction alias: `introduction` | `intro` | `summary` | `description`,
+ * - title alias: `courseTitle` | `course_title` | `title` | `name`
+ * - introduction alias: `introduction` | `courseSummary` | `course_summary`
+ *   | `intro` | `summary` | `description`,
  *   缺就空字符串(EmptyState 显示稍简陋,但课程能跑)
- * - outlineMarkdown alias: `outlineMarkdown` | `markdown` | `outline`
+ * - outlineMarkdown alias: `outlineMarkdown` | `outline_markdown`
+ *   | `markdown` | `outline`
  * - sections optional;缺就从 outlineMarkdown 重 parse;再缺才报错
  * - sources alias: `sources` | `citations` | `references`,缺就 []
  *   (mainline prompt 没 sources block,讲解时不强制 cite,行为退回到普通课程)
@@ -120,6 +122,7 @@ export function parseDeeplyResearchOutline(assistantText: string): ParseResult {
 
   const courseTitle =
     trimString(raw.courseTitle) ||
+    trimString(raw.course_title) ||
     trimString(raw.title) ||
     trimString(raw.name);
   if (courseTitle.length === 0) {
@@ -128,6 +131,8 @@ export function parseDeeplyResearchOutline(assistantText: string): ParseResult {
 
   const introductionRaw =
     trimString(raw.introduction) ||
+    trimString(raw.courseSummary) ||
+    trimString(raw.course_summary) ||
     trimString(raw.intro) ||
     trimString(raw.summary) ||
     trimString(raw.description);
@@ -135,6 +140,7 @@ export function parseDeeplyResearchOutline(assistantText: string): ParseResult {
 
   const outlineMarkdown = (
     trimString(raw.outlineMarkdown) ||
+    trimString(raw.outline_markdown) ||
     trimString(raw.markdown) ||
     trimString(raw.outline)
   ).trim();
@@ -222,6 +228,17 @@ export function parseDeeplyResearchOutline(assistantText: string): ParseResult {
     unionSources.push(src);
   }
 
+  // Research / material / book courses are only useful if they carry at least
+  // one verified source pointer. If search is blocked and the agent emits an
+  // empty-sources outline, fail parsing so the UI can surface a retry state
+  // instead of creating a course that looks researched but cannot cite anything.
+  if (unionSources.length === 0) {
+    return {
+      ok: false,
+      error: "没有拿到任何可验证来源 URL;已拒绝创建空来源调研课程"
+    };
+  }
+
   return {
     ok: true,
     value: {
@@ -244,11 +261,25 @@ function collectSectionsLoose(rawSections: unknown[]): DeeplyResearchSection[] {
       trimString(item.title) || trimString(item.name) || trimString(item.heading)
     );
     if (title.length === 0) continue;
-    const rawIndex = typeof item.index === "number" ? Math.trunc(item.index) : NaN;
+    const rawIndex = typeof item.index === "number"
+      ? Math.trunc(item.index)
+      : typeof item.section === "number"
+        ? Math.trunc(item.section)
+        : NaN;
     // index 缺 / 不合法时按 1-based 顺序回填,而不是丢弃这条 section。
     const index = Number.isFinite(rawIndex) && rawIndex > 0 ? rawIndex : i + 1;
     const sources = collectSourcesLoose(
-      Array.isArray(item.sources) ? item.sources : []
+      Array.isArray(item.sources)
+        ? item.sources
+        : Array.isArray(item.sourcePointers)
+          ? item.sourcePointers
+          : Array.isArray(item.source_pointers)
+            ? item.source_pointers
+            : Array.isArray(item.citations)
+              ? item.citations
+              : Array.isArray(item.references)
+                ? item.references
+                : []
     );
     out.push({
       index,
@@ -283,7 +314,9 @@ function collectSourcesLoose(rawSources: unknown[]): DeeplyResearchSource[] {
     const snippet = (
       trimString(item.snippet) ||
       trimString(item.summary) ||
-      trimString(item.description)
+      trimString(item.description) ||
+      trimString(item.relevance) ||
+      trimString(item.why_it_matters)
     ).slice(0, MAX_SNIPPET_CHARS);
     out.push({ title, url, stance, snippet });
     if (out.length >= MAX_SOURCES) break;

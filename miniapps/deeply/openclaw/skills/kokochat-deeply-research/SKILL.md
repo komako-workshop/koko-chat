@@ -44,7 +44,9 @@ the deeply agent):
 
 ### `web_search`
 
-Run a web search via the gateway's configured provider (currently Brave).
+Run a web search via the gateway's configured provider. KokoChat's installer
+defaults this to key-free DuckDuckGo when the user has not configured another
+provider.
 Returns title / url / snippet for each result.
 
 Arguments:
@@ -54,8 +56,15 @@ Arguments:
 - `count` (optional, int 1–10): how many results to ask for. Default ~5;
   pick higher when scoping broadly, lower for targeted lookups.
 
-Call this 1–3 times per turn with different angles (e.g. first the canonical
-view, then the critique, then a domain-specific deep cut).
+Call this **at most 3 times total per turn** with different angles (e.g. first
+the canonical view, then the critique, then a domain-specific deep cut). Do not
+batch multiple `web_search` calls in one assistant turn. DuckDuckGo is key-free
+but anti-bot sensitive; high-volume or domain-limited bursts can trigger
+challenge pages.
+
+Pass only `{ "query": "...", "count": N }`. Do not pass provider-specific or
+unsupported parameters such as `domain_filter`, `date_after`, `date_before`,
+`freshness`, `country`, `language`, `max_tokens`, or `max_tokens_per_page`.
 
 ### `web_fetch`
 
@@ -66,6 +75,13 @@ something specific. Don't fetch everything — that's wasteful and slow.
 Arguments:
 
 - `url` (required, string): the URL to fetch.
+
+Use **at most 1 `web_fetch`** in this preparation turn. Only fetch an `http://`
+or `https://` URL that came from a successful `web_search` result. Never use
+`web_fetch` for local files, `file://` URLs, skill files, docs in the workspace,
+or URLs you invented yourself. If fetch fails once (network block,
+private-IP guard, challenge, timeout), do not retry other URLs; continue from
+the search snippets you already have.
 
 ## Narration Pattern (Required)
 
@@ -165,8 +181,12 @@ Field rules (**所有字段都不能省略**):
 ## Strict Constraints
 
 - 必须 narration:开场 + 每次 tool 调用之间 + 综合 都有一段中文 prose。每段末尾打 `〔KP〕` sentinel。
+- `web_search` 总次数最多 3 次,不要并发批量搜索;每次只传 `query` 和 `count`。如果 DuckDuckGo 返回 bot-detection challenge,立刻停止继续搜索,基于已经成功的结果收束。
+- `web_fetch` 最多 1 次,且只能 fetch 成功 `web_search` 返回的 http(s) URL;不要 fetch `file://`、skill 文件或 workspace 文档。如果失败,不要继续 fetch 其它 URL。
 - 必须 fenced block:最后一段是 ` ```koko.deeply.research.outline `,合法 JSON,不要 trailing comma、不要单引号、不要 JS 注释。
 - fenced block 之后**不要再写任何文字**。
+- JSON 字段名必须严格使用 camelCase: `version`, `courseTitle`, `introduction`, `sections`, `outlineMarkdown`。不要输出旧 schema / snake_case 字段,例如 `course_title`, `course_summary`, `suggested_course_flow`。
 - **url 必须来自 web_search / web_fetch 实际返回**,不要编造、不要 cite 不存在的页面。
 - **不要在这一轮把任何一节的内容讲透** —— 你只是在为讲解阶段做素材准备。
+- 不要输出讲解型字段,例如 `learning_goals`, `key_points`, `case_studies`, `discussion_questions`, `risk_framework`。每节只要 `index`, `title`, `sources`。
 - 不要在 prose 里出现 ` ``` ` 三反引号(避免触发 markdown 代码块,挤压排版)。

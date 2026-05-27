@@ -335,9 +335,12 @@ function transformDeeplyCourseAgentResponse({
 
   if (!parsed.ok) {
     console.warn("[deeply-course] research outline parse failed:", parsed.error);
+    const noVerifiedSources = parsed.error.includes("可验证来源");
     useConversationStore.getState().setBootstrap(conversation.id, {
       status: "error",
-      error: `调研结果格式没能解析:${truncate(parsed.error, 120)}`
+      error: noVerifiedSources
+        ? "这次搜索没有拿到可验证来源,请稍后重试或换一个资料链接"
+        : `调研结果格式没能解析:${truncate(parsed.error, 120)}`
     });
     const messages: ChatMessage[] = [];
     if (prose.length > 0) {
@@ -352,14 +355,16 @@ function transformDeeplyCourseAgentResponse({
     messages.push({
       id: `${runId}-error`,
       role: "agent",
-      text: `🚫 调研结果格式没能解析(${truncate(parsed.error, 80)})。
+      text: noVerifiedSources
+        ? "🚫 这次搜索没有拿到可验证来源,我没有创建这门调研课。可以稍后重试,或换成「基于一个链接」从可靠资料开始。"
+        : `🚫 调研结果格式没能解析(${truncate(parsed.error, 80)})。
 你可以右上角归档这门课,然后回 Deeply 探索重新开一个 —— 同一题目重发,agent 通常二次就能 produce 正确结构。`,
       runId,
       streaming: false
     } satisfies ChatMessage);
     return {
       messages,
-      preview: "调研结果格式错误"
+      preview: noVerifiedSources ? "搜索没有拿到可验证来源" : "调研结果格式错误"
     };
   }
 

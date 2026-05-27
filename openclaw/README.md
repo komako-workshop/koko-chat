@@ -63,6 +63,10 @@ The installer creates the KokoChat agents if needed and syncs:
 - `miniapps/deeply/openclaw/skills/kokochat-deeply-research` →
   `~/.openclaw/agents/deeply/workspace/skills/kokochat-deeply-research`
 
+If `tools.web.search.provider` is not already configured, the installer sets it
+to key-free `duckduckgo` so Deeply research works for users without search API
+keys. Existing provider choices such as Brave, Tavily, or Exa are preserved.
+
 Sanity-check manually on OpenClaw versions that support `--agent`:
 
 ```bash

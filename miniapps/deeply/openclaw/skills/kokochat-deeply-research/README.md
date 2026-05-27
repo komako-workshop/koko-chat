@@ -7,7 +7,7 @@ becomes the new course.
 
 The skill is **prompt-only** — it has no `bin/`. All search and fetch goes
 through OpenClaw's built-in `web_search` and `web_fetch` tools (configured
-globally via `tools.web.search.provider`, default Brave). The deeply agent
+globally via `tools.web.search.provider`, default DuckDuckGo). The deeply agent
 gets these tools enabled via `alsoAllow: ["web_search", "web_fetch"]` in
 `install-openclaw-support.mjs`.
 
@@ -31,10 +31,11 @@ launchctl kickstart -k "gui/$(id -u)/ai.openclaw.gateway"
 ## Search provider
 
 Web search runs against whatever `tools.web.search.provider` is set to in
-`~/.openclaw/openclaw.json` — the default is **Brave Search**. To change
-the provider (e.g. to Tavily, Exa, etc.), edit that file's `tools.web`
-section per the OpenClaw docs. The skill itself stays neutral; it just
-calls `web_search` and lets the gateway pick the provider.
+`~/.openclaw/openclaw.json` — KokoChat defaults this to key-free
+**DuckDuckGo** when the user has not configured another provider. To change
+the provider (e.g. to Brave, Tavily, Exa, etc.), edit that file's `tools.web`
+section per the OpenClaw docs. The skill itself stays neutral; it just calls
+`web_search` and lets the gateway pick the provider.
 
 If `web_search` returns no results or errors out, the agent is instructed
 to be honest with the user in its narration — it won't hallucinate URLs
