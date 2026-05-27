@@ -2,6 +2,8 @@
 
 > Mini-app-first 的移动 App,容纳多个 AI 小程序和对话 surface。底层蹭用户已经配好的 OpenClaw(Codex / Claude Code 订阅)做能力供给。By Komako.
 
+**下载客户端 → [kokochat.komako.me](https://kokochat.komako.me/)**(iOS TestFlight / Android APK)
+
 ## 这是什么
 
 KokoChat 是基于 OpenClaw 的移动端 agent 开源平台。
