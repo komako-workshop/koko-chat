@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KokoChat 移动端 · 精修版</title>
+  <link rel="icon" type="image/png" href="./assets/app-icon.png" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      background: #F4EFE5;
+      color: #1A1004;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    body {
+      background:
+        radial-gradient(900px 600px at 20% 0%, rgba(255, 180, 80, 0.16), transparent 60%),
+        radial-gradient(700px 500px at 80% 100%, rgba(255, 140, 42, 0.10), transparent 60%),
+        #F4EFE5;
+      min-height: 100vh;
+    }
+    .page-head {
+      max-width: 720px; margin: 0 auto; padding: 56px 32px 16px;
+      text-align: center;
+    }
+    .page-head h1 {
+      font-size: 28px; font-weight: 900; margin: 0 0 10px;
+      letter-spacing: -0.5px;
+    }
+    .page-head p {
+      margin: 0; color: #6B5435; font-size: 14.5px; max-width: 560px;
+      margin-left: auto; margin-right: auto; line-height: 1.6;
+    }
+    .stage {
+      display: flex; justify-content: center;
+      padding: 36px 24px 80px;
+    }
+
+    /* ─── phone frame ─── */
+    .phone {
+      width: 360px; height: 740px;
+      background: #0d0d0d;
+      border-radius: 54px;
+      padding: 14px;
+      box-shadow:
+        0 50px 120px rgba(46, 30, 16, 0.30),
+        0 12px 28px rgba(46, 30, 16, 0.12);
+      position: relative;
+    }
+    .screen {
+      width: 100%; height: 100%;
+      border-radius: 42px;
+      overflow: hidden;
+      position: relative;
+      display: flex; flex-direction: column;
+      background: #FFFFFF;
+    }
+    /* dynamic island simulation */
+    .island {
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      width: 110px; height: 30px; border-radius: 999px;
+      background: #000;
+      z-index: 5;
+    }
+    .statusbar {
+      height: 54px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 30px 0 32px;
+      font-size: 14px; font-weight: 700;
+      flex-shrink: 0;
+      color: #1A1004;
+    }
+    .statusbar .icons {
+      display: inline-flex; gap: 5px; align-items: center; font-size: 11px;
+    }
+    .home-indicator {
+      position: absolute;
+      bottom: 8px; left: 50%; transform: translateX(-50%);
+      width: 130px; height: 5px; border-radius: 99px;
+      background: rgba(0,0,0,0.6);
+      z-index: 5;
+    }
+
+    /* ─── ambient brand wash ─── */
+    .ambient {
+      position: absolute; top: 0; left: 0; right: 0; height: 240px;
+      background:
+        radial-gradient(closest-side at 50% 0%, rgba(255, 167, 66, 0.16), transparent 70%),
+        linear-gradient(180deg, rgba(255, 230, 200, 0.55), rgba(255, 230, 200, 0) 100%);
+      pointer-events: none;
+    }
+
+    /* ─── header ─── */
+    .scr-head {
+      position: relative;
+      padding: 8px 18px 12px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .scr-title {
+      font-size: 28px; font-weight: 800;
+      letter-spacing: -0.5px; color: #1F140A;
+    }
+    .scr-plus {
+      width: 40px; height: 40px;
+      border-radius: 999px;
+      border: none; padding: 0; margin: 0; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #FF8C2A;
+      color: #fff;
+      box-shadow:
+        0 8px 20px rgba(245, 130, 30, 0.35),
+        0 1px 3px rgba(46, 30, 16, 0.10);
+    }
+    .scr-plus svg { width: 18px; height: 18px; display: block; }
+
+    /* ─── rows ─── */
+    .rows {
+      position: relative; z-index: 2;
+      flex: 1; overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .row {
+      padding: 12px 16px;
+      display: flex; gap: 12px; align-items: center;
+      position: relative;
+    }
+    .row + .row::before {
+      content: ""; position: absolute;
+      top: 0; left: 74px; right: 16px; height: 1px;
+      background: #F1E7D0;
+    }
+    .row--pinned {
+      background: linear-gradient(90deg, #FFF1DA, #FFFAEC);
+    }
+    .row--pinned + .row::before { left: 16px; right: 16px; }
+
+    .row__avatar {
+      width: 46px; height: 46px; border-radius: 12px;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-size: 16px; font-weight: 800; color: #fff;
+      overflow: hidden;
+    }
+    .row__avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .row__body { flex: 1; min-width: 0; }
+    .row__line1 {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    }
+    .row__title {
+      font-size: 15.5px; font-weight: 700;
+      color: #1F140A;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .row__time { font-size: 11.5px; color: #A89274; flex-shrink: 0; }
+    .row__preview {
+      font-size: 13px; color: #7A6248; margin-top: 3px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* avatar colour palette — KokoChat 现状色板,克制不糖果 */
+    .row__avatar--koko    { background: #FF8C2A; }
+    .row__avatar--tavern  { background: #6B5648; }
+    .row__avatar--deeply1 { background: #4A4E70; }
+    .row__avatar--deeply2 { background: #5C4470; }
+    .row__avatar--explore { background: #84612D; }
+
+    /* ─── tab bar ─── */
+    .tab {
+      position: relative; z-index: 2;
+      height: 70px;
+      display: flex; align-items: center; justify-content: space-around;
+      padding: 8px 0 16px;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid #ECE5D2;
+    }
+    .tab__item {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      font-size: 10.5px; font-weight: 600; letter-spacing: 0.2px;
+    }
+    .tab__icon {
+      width: 24px; height: 24px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .tab__icon svg { width: 22px; height: 22px; }
+    .tab__item--active { color: #FF8C2A; }
+    .tab__item--mute { color: #A89274; }
+
+    /* ─── caption under phone ─── */
+    .caption {
+      max-width: 360px; margin: 32px auto 0;
+      text-align: center; font-size: 13px; color: #6B5435; line-height: 1.6;
+    }
+    .caption b { color: #1F140A; }
+
+  </style>
+</head>
+<body>
+
+  <header class="page-head">
+    <h1>KokoChat 移动端 · 精修版</h1>
+    <p>
+      去掉所有装饰元素(sticker / 小金星 / 头像旋转 / 黑边粗阴影 / 糖果色块 / 竖条 / 倾斜),
+      只保留两条品牌动作:**顶部暖橙 ambient 渐变** + **暖橙圆形 + 按钮**。
+      其余完全遵循 iOS Messages / Things 3 这类成熟聊天列表的 UI 常识。
+    </p>
+  </header>
+
+  <div class="stage">
+    <div class="phone">
+      <div class="screen">
+
+        <!-- background brand wash -->
+        <div class="ambient"></div>
+
+        <!-- dynamic island + status bar -->
+        <div class="island"></div>
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="icons">5G&nbsp;·&nbsp;100%</span>
+        </div>
+
+        <!-- title + plus -->
+        <div class="scr-head">
+          <div class="scr-title">KokoChat</div>
+          <button class="scr-plus" aria-label="新建会话">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- list -->
+        <div class="rows">
+          <div class="row row--pinned">
+            <div class="row__avatar row__avatar--koko"><img src="./assets/app-icon.png" alt=""></div>
+            <div class="row__body">
+              <div class="row__line1"><span class="row__title">Koko 知识助手</span><span class="row__time">13:42</span></div>
+              <div class="row__preview">如果你看完《赤裸裸的统计学》还想再读一本…</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row__avatar row__avatar--tavern">月</div>
+            <div class="row__body">
+              <div class="row__line1"><span class="row__title">月城 Mona</span><span class="row__time">12:31</span></div>
+              <div class="row__preview">*早晨办公室还有些空,你刚走进来…*</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row__avatar row__avatar--deeply1">人</div>
+            <div class="row__body">
+              <div class="row__line1"><span class="row__title">Sapiens · 人类简史</span><span class="row__time">昨天</span></div>
+              <div class="row__preview">第 3 节讲完了。要继续讲第 4 节"农业革命的代价"吗?</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row__avatar row__avatar--deeply2">思</div>
+            <div class="row__body">
+              <div class="row__line1"><span class="row__title">思考的快与慢 · 卡尼曼</span><span class="row__time">周一</span></div>
+              <div class="row__preview">课程库 · 正在准备</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row__avatar row__avatar--explore">D</div>
+            <div class="row__body">
+              <div class="row__line1"><span class="row__title">Deeply 知识探索</span><span class="row__time">10/24</span></div>
+              <div class="row__preview">陪你引经据典地聊一聊</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- tab bar -->
+        <div class="tab">
+          <div class="tab__item tab__item--active">
+            <div class="tab__icon">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 2-2Z"/></svg>
+            </div>
+            <span>会话</span>
+          </div>
+          <div class="tab__item tab__item--mute">
+            <div class="tab__icon">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.31 0-8 1.67-8 5v2h16v-2c0-3.33-4.69-5-8-5Z"/></svg>
+            </div>
+            <span>我</span>
+          </div>
+        </div>
+
+        <div class="home-indicator"></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption">
+    <b>只动了两处</b>:顶部一道几乎察觉不到的暖橙 ambient(下滑后消失),
+    以及 <b>+ 按钮</b> 用 brand 主色实心圆 + 柔阴影。
+    置顶行用 KokoChat 既有的 <code>surfaceSoft</code> 淡橙 wash 标识——
+    这是功能性(置顶提示),不是装饰。
+  </p>
+
+</body>
+</html>

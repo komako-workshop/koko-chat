@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KokoChat — Concepts</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 56px 32px; background: #F7F4ED; color: #1A1004;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+      font-size: 15px; line-height: 1.55;
+    }
+    h1 { font-size: 28px; margin: 0 0 8px; }
+    .sub { color: #6B5435; margin: 0 0 36px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 18px; max-width: 1080px; }
+    .card { background: #fff; border-radius: 14px; padding: 22px;
+      border: 1px solid #E3D8BF; transition: transform 0.15s, box-shadow 0.15s; }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(46,30,16,0.08); }
+    .card a { color: #E69228; text-decoration: none; font-weight: 700; font-size: 18px; }
+    .card a:hover { text-decoration: underline; }
+    .card .label { font-size: 12px; letter-spacing: 1.5px; color: #A89274;
+      text-transform: uppercase; margin-bottom: 8px; }
+    .card p { color: #6B5435; margin: 8px 0 0; font-size: 14px; }
+    .swatches { display: flex; gap: 6px; margin-top: 14px; }
+    .swatch { width: 22px; height: 22px; border-radius: 6px; border: 1px solid #00000010; }
+  </style>
+</head>
+<body>
+  <h1>KokoChat 下载页 · 三个概念设计</h1>
+  <p class="sub">点开任意一个看完整页面。当前线上版本是更克制的中间路线。</p>
+  <div class="grid">
+    <div class="card">
+      <div class="label">Option A</div>
+      <a href="./a-playful.html">Playful · 玩具感</a>
+      <p>大鸭子 + sticker 飘动装饰 + 圆胖大字 + neo-brutalism 黑边粗阴影按钮。最强品牌温度,适合社区/二次元向。</p>
+      <div class="swatches">
+        <div class="swatch" style="background:#FFF6E5"></div>
+        <div class="swatch" style="background:#FFEDC8"></div>
+        <div class="swatch" style="background:#FF8C2A"></div>
+        <div class="swatch" style="background:#1A1004"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Option B</div>
+      <a href="./b-terminal.html">Terminal · 极客感</a>
+      <p>黑底 + 等宽字 + 伪命令行 hero + 终端样式按钮。适合开发者/OpenClaw 圈,信号强:"这是 hacker 工具,不是 chatGPT 又一个壳"。</p>
+      <div class="swatches">
+        <div class="swatch" style="background:#0B0907"></div>
+        <div class="swatch" style="background:#1A130D"></div>
+        <div class="swatch" style="background:#F5A742"></div>
+        <div class="swatch" style="background:#56B07C"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Option C</div>
+      <a href="./c-editorial.html">Editorial · 杂志感</a>
+      <p>大衬线 + 报头 vol/issue 标识 + 两栏图文 + 厚轮廓按钮。最像"严肃产品",未来加 changelog/blog 顺手就有版面。</p>
+      <div class="swatches">
+        <div class="swatch" style="background:#FAF7F1"></div>
+        <div class="swatch" style="background:#FFFFFF"></div>
+        <div class="swatch" style="background:#B5532A"></div>
+        <div class="swatch" style="background:#0A0A08"></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

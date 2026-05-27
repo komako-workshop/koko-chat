@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>KokoChat — Concept C · Editorial</title>
+  <link rel="icon" type="image/png" href="./assets/app-icon.png" />
+  <style>
+    :root {
+      --bg: #FAF7F1;
+      --paper: #FFFFFF;
+      --ink: #0A0A08;
+      --ink-2: #2B2A26;
+      --ink-secondary: #6B6760;
+      --ink-muted: #A6A097;
+      --accent: #B5532A;
+      --accent-soft: #E8C9B5;
+      --rule: #D5CFC1;
+      --rule-strong: #1A1A18;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+      font-family: "Charter", "Iowan Old Style", "Source Serif Pro", "Georgia",
+        "PingFang SC", "Songti SC", serif;
+      font-size: 17px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    a { color: var(--accent); text-decoration: none;
+        border-bottom: 1px solid var(--accent-soft); }
+    a:hover { border-bottom-color: var(--accent); }
+
+    /* sans utility */
+    .sans { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue",
+      "PingFang SC", "Hiragino Sans GB", sans-serif; }
+
+    .container { max-width: 1080px; margin: 0 auto; padding: 0 40px; }
+
+    /* masthead */
+    .masthead {
+      border-bottom: 1px solid var(--rule-strong);
+      padding: 22px 0 16px;
+    }
+    .masthead-row {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 24px; flex-wrap: wrap;
+    }
+    .masthead-left {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--ink-secondary);
+    }
+    .masthead-left b { color: var(--ink); }
+    .masthead-right {
+      display: flex; gap: 22px; font-family: -apple-system, BlinkMacSystemFont,
+        "Helvetica Neue", sans-serif; font-size: 12.5px;
+      letter-spacing: 0.6px;
+    }
+    .masthead-right a {
+      color: var(--ink-secondary); border-bottom: none;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .masthead-right a:hover { color: var(--accent); }
+    .masthead-right svg { width: 14px; height: 14px; }
+    .masthead-title {
+      font-size: 56px; font-weight: 700; letter-spacing: -1.2px;
+      margin: 18px 0 0; line-height: 1; color: var(--ink);
+    }
+    .masthead-title em { font-style: italic; color: var(--accent); }
+
+    /* hero / cover story */
+    .cover {
+      padding: 80px 0 64px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 48px;
+      border-bottom: 1px solid var(--rule);
+    }
+    @media (min-width: 920px) {
+      .cover { grid-template-columns: 1.4fr 1fr; gap: 64px; align-items: center; }
+    }
+
+    .cover__kicker {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--accent); font-weight: 700; margin: 0 0 18px;
+    }
+    .cover__kicker .sep { color: var(--ink-muted); margin: 0 10px; }
+    .cover h1 {
+      font-size: 64px; line-height: 1.06; letter-spacing: -1.4px;
+      font-weight: 700; margin: 0 0 28px; color: var(--ink);
+    }
+    .cover h1 em { font-style: italic; color: var(--accent); }
+    .cover__deck {
+      font-size: 19px; color: var(--ink-2); line-height: 1.65;
+      margin: 0 0 32px; max-width: 560px;
+    }
+
+    .cover__cta { display: flex; gap: 14px; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 14px 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      font-size: 14.5px; font-weight: 600; letter-spacing: 0.2px;
+      border-radius: 4px;
+      transition: transform 0.12s ease, background 0.15s ease;
+      border-bottom: none;
+    }
+    .btn--filled {
+      background: var(--ink); color: var(--bg);
+    }
+    .btn--filled:hover { background: var(--accent); color: var(--bg);
+      border-bottom: none; transform: translateY(-1px); }
+    .btn--bordered {
+      background: transparent; color: var(--ink);
+      border: 1px solid var(--rule-strong);
+    }
+    .btn--bordered:hover { background: var(--ink); color: var(--bg);
+      border-bottom: 1px solid var(--ink); transform: translateY(-1px); }
+    .btn svg { width: 16px; height: 16px; }
+
+    .cover__note {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      font-size: 13px; color: var(--ink-muted); margin: 20px 0 0;
+    }
+
+    /* art block on right */
+    .cover__art {
+      position: relative;
+      background: var(--paper);
+      border: 1px solid var(--rule);
+      padding: 40px;
+      aspect-ratio: 1 / 1;
+      max-width: 460px;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 0 var(--rule), 16px 16px 0 var(--accent-soft);
+    }
+    .cover__art img {
+      width: 65%; height: auto; display: block;
+      filter: drop-shadow(0 6px 18px rgba(181, 83, 42, 0.18));
+    }
+    .cover__art .caption {
+      position: absolute; bottom: 14px; left: 18px; right: 18px;
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      font-size: 11px; color: var(--ink-muted);
+      letter-spacing: 0.4px; text-transform: uppercase;
+      border-top: 1px solid var(--rule);
+      padding-top: 10px;
+    }
+
+    /* features / mini-apps */
+    .features { padding: 72px 0 56px; }
+    .features__heading {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 24px; padding-bottom: 22px;
+      border-bottom: 1px solid var(--rule-strong);
+      margin-bottom: 36px;
+    }
+    .features__title {
+      font-size: 30px; font-weight: 700; letter-spacing: -0.5px;
+      margin: 0; color: var(--ink);
+    }
+    .features__sub {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      font-size: 12px; color: var(--ink-secondary);
+      letter-spacing: 1.5px; text-transform: uppercase;
+    }
+
+    .features__grid {
+      display: grid; grid-template-columns: 1fr; gap: 36px;
+    }
+    @media (min-width: 720px) {
+      .features__grid {
+        grid-template-columns: repeat(3, 1fr); gap: 36px;
+      }
+    }
+
+    .feature {
+      padding-top: 8px;
+      border-top: 2px solid var(--ink);
+    }
+    .feature__no {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      font-size: 12px; color: var(--ink-muted);
+      letter-spacing: 1.2px; margin: 14px 0 6px;
+    }
+    .feature__name {
+      font-size: 26px; font-weight: 700; letter-spacing: -0.4px;
+      margin: 0 0 8px; color: var(--ink);
+    }
+    .feature__name em { font-style: italic; color: var(--accent); font-weight: 400; }
+    .feature__tag {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      font-size: 11.5px; color: var(--accent); font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1.5px;
+      margin: 0 0 14px;
+    }
+    .feature__body {
+      font-size: 15.5px; color: var(--ink-2); line-height: 1.65;
+      margin: 0;
+    }
+
+    /* footer */
+    footer {
+      border-top: 1px solid var(--rule-strong);
+      padding: 28px 0 48px;
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      font-size: 12.5px; color: var(--ink-muted);
+      letter-spacing: 0.5px;
+      display: flex; gap: 18px; justify-content: space-between; flex-wrap: wrap;
+    }
+    footer a { color: var(--ink-secondary); border-bottom: none; }
+    footer .right { display: flex; gap: 22px; }
+
+    @media (max-width: 720px) {
+      .container { padding: 0 24px; }
+      .masthead-title { font-size: 38px; }
+      .cover h1 { font-size: 42px; letter-spacing: -0.8px; }
+      .cover__deck { font-size: 16.5px; }
+      .cover__art { padding: 28px; }
+      .cover__cta { flex-direction: column; }
+      .btn { width: 100%; justify-content: center; }
+      .features__title { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="masthead">
+    <div class="container">
+      <div class="masthead-row">
+        <div class="masthead-left">
+          Vol. 01 · Issue 01 &nbsp; <b>2026 — A mobile companion for OpenClaw</b>
+        </div>
+        <div class="masthead-right">
+          <a href="https://github.com/komako-workshop/koko-chat" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2.02c-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.27-1.68-1.27-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.69 1.25 3.34.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.19-3.08-.12-.29-.51-1.47.11-3.07 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.79 0c2.21-1.49 3.18-1.18 3.18-1.18.62 1.6.23 2.78.11 3.07.74.8 1.19 1.82 1.19 3.08 0 4.42-2.7 5.39-5.27 5.68.41.35.78 1.05.78 2.12v3.14c0 .31.21.66.79.55C20.71 21.39 24 17.08 24 12 24 5.65 18.85.5 12 .5Z"/></svg>
+            GitHub
+          </a>
+          <a href="https://space.bilibili.com/1433675739" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L9.653 4.44c.071.071.134.142.187.213h4.267a.836.836 0 0 1 .16-.213l2.853-2.747c.267-.249.573-.373.92-.373.347 0 .662.151.929.4.267.249.391.551.391.907 0 .355-.124.657-.373.906zM5.333 7.24c-.747.018-1.373.276-1.88.773-.506.498-.769 1.13-.787 1.894v7.52c.018.764.28 1.395.787 1.893.507.498 1.133.756 1.88.773h13.334c.747-.017 1.373-.275 1.88-.773.506-.498.769-1.129.787-1.893v-7.52c-.018-.765-.28-1.396-.787-1.894-.507-.497-1.133-.755-1.88-.773zM8 11.107c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c0-.373.129-.689.387-.947.258-.258.574-.386.946-.386zm8 0c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c.017-.391.15-.711.4-.96.249-.249.56-.373.933-.373z"/></svg>
+            Bilibili
+          </a>
+        </div>
+      </div>
+      <h1 class="masthead-title">Koko<em>Chat</em></h1>
+    </div>
+  </header>
+
+  <section class="cover">
+    <div class="container" style="display: contents;">
+      <div class="container">
+        <p class="cover__kicker">The Cover Story <span class="sep">·</span> A mobile home for your agents</p>
+        <h1>Turn your <em>OpenClaw</em> into your pocket AI agent hub.</h1>
+        <p class="cover__deck">
+          把你的龙虾变成口袋里的 AI Agent hub。
+          三个小程序——Koko、Deeply、Tavern——跑在同一个本地 OpenClaw 之上,
+          数据全部留在你的手机和电脑上。
+        </p>
+        <div class="cover__cta">
+          <a class="btn btn--filled" href="https://testflight.apple.com/join/VpTW5U75" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.365 1.43c0 1.14-.43 2.23-1.14 3.03-.77.89-2.06 1.57-3.08 1.49-.13-1.11.44-2.27 1.16-3.02.79-.82 2.16-1.47 3.06-1.5zM21 17.65c-.5 1.16-1.06 2.27-1.93 3.27-.92 1.05-2.21 2.36-3.81 2.38-1.6.02-2.02-1.06-4.06-1.04-2.04.02-2.5 1.07-4.1 1.04-1.6-.02-2.81-1.18-3.74-2.23-2.55-2.92-4.5-8.27-1.88-11.87 1.3-1.79 3.62-2.93 5.79-2.96 1.66-.03 3.22 1.12 4.06 1.12.83 0 2.81-1.39 4.75-1.18.81.03 3.09.33 4.55 2.49-.12.07-2.72 1.6-2.69 4.75.03 3.76 3.3 5.01 3.34 5.03-.03.07-.52 1.81-1.71 4.2z"/></svg>
+            iOS TestFlight
+          </a>
+          <a class="btn btn--bordered" href="https://docs.metacreate.cc/kokochat/android/latest.apk">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18a.4.4 0 10-.69-.4l-1.86 3.22a11.4 11.4 0 00-9.79 0L5.24 5.9a.4.4 0 00-.69.4l1.84 3.18A10.69 10.69 0 001 18h22a10.69 10.69 0 00-5.4-8.52zM7 15.25a1 1 0 11-1-1 1 1 0 011 1zm11 0a1 1 0 11-1-1 1 1 0 011 1z"/></svg>
+            Android APK
+          </a>
+        </div>
+        <p class="cover__note">
+          需要先在电脑上跑一个
+          <a href="https://www.openclaw.com" target="_blank" rel="noopener">OpenClaw</a>。
+        </p>
+      </div>
+
+      <div class="cover__art">
+        <img src="./assets/app-icon.png" alt="">
+        <div class="caption">Plate I — The KokoChat mascot, 2026</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="container">
+      <div class="features__heading">
+        <h2 class="features__title">三个小程序<em style="color: var(--accent); font-style: italic;">,</em> 一个 App</h2>
+        <div class="features__sub">Three Mini-Apps · One Container</div>
+      </div>
+      <div class="features__grid">
+        <article class="feature">
+          <p class="feature__no">No. 01</p>
+          <h3 class="feature__name">Koko</h3>
+          <p class="feature__tag">通用助手 · General assistant</p>
+          <p class="feature__body">
+            一个口袋助手,调用 OpenClaw 后端推理,做研究、写东西、随手聊。
+          </p>
+        </article>
+        <article class="feature">
+          <p class="feature__no">No. 02</p>
+          <h3 class="feature__name">Deep<em>ly</em></h3>
+          <p class="feature__tag">深度对话式学习 · Learning</p>
+          <p class="feature__body">
+            从一个问题、一篇资料或一本书出发,自动生成课程目录,按节深入讲解,
+            像有个博学的朋友陪你读。
+          </p>
+        </article>
+        <article class="feature">
+          <p class="feature__no">No. 03</p>
+          <h3 class="feature__name">Tavern</h3>
+          <p class="feature__tag">角色扮演 · Roleplay</p>
+          <p class="feature__body">
+            推荐 Character Tavern 角色卡,自动翻译开场白,
+            进入沉浸式中文角色扮演聊天。
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <footer class="container">
+    <div>KOKOCHAT &nbsp;·&nbsp; POWERED BY <a href="https://www.openclaw.com" target="_blank" rel="noopener">OPENCLAW</a></div>
+    <div class="right">
+      <a href="https://github.com/komako-workshop/koko-chat" target="_blank" rel="noopener">GITHUB</a>
+      <a href="https://space.bilibili.com/1433675739" target="_blank" rel="noopener">BILIBILI</a>
+    </div>
+  </footer>
+</body>
+</html>

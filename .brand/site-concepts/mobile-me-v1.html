@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KokoChat 移动端 · 我页精修版</title>
+  <link rel="icon" type="image/png" href="./assets/app-icon.png" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      background: #F4EFE5;
+      color: #1A1004;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    body {
+      background:
+        radial-gradient(900px 600px at 20% 0%, rgba(255, 180, 80, 0.16), transparent 60%),
+        radial-gradient(700px 500px at 80% 100%, rgba(255, 140, 42, 0.10), transparent 60%),
+        #F4EFE5;
+      min-height: 100vh;
+    }
+    .page-head {
+      max-width: 720px; margin: 0 auto; padding: 56px 32px 16px;
+      text-align: center;
+    }
+    .page-head h1 {
+      font-size: 28px; font-weight: 900; margin: 0 0 10px;
+      letter-spacing: -0.5px;
+    }
+    .page-head p {
+      margin: 0; color: #6B5435; font-size: 14.5px; max-width: 560px;
+      margin-left: auto; margin-right: auto; line-height: 1.6;
+    }
+    .stage {
+      display: flex; justify-content: center;
+      padding: 36px 24px 80px;
+    }
+
+    /* ─── phone frame (same as chat list mockup) ─── */
+    .phone {
+      width: 360px; height: 740px;
+      background: #0d0d0d;
+      border-radius: 54px;
+      padding: 14px;
+      box-shadow:
+        0 50px 120px rgba(46, 30, 16, 0.30),
+        0 12px 28px rgba(46, 30, 16, 0.12);
+      position: relative;
+    }
+    .screen {
+      width: 100%; height: 100%;
+      border-radius: 42px;
+      overflow: hidden;
+      position: relative;
+      display: flex; flex-direction: column;
+      background: #F4EFE5;
+    }
+    .island {
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      width: 110px; height: 30px; border-radius: 999px;
+      background: #000;
+      z-index: 5;
+    }
+    .statusbar {
+      height: 54px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 30px 0 32px;
+      font-size: 14px; font-weight: 700;
+      flex-shrink: 0;
+      color: #1A1004;
+    }
+    .statusbar .icons {
+      display: inline-flex; gap: 5px; align-items: center; font-size: 11px;
+    }
+    .home-indicator {
+      position: absolute;
+      bottom: 8px; left: 50%; transform: translateX(-50%);
+      width: 130px; height: 5px; border-radius: 99px;
+      background: rgba(0,0,0,0.6);
+      z-index: 5;
+    }
+
+    /* ambient brand wash — same recipe as chat list */
+    .ambient {
+      position: absolute; top: 0; left: 0; right: 0; height: 280px;
+      background:
+        radial-gradient(closest-side at 50% 0%, rgba(255, 167, 66, 0.18), transparent 70%),
+        linear-gradient(180deg, rgba(255, 230, 200, 0.55), rgba(255, 230, 200, 0) 100%);
+      pointer-events: none;
+    }
+
+    /* ─── header (大标题 "我") ─── */
+    .scr-head {
+      position: relative; z-index: 2;
+      padding: 8px 20px 14px;
+      flex-shrink: 0;
+    }
+    .scr-title {
+      font-size: 28px; font-weight: 800;
+      letter-spacing: -0.5px; color: #1F140A;
+    }
+
+    /* ─── scroll content ─── */
+    .scroll {
+      position: relative; z-index: 2;
+      flex: 1; overflow: hidden;
+      padding: 0 14px 12px;
+    }
+
+    /* profile card */
+    .profile {
+      display: flex; align-items: center; gap: 14px;
+      background: #FFFFFF;
+      border-radius: 16px;
+      padding: 16px 16px;
+      margin-bottom: 18px;
+      box-shadow: 0 1px 0 rgba(46, 30, 16, 0.04);
+    }
+    .profile__avatar {
+      width: 60px; height: 60px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #FFE9C7;
+      flex-shrink: 0;
+      box-shadow: 0 6px 16px rgba(245, 130, 30, 0.20);
+    }
+    .profile__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .profile__text { min-width: 0; }
+    .profile__title { font-size: 19px; font-weight: 700; color: #1F140A; }
+    .profile__sub { font-size: 13px; color: #7A6248; margin-top: 4px; }
+
+    /* group */
+    .group {
+      background: #FFFFFF;
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 0 rgba(46, 30, 16, 0.04);
+    }
+    .row {
+      display: flex; align-items: center;
+      padding: 13px 14px;
+      gap: 12px;
+      position: relative;
+    }
+    .row + .row::before {
+      content: ""; position: absolute;
+      top: 0; left: 46px; right: 14px; height: 1px;
+      background: #F1E7D0;
+    }
+    .row__icon {
+      width: 22px; height: 22px;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: #7A6248; flex-shrink: 0;
+    }
+    .row__icon svg { width: 19px; height: 19px; }
+    .row__label {
+      flex: 1; font-size: 15.5px; color: #1F140A; font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .row__value {
+      font-size: 13.5px; color: #A89274; flex-shrink: 0;
+    }
+    .row__value--good { color: #2E9D5C; font-weight: 600; }
+    .row__value--good::before {
+      content: ""; display: inline-block;
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #2E9D5C; margin-right: 6px; vertical-align: 1px;
+    }
+    .row__chevron {
+      width: 12px; height: 12px;
+      color: #C3B299; flex-shrink: 0;
+    }
+    .row__chevron svg { width: 12px; height: 12px; display: block; }
+    .row--destructive .row__icon { color: #E27143; }
+    .row--destructive .row__label { color: #E27143; font-weight: 600; }
+
+    /* footer */
+    .scroll__footer {
+      text-align: center;
+      padding: 18px 0 4px;
+      color: #A89274;
+      font-size: 11.5px;
+      letter-spacing: 0.2px;
+    }
+
+    /* ─── tab bar (same as chat list) ─── */
+    .tab {
+      position: relative; z-index: 2;
+      height: 70px;
+      display: flex; align-items: center; justify-content: space-around;
+      padding: 8px 0 16px;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid #ECE5D2;
+    }
+    .tab__item {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      font-size: 10.5px; font-weight: 600; letter-spacing: 0.2px;
+    }
+    .tab__icon {
+      width: 24px; height: 24px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .tab__icon svg { width: 22px; height: 22px; }
+    .tab__item--active { color: #FF8C2A; }
+    .tab__item--mute { color: #A89274; }
+
+    /* caption under phone */
+    .caption {
+      max-width: 360px; margin: 32px auto 0;
+      text-align: center; font-size: 13px; color: #6B5435; line-height: 1.6;
+    }
+    .caption b { color: #1F140A; }
+    .caption code {
+      background: rgba(255, 167, 66, 0.15);
+      padding: 1px 6px; border-radius: 4px;
+      font-size: 12px; color: #6B5435;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="page-head">
+    <h1>KokoChat · 我页精修版</h1>
+    <p>
+      跟 chat list 同一套风格语言:顶部暖橙 ambient + iOS Settings 标准分组卡片。
+      去掉了「网络连接测试」入口。Profile 头像加 6px 暖橙 elevation,跟 + 按钮呼应。
+    </p>
+  </header>
+
+  <div class="stage">
+    <div class="phone">
+      <div class="screen">
+        <div class="ambient"></div>
+        <div class="island"></div>
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="icons">5G&nbsp;·&nbsp;100%</span>
+        </div>
+
+        <div class="scr-head">
+          <div class="scr-title">我</div>
+        </div>
+
+        <div class="scroll">
+
+          <!-- profile -->
+          <div class="profile">
+            <div class="profile__avatar"><img src="./assets/app-icon.png" alt=""></div>
+            <div class="profile__text">
+              <div class="profile__title">KokoChat</div>
+              <div class="profile__sub">v0.0.1 · 5 个会话</div>
+            </div>
+          </div>
+
+          <!-- 连接 -->
+          <div class="group">
+            <div class="row">
+              <div class="row__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 1 0-5.66L13 5.34a4 4 0 0 1 5.66 5.66l-1.5 1.5"/><path d="M14 10a4 4 0 0 1 0 5.66L11 18.66a4 4 0 0 1-5.66-5.66l1.5-1.5"/></svg>
+              </div>
+              <div class="row__label">Gateway 状态</div>
+              <div class="row__value row__value--good">已连接</div>
+            </div>
+            <div class="row">
+              <div class="row__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </div>
+              <div class="row__label">配对 OpenClaw</div>
+              <div class="row__chevron">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+              </div>
+            </div>
+            <div class="row row--destructive">
+              <div class="row__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+              </div>
+              <div class="row__label">断开连接</div>
+            </div>
+          </div>
+
+          <!-- 关于 -->
+          <div class="group">
+            <div class="row">
+              <div class="row__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              </div>
+              <div class="row__label">关于 KokoChat</div>
+              <div class="row__value">v0.0.1</div>
+              <div class="row__chevron">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- 危险区 -->
+          <div class="group">
+            <div class="row row--destructive">
+              <div class="row__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+              </div>
+              <div class="row__label">忘记此设备</div>
+            </div>
+          </div>
+
+          <div class="scroll__footer">
+            Made for OpenClaw · by Komako
+          </div>
+        </div>
+
+        <!-- tab bar -->
+        <div class="tab">
+          <div class="tab__item tab__item--mute">
+            <div class="tab__icon">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 2-2Z"/></svg>
+            </div>
+            <span>会话</span>
+          </div>
+          <div class="tab__item tab__item--active">
+            <div class="tab__icon">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.31 0-8 1.67-8 5v2h16v-2c0-3.33-4.69-5-8-5Z"/></svg>
+            </div>
+            <span>我</span>
+          </div>
+        </div>
+
+        <div class="home-indicator"></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption">
+    跟 <code>chat-list</code> 完全同一套设计语言。<br>
+    去掉了「网络连接测试」入口。<br>
+    Gateway 状态用语义化 <b>● 已连接</b>(KokoChat success 绿)代替原文字标签。
+  </p>
+
+</body>
+</html>
