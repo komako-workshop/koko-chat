@@ -195,7 +195,9 @@ function saveCourseScrollSnapshot(
  */
 export function DeeplyCourseScreen({
   conversationId,
-  headerHeight = 0
+  headerHeight = 0,
+  isRouteFocused = true,
+  focusEpoch = 0
 }: {
   conversationId: string | null;
   /**
@@ -204,6 +206,13 @@ export function DeeplyCourseScreen({
    * /chat/[id] 一致;不传 iOS 上键盘会遮住输入框。
    */
   headerHeight?: number;
+  /**
+   * Host route focus state. Deeply lives in its own package, so the host route
+   * shell forwards navigation focus instead of importing router hooks here.
+   */
+  isRouteFocused?: boolean;
+  /** Incremented by the host route every time `/deeply/course/[id]` focuses. */
+  focusEpoch?: number;
 }): React.ReactElement {
   const conversation = useConversationStore((s) =>
     conversationId === null ? null : s.list.find((m) => m.id === conversationId) ?? null
@@ -249,6 +258,7 @@ export function DeeplyCourseScreen({
   );
   const hasRestoredScrollRef = useRef(pendingScrollRestoreRef.current === null);
   const lastConversationIdRef = useRef<string | null>(conversationId);
+  const focusRestoreTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   if (lastConversationIdRef.current !== conversationId) {
     lastConversationIdRef.current = conversationId;
     const snapshot = conversationId === null
@@ -267,7 +277,6 @@ export function DeeplyCourseScreen({
   const updateNearBottom = useCallback((): void => {
     const { contentHeight, viewportHeight, offsetY } = scrollMetricsRef.current;
     if (contentHeight <= 0 || viewportHeight <= 0) {
-      isNearBottomRef.current = true;
       return;
     }
     const distanceToBottom = contentHeight - (offsetY + viewportHeight);
@@ -317,7 +326,10 @@ export function DeeplyCourseScreen({
     // `snapshot.offsetY` is representable clamps to the temporary bottom and
     // makes later content growth auto-follow to the real bottom. Wait until
     // the current content can actually hold the saved offset.
-    if (maxOffset + 1 < snapshot.offsetY) return true;
+    if (
+      contentHeight + 1 < snapshot.contentHeight &&
+      maxOffset + 1 < snapshot.offsetY
+    ) return true;
     hasRestoredScrollRef.current = true;
     pendingScrollRestoreRef.current = null;
     const offset = Math.min(Math.max(0, snapshot.offsetY), maxOffset);
@@ -386,7 +398,56 @@ export function DeeplyCourseScreen({
     if (snapshot !== null) {
       isNearBottomRef.current = snapshot.isNearBottom;
     }
-  }, [conversationId]);
+    if (snapshot === null) return;
+
+    const restoreRetryDelaysMs = [16, 80, 200, 400, 800];
+    const timers = restoreRetryDelaysMs.map((delay) =>
+      setTimeout(() => {
+        if (hasRestoredScrollRef.current) return;
+        tryRestoreSavedScroll();
+      }, delay)
+    );
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, [conversationId, tryRestoreSavedScroll]);
+
+  useEffect(() => {
+    if (conversationId === null) return;
+    const clearFocusRestoreTimers = (): void => {
+      for (const timer of focusRestoreTimersRef.current) clearTimeout(timer);
+      focusRestoreTimersRef.current = [];
+    };
+    if (!isRouteFocused) {
+      clearFocusRestoreTimers();
+      saveCurrentScrollSnapshot();
+      return;
+    }
+
+    clearFocusRestoreTimers();
+    const snapshot = courseScrollSnapshots.get(conversationId) ?? null;
+    pendingScrollRestoreRef.current = snapshot;
+    hasRestoredScrollRef.current = snapshot === null;
+    if (snapshot !== null) {
+      isNearBottomRef.current = snapshot.isNearBottom;
+    }
+    if (snapshot === null) return;
+
+    const restoreRetryDelaysMs = [0, 16, 80, 200, 400, 800];
+    focusRestoreTimersRef.current = restoreRetryDelaysMs.map((delay) =>
+      setTimeout(() => {
+        if (hasRestoredScrollRef.current) return;
+        tryRestoreSavedScroll();
+      }, delay)
+    );
+    return clearFocusRestoreTimers;
+  }, [
+    conversationId,
+    focusEpoch,
+    isRouteFocused,
+    saveCurrentScrollSnapshot,
+    tryRestoreSavedScroll
+  ]);
 
   // 卸载或切对话之前,把当前位置写回 snapshot —— onScroll 已经在持续
   // save,这一步主要兜底极端情况(用户从来没滑动过,但 contentSize 改过)。

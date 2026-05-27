@@ -347,11 +347,27 @@ export default function ChatScreen() {
     conversationId === null ? null : chatScrollSnapshots.get(conversationId) ?? null
   );
   const hasRestoredScrollRef = useRef(pendingScrollRestoreRef.current === null);
+  const lastConversationIdRef = useRef<string | null>(conversationId);
+  const focusRestoreTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+
+  if (lastConversationIdRef.current !== conversationId) {
+    lastConversationIdRef.current = conversationId;
+    const snapshot = conversationId === null
+      ? null
+      : chatScrollSnapshots.get(conversationId) ?? null;
+    pendingScrollRestoreRef.current = snapshot;
+    hasRestoredScrollRef.current = snapshot === null;
+    if (snapshot !== null) {
+      isNearBottomRef.current = snapshot.isNearBottom;
+    }
+  }
+  if (pendingScrollRestoreRef.current !== null) {
+    isNearBottomRef.current = pendingScrollRestoreRef.current.isNearBottom;
+  }
 
   function updateNearBottom(): void {
     const { contentHeight, viewportHeight, offsetY } = scrollMetricsRef.current;
     if (contentHeight <= 0 || viewportHeight <= 0) {
-      isNearBottomRef.current = true;
       return;
     }
     const distanceToBottom = contentHeight - (offsetY + viewportHeight);
@@ -366,6 +382,15 @@ export default function ChatScreen() {
   }
 
   function scrollToBottomSoon(animated: boolean): void {
+    const { contentHeight, viewportHeight } = scrollMetricsRef.current;
+    if (contentHeight > 0 && viewportHeight > 0) {
+      scrollMetricsRef.current = {
+        ...scrollMetricsRef.current,
+        offsetY: Math.max(0, contentHeight - viewportHeight)
+      };
+      updateNearBottom();
+      saveCurrentScrollSnapshot();
+    }
     setTimeout(() => {
       listRef.current?.scrollToEnd({ animated });
     }, 16);
@@ -378,16 +403,23 @@ export default function ChatScreen() {
     const { contentHeight, viewportHeight } = scrollMetricsRef.current;
     if (contentHeight <= 0 || viewportHeight <= 0) return true;
 
-    hasRestoredScrollRef.current = true;
-    pendingScrollRestoreRef.current = null;
-
     if (snapshot.isNearBottom) {
+      hasRestoredScrollRef.current = true;
+      pendingScrollRestoreRef.current = null;
       isNearBottomRef.current = true;
       scrollToBottomSoon(false);
       return true;
     }
 
     const maxOffset = Math.max(0, contentHeight - viewportHeight);
+    if (
+      contentHeight + 1 < snapshot.contentHeight &&
+      maxOffset + 1 < snapshot.offsetY
+    ) {
+      return true;
+    }
+    hasRestoredScrollRef.current = true;
+    pendingScrollRestoreRef.current = null;
     const offset = Math.min(Math.max(0, snapshot.offsetY), maxOffset);
     scrollMetricsRef.current = {
       ...scrollMetricsRef.current,
@@ -484,7 +516,53 @@ export default function ChatScreen() {
     if (snapshot !== null) {
       isNearBottomRef.current = snapshot.isNearBottom;
     }
+    if (snapshot === null) return;
+
+    const restoreRetryDelaysMs = [16, 80, 200, 400, 800];
+    const timers = restoreRetryDelaysMs.map((delay) =>
+      setTimeout(() => {
+        if (hasRestoredScrollRef.current) return;
+        tryRestoreSavedScroll();
+      }, delay)
+    );
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
   }, [conversationId]);
+
+  useEffect(() => {
+    if (conversationId === null) return;
+    const clearFocusRestoreTimers = (): void => {
+      for (const timer of focusRestoreTimersRef.current) clearTimeout(timer);
+      focusRestoreTimersRef.current = [];
+    };
+    const unsubscribeBlur = navigation.addListener("blur", () => {
+      clearFocusRestoreTimers();
+      saveCurrentScrollSnapshot();
+    });
+    const unsubscribeFocus = navigation.addListener("focus", () => {
+      clearFocusRestoreTimers();
+      const snapshot = chatScrollSnapshots.get(conversationId) ?? null;
+      pendingScrollRestoreRef.current = snapshot;
+      hasRestoredScrollRef.current = snapshot === null;
+      if (snapshot !== null) {
+        isNearBottomRef.current = snapshot.isNearBottom;
+      }
+      if (snapshot === null) return;
+      const restoreRetryDelaysMs = [0, 16, 80, 200, 400, 800];
+      focusRestoreTimersRef.current = restoreRetryDelaysMs.map((delay) =>
+        setTimeout(() => {
+          if (hasRestoredScrollRef.current) return;
+          tryRestoreSavedScroll();
+        }, delay)
+      );
+    });
+    return () => {
+      clearFocusRestoreTimers();
+      unsubscribeBlur();
+      unsubscribeFocus();
+    };
+  }, [conversationId, navigation]);
 
   useEffect(() => {
     if (messages.length === 0) return;
@@ -524,7 +602,7 @@ export default function ChatScreen() {
       appStateSubscription.remove();
       keyboardShowSubscription.remove();
     };
-  }, []);
+  }, [conversationId]);
 
   const hasStreamingAgentMessage = messages.some(
     (message) => message.role === "agent" && message.streaming === true

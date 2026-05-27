@@ -5,7 +5,7 @@
  * Conversation 的 mode 是 `deeply-course`,由 mini-app 注册成 route 形式的
  * conversation mode,所以 `openConversation(meta.id)` 会自动跳到这里。
  */
-import { useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Pressable, StyleSheet, Text } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useLocalSearchParams, useNavigation } from "expo-router";
@@ -29,6 +29,22 @@ export default function DeeplyCourseRoute(): React.ReactElement {
   });
   // 跟 /deeply 同样,把 stack header 高度传给 mini-app 给 KeyboardAvoidingView 用。
   const headerHeight = useHeaderHeight();
+  const [isFocused, setIsFocused] = useState(() => navigation.isFocused());
+  const [focusEpoch, setFocusEpoch] = useState(0);
+
+  useEffect(() => {
+    const unsubscribeFocus = navigation.addListener("focus", () => {
+      setIsFocused(true);
+      setFocusEpoch((x) => x + 1);
+    });
+    const unsubscribeBlur = navigation.addListener("blur", () => {
+      setIsFocused(false);
+    });
+    return () => {
+      unsubscribeFocus();
+      unsubscribeBlur();
+    };
+  }, [navigation]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -61,7 +77,12 @@ export default function DeeplyCourseRoute(): React.ReactElement {
 
   return (
     <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
-      <DeeplyCourseScreen conversationId={conversationId} headerHeight={headerHeight} />
+      <DeeplyCourseScreen
+        conversationId={conversationId}
+        headerHeight={headerHeight}
+        isRouteFocused={isFocused}
+        focusEpoch={focusEpoch}
+      />
     </SafeAreaView>
   );
 }

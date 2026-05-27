@@ -64,8 +64,13 @@ public class KokoBackgroundTaskModule: Module {
       return
     }
 
-    DispatchQueue.main.async {
+    let endTask = {
       UIApplication.shared.endBackgroundTask(taskId)
+    }
+    if Thread.isMainThread {
+      endTask()
+    } else {
+      DispatchQueue.main.async(execute: endTask)
     }
   }
 }
