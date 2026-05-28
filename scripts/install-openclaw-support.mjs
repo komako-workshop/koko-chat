@@ -91,6 +91,14 @@ const SKILLS = [
   // exec-approval / allowlist dance for first-time pairings.
 ];
 const RELAY_SOURCE = join(REPO_ROOT, "openclaw", "relay");
+const RELAY_DAEMON_SERVICE = "kokochat-relay-connector.service";
+const RELAY_DAEMON_UNIT_TEMPLATE = join(
+  REPO_ROOT,
+  "openclaw",
+  "relay",
+  "deploy",
+  "kokochat-relay-connector.service"
+);
 const AGENT_DEFINITIONS = {
   tavern: {
     instructions: [
@@ -615,15 +623,6 @@ function installRelayConnector(defaultWorkspace) {
   rmSync(target, { recursive: true, force: true });
   cpSync(RELAY_SOURCE, target, { recursive: true });
 }
-
-const RELAY_DAEMON_SERVICE = "kokochat-relay-connector.service";
-const RELAY_DAEMON_UNIT_TEMPLATE = join(
-  REPO_ROOT,
-  "openclaw",
-  "relay",
-  "deploy",
-  "kokochat-relay-connector.service"
-);
 
 /**
  * Install the relay connector as a self-healing systemd service so it
