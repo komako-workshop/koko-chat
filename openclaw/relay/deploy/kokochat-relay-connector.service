@@ -2,6 +2,9 @@
 Description=KokoChat relay connector (bridges KokoChat relay tunnel to local OpenClaw Gateway)
 After=network-online.target
 Wants=network-online.target
+# Never rate-limit restarts: the connector intentionally exits 0 while
+# unpaired and relies on RestartSec to poll for relay.json.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -19,8 +22,6 @@ ExecStart={{NODE_BIN}} {{CONNECTOR}}
 # RestartSec gives a light retry loop until pairing happens.
 Restart=always
 RestartSec=10
-# Avoid hammering if something is genuinely broken.
-StartLimitIntervalSec=0
 
 [Install]
 WantedBy=multi-user.target
