@@ -94,7 +94,10 @@ The installer creates the KokoChat agents if needed and syncs:
   `~/.openclaw/agents/deeply/workspace/skills/kokochat-deeply-research`
 - `openclaw/skills/kokochat-search` →
   `~/.openclaw/agents/deeply/workspace/skills/kokochat-search`
-  (shared skill; other mini-apps can opt in via the installer's SKILLS list)
+  (shared skill; other mini-apps can opt in via the installer's SKILLS list,
+  also published as [`kokochat-search` on ClawHub](https://clawhub.ai/komako-workshop/kokochat-search)
+  so any OpenClaw user can install it standalone via
+  `openclaw skills install kokochat-search`)
 
 Deeply research search is routed through KokoChat's hosted search proxy via the
 local `kokochat-search` wrapper. The user's OpenClaw does **not** need a

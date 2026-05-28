@@ -5,6 +5,16 @@ Deeply uses it for research / outline / per-section lookups, and any future
 mini-app (e.g. Koko's general assistant turn) can route the same way without
 shipping a Brave / Tavily / Serper key on the user's machine.
 
+Also published on ClawHub so any OpenClaw user can install it standalone:
+
+```bash
+openclaw skills install kokochat-search --agent <your-agent>
+```
+
+After install, allowlist `bin/search.mjs` via `openclaw approvals` so the agent
+is allowed to exec it. KokoChat's `install-openclaw-support.mjs` does this
+automatically for the `deeply` agent.
+
 The wrapper lives in `bin/search.mjs` and calls:
 
 ```text
