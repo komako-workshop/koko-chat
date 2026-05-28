@@ -165,7 +165,6 @@ ${DEEPLY_EXPLORE_PERSONA_DOC}
 - 主题:${card.title}
 - 类型:${card.kind}(${card.subtitle})
 - 推荐时给的简短理由:${card.reason}
-- 推荐时的建议节数:${card.suggestedSections}
 
 # 用户对话上下文(最近若干轮)
 
@@ -180,7 +179,6 @@ ${transcript}
 {
   "version": 1,
   "introduction": "",
-  "suggestedSections": 28,
   "options": []
 }
 \`\`\`
@@ -191,7 +189,6 @@ ${transcript}
   (代表作 / 核心概念 / 主要论敌或对照),为什么它跟用户对话里的好奇点契合,
   以及学完用户应该能「看见」什么。语气保持博学朋友式,不要营销话术、不要小标题、
   不要列表,流畅短段落。
-- \`suggestedSections\`:整数 10-50。综合考虑课题的内容密度和用户在对话里表达的「想多深」倾向。
 - \`options\`:**必须是空数组 \`[]\`**。当前 UI 不展示额外配置项,把所有判断收进 introduction 即可。
 
 严格约束:
@@ -279,6 +276,12 @@ export function buildCourseOutlinePrompt(input: {
   introduction: string;
   targetSections: number;
 }): string {
+  const lengthLine = input.targetSections > 0
+    ? `- 用户选择长度:约 ${input.targetSections} 节`
+    : "";
+  const lengthRequirement = input.targetSections > 0
+    ? `- 用户选择的是约 ${input.targetSections} 节。请按课题自然结构组织,不要为了凑数机械拆分或合并。`
+    : "";
   return `<deeply_course_persona>
 ${DEEPLY_COURSE_PERSONA_DOC}
 </deeply_course_persona>
@@ -288,7 +291,7 @@ ${DEEPLY_COURSE_PERSONA_DOC}
 # 课题
 - 标题:${input.courseTitle}
 - 一句话副标题:${input.courseSubtitle}
-- 用户期望节数:${input.targetSections} 节(允许 ±20% 浮动,以课题自然结构为准)
+${lengthLine}
 
 # 课题介绍(你刚才写给用户的)
 ${input.introduction}
@@ -315,7 +318,7 @@ ${input.introduction}
 - 每节正文严格 2 条 \`-\` 列表项:**核心隐喻** + **要点**,不超过两条。
 - "核心隐喻" 是一个画面感的小比喻(< 30 字),不是定义。
 - "要点" 不超过 60 字,是这一节真正要传达的反直觉结论。
-- 总节数控制在 ${input.targetSections} ± 4 之间。
+${lengthRequirement}
 - 章节顺序要构成一条认知阶梯:从可见 / 反直觉的现象起手,
   逐步深入到原理 / 应用 / 余响。
 - **只输出 markdown 大纲本身,不要前言、不要尾声、不要解释。**
@@ -426,7 +429,7 @@ export function buildResearchCourseSectionPrompt(input: {
         : `你这一轮有两个工具:
 
 - \`web_search({ query, count })\` —— 推荐在讲解前用 1-2 次。query 用英文关键词。**特别推荐**:针对本节标题做一次更聚焦的搜索,看看有没有比准备阶段更新或者更对题的资料。
-- \`web_fetch({ url })\` —— 推荐挑准备阶段挂的 1-2 个 primary source(或者刚 search 到的最有价值的一条)抓正文,这样你讲解时引用的是真实段落,而不是 snippet 一句话。`;
+- \`web_fetch({ url, maxChars: 60000 })\` —— 推荐挑准备阶段挂的 1 个 primary source(或者刚 search 到的最有价值的一条)抓正文,这样讲解时引用的是真实段落,不是 snippet 一句话。如果失败,直接基于搜索结果和准备阶段 sources 讲,不要把 fetch 失败写得像本节失败。`;
 
   return `<deeply_course_persona>
 ${DEEPLY_COURSE_PERSONA_DOC}
@@ -494,11 +497,6 @@ OpenClaw wire 层会把多 tool call 之间的 prose 合并成一个 text block,
  * 让用户看到自己刚才在 sheet 里的请求自然变成对 agent 的喊话,
  * 比 "[system: start research]" 那种黑话气泡更有契约感。
  */
-/**
- * `sections === 0` 代表"让 agent 在调研/读资料后自定节数"(customize sheet 的
- * "自动" preset)。visible text 用一句明确话说出来,既让用户在 chat 流里
- * 看到自己点了什么,也让 agent 从 visible text 就能 disambiguate。
- */
 export function buildResearchKickoffVisibleText(input: {
   topic: string;
   sections: number;
@@ -506,14 +504,14 @@ export function buildResearchKickoffVisibleText(input: {
   if (input.sections > 0) {
     return `请围绕「${input.topic}」做一份 ${input.sections} 节的深度调研课程`;
   }
-  return `请围绕「${input.topic}」做一份深度调研课程,课程节数由你看完资料后自定`;
+  return `请围绕「${input.topic}」做一份深度调研课程`;
 }
 
-// 匹配两种形态:显式 N 节 / auto(节数由你自定)。
+// 匹配新形态和显式 N 节。
 const DEEPLY_RESEARCH_KICKOFF_REGEX =
-  /^请围绕「(.+?)」做一份(?:\s*(\d+)\s*节的深度调研课程|深度调研课程,课程节数由你看完资料后自定)\s*$/;
+  /^请围绕「(.+?)」做一份(?:\s*(\d+)\s*节的)?深度调研课程\s*$/;
 const DEEPLY_MATERIAL_KICKOFF_REGEX =
-  /^请基于我提供的资料「(.+?)」做一份(?:\s*(\d+)\s*节的深度学习课程|深度学习课程,课程节数由你看完资料后自定)\s*$/;
+  /^请基于我提供的资料「(.+?)」做一份(?:\s*(\d+)\s*节的)?深度学习课程\s*$/;
 
 export function parseDeeplyResearchKickoff(
   text: string
@@ -536,7 +534,7 @@ export function buildMaterialKickoffVisibleText(input: {
   if (input.sections > 0) {
     return `请基于我提供的资料「${input.label}」做一份 ${input.sections} 节的深度学习课程`;
   }
-  return `请基于我提供的资料「${input.label}」做一份深度学习课程,课程节数由你看完资料后自定`;
+  return `请基于我提供的资料「${input.label}」做一份深度学习课程`;
 }
 
 export function parseDeeplyMaterialKickoff(
@@ -571,11 +569,11 @@ export function buildBookKickoffVisibleText(input: {
   if (input.sections > 0) {
     return `请基于书《${label}》做一份 ${input.sections} 节的精读课程`;
   }
-  return `请基于书《${label}》做一份精读课程,课程节数由你看完资料后自定`;
+  return `请基于书《${label}》做一份精读课程`;
 }
 
 const DEEPLY_BOOK_KICKOFF_REGEX =
-  /^请基于书《(.+?)》做一份(?:\s*(\d+)\s*节的精读课程|精读课程,课程节数由你看完资料后自定)\s*$/;
+  /^请基于书《(.+?)》做一份(?:\s*(\d+)\s*节的)?精读课程\s*$/;
 
 export function parseDeeplyBookKickoff(
   text: string
@@ -594,9 +592,17 @@ export function parseDeeplyBookKickoff(
 /**
  * Research kickoff 的 gatewayText 包装。
  *
- * AGENTS.md (deeply agent) 已经告诉 agent "看到这种 user message 就按
- * kokochat-deeply-research skill 走",这里只是 reinforce 一下节数 + skill
- * 关键步骤,避免 agent 在没拿到 skill 上下文时跑偏。
+ * 此 prompt 故意保持精简。前几个版本累加了大量"防 anti-pattern"细则
+ * (sentinel marker 完整解释 / DuckDuckGo bot-detection / camelCase 字段
+ * 名警告 / 禁止 snake_case 旧 schema / Provider 参数白名单 / 4 维度调研
+ * 规划 ...),长 prompt 反而把"先 web_search 再输出 / sources 必须来自
+ * 真实返回"这条核心硬约束淹没了:2026-05-28 的回归测试里 toolCallCount=0
+ * 但 sources 数组仍然塞满了来自训练数据猜的 URL。
+ *
+ * 现在的版本只突出 5 条不可商量的硬约束 + 紧凑的工具说明 + JSON schema。
+ * 其他风格细节(prose 节奏 / sentinel marker 设计动机 / tool quirks)
+ * 留给 kokochat-deeply-research SKILL.md。kickoff prompt 是当下要做什么,
+ * skill 是 agent 的长期手册,两者不重复。
  */
 export function buildResearchKickoffPrompt(input: {
   topic: string;
@@ -606,107 +612,62 @@ export function buildResearchKickoffPrompt(input: {
     topic: input.topic,
     sections: input.sections
   });
+  const sectionHint = input.sections > 0
+    ? `用户希望约 ${input.sections} 节(允许 ±20%),但仍以课题自然结构为准。`
+    : `没有预设节数 —— 按课题自然结构自由决定,题目窄就少分,题目宽就多分。`;
   return `[系统注入 · 深度调研课程 kickoff]
 
-用户从 KokoChat Deeply mini-app 的「定制课程」入口提交了一个深度调研主题。
-按 \`kokochat-deeply-research\` skill 的"Narration Pattern (Required)"流程办。
+按 \`kokochat-deeply-research\` skill 走研报流程。这一轮只**准备目录**,
+不写讲解内容;讲解发生在后续 turn。
 
-# 调研工具
+# 5 条硬约束(其它都可商量)
 
-你有两个 OpenClaw 内置 web 工具(已经在 deeply agent 的 allowlist 里):
+1. **先 web_search,再 emit fenced block**。tool 调用次数为 0 时,
+   fenced block 里 \`sources\` 数组必须为空,**不要凭训练数据编 URL**。
+2. \`sources\` 里每个 \`url\` 必须来自**本轮** web_search / web_fetch
+   真实返回。没搜到合适的就少 cite,某节 0 条也 OK,**不要编**。
+3. **目录节数由你定**。${sectionHint}
+4. 输出**唯一一个** \`koko.deeply.research.outline\` fenced block,
+   内部是合法 JSON,字段按下面 schema。fenced block 之后不要再写文字。
+5. JSON 字符串内部引用短语优先用中文引号 “...”,避免裸 \`"\` 破坏解析。
 
-- \`web_search({ query: "EN keywords", count: 1-10 })\` —— 通过 gateway 配置的搜索 provider 做 web 搜索,KokoChat 安装脚本在用户没配置 provider 时默认使用免 key 的 DuckDuckGo,返回 title / url / snippet。**最多调 3 次**,每次换不同角度(主流 → 反方 → 背景 / 不同关键词组)。
-- \`web_fetch({ url: "..." })\` —— 抓某个具体 URL 的正文。**少用**,只在 snippet 不够、需要看正文确认某个具体说法时调一次。
+# 工具
 
-**最终 sources 数组里所有 url 必须来自 web_search / web_fetch 的真实返回 —— 不要编造 URL。** 没找到合适来源,宁可少 cite,也不要编。
-
-DuckDuckGo 是免 key provider,但对高频/域名限定突发搜索敏感。工具调用硬约束:
-
-- \`web_search\` 总次数最多 3 次,不是"每轮 3 次"。不要在同一个 assistant turn 里并发批量发多个 \`web_search\`。
-- 每次 \`web_search\` 只传 \`query\` 和 \`count\`。不要传 \`domain_filter\`, \`date_after\`, \`date_before\`, \`freshness\`, \`country\`, \`language\`, \`max_tokens\`, \`max_tokens_per_page\` 等 provider-specific 参数。
-- 如果 DuckDuckGo 返回 bot-detection challenge,立刻停止继续搜索,基于已经成功的结果收束并诚实说明限制。
-- \`web_fetch\` 最多 1 次,且只能 fetch 成功 \`web_search\` 返回的 \`http://\` 或 \`https://\` URL。不要 fetch \`file://\`、skill 文件或 workspace 文档。如果失败(网络拦截、private-IP guard、challenge、timeout),不要继续 fetch 其它 URL,改用搜索 snippets。
+- \`web_search({ query: "EN keywords", count: 1-10 })\`:最多 5 次,
+  通常 3 次够。只传 \`query\` + \`count\`,不传其它参数。
+- \`web_fetch({ url, maxChars: 60000 })\`:最多 2 次,且 url 必须来自
+  上一步 web_search 返回的 http(s) 结果,不要 fetch 文件 / 自己编的 URL。
 
 # Prose 节奏
 
-1. 用一两句中文 prose 开场,确认主题、说你打算从哪个角度先切入。
-2. 每次调 web_search / web_fetch 之前不要沉默 —— 一定先有一段 1-2 句的 prose 说"接下来我去看 X"。
-3. 工具返回后用 2-4 句 prose 汇报本轮找到了什么、是否有 surprise、下一步打算搜什么。
-4. 综合段(3-5 句 prose):总结 landscape,说出本课要走的视角。
+每次 tool 调用前后都用 1-3 句中文 prose 说你打算去查什么、查到了什么。
+**每段 prose 末尾打 \`〔KP〕\`** sentinel(客户端会替换为段落分隔符,
+不打的话所有段会粘成一坨)。综合段后接 fenced block。
 
-# 段落分隔(强制 · 用一个特殊 sentinel marker)
-
-OpenClaw 在 wire 层把多次 tool call 之间的 commentary phase prose **合并成一个 text block** 推给客户端,合并时会 **strip 段尾的 \`\\n\\n\`**,导致所有 prose 段在用户屏幕上粘成一坨连续文字。
-
-**修法:每段 prose 末尾打一个 sentinel marker \`〔KP〕\`**(中文鱼尾括号包 "KP"),客户端会 detect 这个 marker 把它**替换为段落分隔符**,marker 本身不显示。这样无论 OpenClaw 如何合并,段边界都能保住。
-
-强制要求:
-
-- 开场 prose 末尾打 \`〔KP〕\`
-- 每个 mid prose(tool 之间的汇报段)末尾打 \`〔KP〕\`
-- 综合段末尾打 \`〔KP〕\`
-- 然后才接 fenced block
-
-\`〔KP〕\` 是 ASCII-safe 之外的固定 4 字符 sentinel,不会出现在你的正文里。打 marker 不影响阅读 —— 客户端在渲染前 strip 掉。
-
-**正例**:
-
-\`\`\`
-我先去搜主流综述。〔KP〕
-找到了 6 篇,主线一致 —— 三个机制聚到一起。〔KP〕
-下一步我去搜反对意见。〔KP〕
-\`\`\`
-
-# Outline fenced block(只准备目录,不写完整讲解内容)
-
-这是**研报模式**的关键 —— 你这一轮是**准备阶段**,不是讲解阶段。讲解会发生在用户每点"开始第 N 节"时,**那时**会给你一个新的 turn,允许你再调 web_search / web_fetch 临场基于实时材料创作内容。所以**这一轮不要把每节的内容讲透**,只:
-
-1. 决定课程的总题目和简介
-2. 拆出 N 节(每节一个标题)
-3. **为每节准备一个资料指针清单(从你刚才 web_search / web_fetch 拿到的真实 url 里挑)**
-
-输出严格按这个 JSON schema(字段名必填,不要 alias):
+# Output schema
 
 \`\`\`json
 {
   "version": 1,
-  "courseTitle": "课程标题",
-  "introduction": "200-600 中文字课程介绍,直接当 Deeply 课程介绍渲染。点出本课会回答什么、为什么这个时间点值得看、有哪些主要争议或视角。",
+  "courseTitle": "5-60 字课程标题",
+  "introduction": "200-600 字课程介绍,用户进课程页第一眼看到的",
   "sections": [
     {
       "index": 1,
-      "title": "第 1 节标题",
+      "title": "8-30 字节标题",
       "sources": [
-        { "title": "原始来源标题", "url": "https://...", "stance": "primary", "snippet": "<=80 字中文转述这条来源对**这一节**为什么重要" }
+        { "title": "...", "url": "https://...", "stance": "primary",
+          "snippet": "<=80 字中文,说明这条对本节为什么有用" }
       ]
     }
   ],
-  "outlineMarkdown": "## 第1节:标题\\n- [primary] 资料标题 — https://...\\n- [counterpoint] 资料标题 — https://...\\n\\n## 第2节:..."
+  "outlineMarkdown": "## 第1节:...\\n- [primary] ... — https://...\\n\\n## 第2节:..."
 }
 \`\`\`
 
-字段要求:
-
-- 字段名必须严格使用 camelCase: \`version\`, \`courseTitle\`, \`introduction\`, \`sections\`, \`outlineMarkdown\`。不要输出旧 schema / snake_case 字段,例如 \`course_title\`, \`course_summary\`, \`suggested_course_flow\`。
-- fenced block 的内容必须是 JSON 对象,第一行从 \`{\` 开始,最后一行以 \`}\` 结束。**禁止 YAML / Markdown outline / 旧 schema**,例如 \`title: ...\`, \`sections_count: ...\`, \`source_ids: ...\`, \`learning_goals: ...\`, \`discussion_questions: ...\` 都是不合格输出。
-- \`courseTitle\` 必填,5-60 字
-- \`introduction\` 必填,200-600 字。**这是用户进课程页第一眼看到的简介**,缺它 UX 残缺。
-- \`sections\` 必填,${input.sections > 0
-    ? `以用户请求的 ${input.sections} 节为目标,允许 ±20% 浮动(下限 ${Math.max(2, Math.floor(input.sections * 0.8))} 节,上限 ${Math.ceil(input.sections * 1.2) + 1} 节)`
-    : `**用户没指定节数,请你根据课题的结构、调研到的材料量和分支视角自己决定该拆几节**。不要为了短而强行合并,也不要为了长而注水。`}。每节:
-  - \`title\` 8-30 中文字
-  - \`sources\` **每节 2-4 条**,每条 \`{ title, url, stance, snippet }\`。**url 必须来自 web_search / web_fetch 实际返回**,不许编造。stance 是 \`primary\` / \`counterpoint\` / \`background\` 之一。snippet 是中文转述,**说明这条资料对这一节为什么有用**(不是泛泛简介,而是"这一节用得上"的角度),不超过 80 字。
-  - **不要写"核心隐喻"或"要点"**。这一轮你不写讲解内容,讲解交给将来的 mainline turn 临场创作。
-  - 不要输出讲解型字段,例如 \`learning_goals\`, \`key_points\`, \`case_studies\`, \`discussion_questions\`, \`risk_framework\`。每节只要 \`index\`, \`title\`, \`sources\`。
-- \`outlineMarkdown\` 必填,严格格式:每节 \`## 第N节:标题\` + 每条资料一行 \`- [stance] 资料标题 — url\`(纯文本列表,不再有"核心隐喻 / 要点")。**不要再用三反引号包裹这段**,它在外层 JSON 字符串里。
-
-# 节数
-
-${input.sections > 0
-    ? `总节数 ${input.sections} ± 20%,以课题自然结构为准。`
-    : `用户没指定节数 —— 由你根据课题的真实复杂度自己决定。覆盖到主线观点 + 主要分支视角 / 反方 / 关键背景就行,不必为了精简强行合并,也不必为了显得详尽注水。`}
-
-fenced block 之后**不要再写任何文字**。
+每节 \`sources\` 0-4 条(0 = 没搜到合适的就空)。
+\`stance\` 必须是 \`primary\` / \`counterpoint\` / \`background\` 之一。
+字段名严格 camelCase,不要用 snake_case 或其它 alias。
 
 [用户消息]
 ${visible}`;
@@ -754,13 +715,15 @@ export function buildMaterialKickoffPrompt(input: {
 
 - \`courseTitle\`:围绕这份资料的课程标题
 - \`introduction\`:200-600 字,说明这份资料讲什么、为什么值得学、课程怎么组织
-- \`sections\`:${input.sections > 0
-    ? `${input.sections} ± 20% 节`
-    : `**用户没指定节数,请你根据这份资料本身的结构、长度和内容密度自己决定该拆几节**。不要为了短而强行合并要点,也不要为了显得详尽而把同一个点拆成多节。`}。每节必须有 2-4 条 \`sources\`:
+- \`sections\`:必填。${input.sections > 0
+    ? `用户选择的是约 ${input.sections} 节;请按资料自然结构组织,不要为了凑数机械拆分或合并。`
+    : ""}每节必须有 2-4 条 \`sources\`:
   - source.url 用用户提供的这条 URL,或你 web_fetch/web_search 得到的真实 URL
+  - 同一节 \`sources\` 内不要重复同一个 URL。
   - source.stance 必须是 \`primary\` / \`counterpoint\` / \`background\` 之一。基于同一份资料的主要段落通常用 \`primary\`,补充背景资料用 \`background\`,反方/限制用 \`counterpoint\`。
   - 每条 source 的 snippet 是「这一节会用到什么材料」,不是泛泛摘要
 - \`outlineMarkdown\`:每节 \`## 第N节:标题\` + \`- [stance] 资料标题 — url\`
+- JSON 字符串内部不要裸用英文双引号 \`"\`。引用短语请优先用中文引号“...”,或把英文双引号写成 \`\\"\`,否则移动端无法解析。
 
 # 段落分隔
 
@@ -936,7 +899,7 @@ export function buildBookOutlinePrompt(input: {
   title: string;
   /** 用户点选时附带的 meta 字符串(作者,年份,版本)— 整段内联进 prompt 给 agent。 */
   meta?: string;
-  /** 课程目标节数;0 = 由 agent 自定。 */
+  /** 用户选择的长度;0 = 自动。 */
   sections: number;
   /** 用户在 chat 里实际看到的那条 visible text,prompt 末尾以"用户消息"形式带过去。 */
   visibleText: string;
@@ -995,12 +958,12 @@ fenced block 之前必须有 2-4 段中文 prose narration,每段末尾打 \`〔
 
 字段要求:
 
-- \`sections\` ${input.sections > 0
-    ? `以用户请求的 ${input.sections} 节为目标,允许 ±20% 浮动(下限 ${Math.max(2, Math.floor(input.sections * 0.8))} 节,上限 ${Math.ceil(input.sections * 1.2) + 1} 节)`
-    : `**用户没指定节数,你根据这本书本身的章节结构、内容厚度和你能拿到的解读资料量自己决定该拆几节**。理想情况下跟原书章节脉络对得上,不必为了简短而合并掉关键章节,也不必为了显得详尽而拆得过细。`}。
-- 每节 \`sources\` **2-4 条**,**url 必须来自 web_search / web_fetch 实际返回**。
+- \`sections\` 必填。${input.sections > 0
+    ? `用户选择的是约 ${input.sections} 节;请按原书章节脉络自然组织,不要为了凑数机械拆分或合并。`
+    : ""}理想情况下,每节 title 跟原书章节有可对应关系。
+- 每节 \`sources\` **2-4 条**,**url 必须来自 web_search / web_fetch 实际返回**,同一节内不要重复同一个 URL。
 - \`stance\`:作者本人的章节内容 / 官方 chapter list / 权威书评归 \`primary\`;反对意见或常见误读归 \`counterpoint\`;补充背景(作者其它书、访谈、相关概念)归 \`background\`。
-- **理想情况下,每节 title 跟原书章节有可对应关系**(允许重组,但用户应该能在课程里识别出原书脉络)。
+- JSON 字符串内部不要裸用英文双引号 \`"\`。引用短语请优先用中文引号“...”,或把英文双引号写成 \`\\"\`,否则移动端无法解析。
 
 # 段落分隔
 
@@ -1241,7 +1204,7 @@ export const DEEPLY_RECOMMEND_INSTRUCTION = `
 每个方向应满足:
 - 是一个具体的人物 / 书籍 / 理论 / 思想流派,而不是宽泛主题。
 - 在对话里被实际提到过,或与对话主题强相关。
-- 能展开为一门 20-50 节的深度对话课程。
+- 能展开为一门结构清晰的深度对话课程。
 
 # 输出格式(必须严格遵守)
 
@@ -1259,8 +1222,7 @@ export const DEEPLY_RECOMMEND_INSTRUCTION = `
         "kind": "person",
         "title": "阿德勒",
         "subtitle": "个体心理学",
-        "reason": "阿德勒很适合谈成长,因为他不把人看成被过去决定的动物,而看成能重新选择生活方向的人。学它,会更懂'勇气'为什么不是鸡血,而是一种面对关系和责任的能力。",
-        "suggestedSections": 32
+        "reason": "阿德勒很适合谈成长,因为他不把人看成被过去决定的动物,而看成能重新选择生活方向的人。学它,会更懂'勇气'为什么不是鸡血,而是一种面对关系和责任的能力。"
       }
     }
   ]
@@ -1275,7 +1237,6 @@ export const DEEPLY_RECOMMEND_INSTRUCTION = `
 - \`card.title\` 主标题:人名 / 书名 / 理论名,例:"阿德勒" / "《思考,快与慢》" / "系统1与系统2"。
 - \`card.subtitle\` 副标题:1 句话(不超过 14 字),常常是"流派 / 作者 / 类别",例:"个体心理学" / "卡尼曼" / "行为经济学"。
 - \`card.reason\` 学习理由:2-3 句、不超过 120 字,告诉用户"为什么值得学,学了能收获什么"。语气保持博学朋友式,不要营销话术。
-- \`card.suggestedSections\` 建议节数,整数,10-50。
 
 # 严格约束
 
