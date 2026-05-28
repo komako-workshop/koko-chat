@@ -830,6 +830,31 @@ function configureExecApprovals(workspaceByAgent) {
   }
 
   writeFileSync(approvalsPath, `${JSON.stringify(approvals, null, 2)}\n`);
+  pushExecApprovalsToGateway(approvalsPath);
+}
+
+function pushExecApprovalsToGateway(approvalsPath) {
+  // `openclaw.json` (agents / tools) is auto hot-reloaded by the gateway, but
+  // `exec-approvals.json` is not. Push it explicitly so the running gateway
+  // accepts newly allowlisted exec entries (e.g. kokochat-search) without a
+  // manual restart — otherwise the first agent call still hits
+  // "exec denied: allowlist miss" and prompts the user for approval.
+  const result = runOpenClaw(["approvals", "set", "--gateway", "--file", approvalsPath, "--json"], {
+    capture: true,
+    allowFailure: true
+  });
+  if (result.status === 0) {
+    log("approvals set --gateway: ok");
+    return;
+  }
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim();
+  log(
+    [
+      `approvals set --gateway did not complete automatically (exit ${result.status ?? "unknown"}).`,
+      output.length > 0 ? lastLines(output, 6) : null,
+      "If the first agent call hits `exec denied: allowlist miss`, restart the gateway and retry."
+    ].filter(Boolean).join(" ")
+  );
 }
 
 function readJsonObject(path) {
