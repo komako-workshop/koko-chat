@@ -1,8 +1,27 @@
 ---
 name: kokochat-deeply-research
 version: 0.5.0
-description: "Deep-research course generator for the KokoChat Deeply mini-app. Use when the user asks to build a deep-research course on a specific topic (KokoChat sends a kickoff message of the shape '请围绕「...」做一份深度调研课程'). This is the Phase A side of a two-phase pipeline: use KokoChat's hosted search wrapper plus `web_fetch` to collect real sources, narrate the research in flowing Chinese prose, and finally emit one `koko.deeply.research.notes` fenced block with synthesis + a flat sources list. The host runs a separate inference (Phase B) afterwards to split those notes into a course outline."
-metadata: { "openclaw": { "emoji": "🔍" } }
+description: "Deep-research course generator for the KokoChat Deeply mini-app. Phase A side of a two-phase pipeline: use the `kokochat-search` skill plus `web_fetch` to collect real sources, narrate the research in Chinese prose, and emit one `koko.deeply.research.notes` fenced block with synthesis + a flat sources list. Phase B runs as a separate stateless inference and turns those notes into the course outline. Fires when the user message looks like '请围绕「<topic>」做一份深度调研课程'."
+author: komako-workshop
+license: Apache-2.0
+tags: [latest, kokochat, deeply, research, course, web-search, two-phase]
+triggers:
+  - 请围绕「
+  - 深度调研课程
+  - kokochat deeply research course
+  - koko.deeply.research.notes
+metadata:
+  openclaw:
+    emoji: "🔍"
+    requires:
+      skills:
+        - kokochat-search
+      capabilities:
+        - network
+      platforms:
+        - linux
+        - darwin
+        - windows
 ---
 
 # kokochat-deeply-research

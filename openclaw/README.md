@@ -86,12 +86,18 @@ The installer creates the KokoChat agents if needed and syncs:
 
 - `openclaw/skills/kokochat-pairing` →
   `~/.openclaw/workspace/skills/kokochat-pairing`
+  (also on ClawHub as
+  [`kokochat-pairing`](https://clawhub.ai/komako-workshop/kokochat-pairing) —
+  `openclaw skills install kokochat-pairing`)
 - `miniapps/tavern/openclaw/skills/kokochat-tavern-search` →
   `~/.openclaw/agents/tavern/workspace/skills/kokochat-tavern-search`
 - `miniapps/tavern/openclaw/skills/kokochat-tavern-roleplay` →
   `~/.openclaw/agents/tavern-roleplay/workspace/skills/kokochat-tavern-roleplay`
 - `miniapps/deeply/openclaw/skills/kokochat-deeply-research` →
   `~/.openclaw/agents/deeply/workspace/skills/kokochat-deeply-research`
+  (also on ClawHub as
+  [`kokochat-deeply-research`](https://clawhub.ai/komako-workshop/kokochat-deeply-research) —
+  `openclaw skills install kokochat-deeply-research --agent deeply`)
 - `openclaw/skills/kokochat-search` →
   `~/.openclaw/agents/deeply/workspace/skills/kokochat-search`
   (shared skill; other mini-apps can opt in via the installer's SKILLS list,

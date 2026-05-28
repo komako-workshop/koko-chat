@@ -1,8 +1,29 @@
 ---
 name: kokochat-pairing
 version: 0.2.1
-description: "Approve a KokoChat device pairing request and return a device-token connection code. Use when the user asks to pair KokoChat, generate a KokoChat connection code, or sends a KokoChat pairing request."
-metadata: { "openclaw": { "emoji": "📱", "requires": { "bins": ["node"] } } }
+description: "Approve a KokoChat device pairing request and return a device-token connection code. Use when the user asks to pair KokoChat, generate a KokoChat connection code, or sends a KokoChat `kokochat.pairingRequest` payload. The script writes the approved device into `~/.openclaw/devices/paired.json` and prints a relay-tunnel setup code the phone can paste back into KokoChat."
+author: komako-workshop
+license: Apache-2.0
+tags: [latest, kokochat, pairing, device, gateway, relay]
+triggers:
+  - kokochat pairing
+  - pair kokochat
+  - generate kokochat connection code
+  - kokochat 配对
+  - KokoChat 连接码
+  - kokochat.pairingRequest
+metadata:
+  openclaw:
+    emoji: "📱"
+    requires:
+      bins: [node]
+      capabilities:
+        - network
+        - filesystem_write
+      platforms:
+        - linux
+        - darwin
+        - windows
 ---
 
 # kokochat-pairing
