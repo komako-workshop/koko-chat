@@ -1,0 +1,26 @@
+[Unit]
+Description=KokoChat relay connector (bridges KokoChat relay tunnel to local OpenClaw Gateway)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# {{USER}} / {{NODE_BIN}} / {{CONNECTOR}} / {{OPENCLAW_HOME}} / {{ENV_FILE}}
+# are substituted by scripts/install-openclaw-support.mjs at install time.
+User={{USER}}
+Environment=OPENCLAW_HOME={{OPENCLAW_HOME}}
+Environment=OPENCLAW_CONFIG_DIR={{OPENCLAW_HOME}}
+# openclaw.env carries KOKOCHAT_RELAY_URL (and any overrides). EnvironmentFile
+# is optional: a leading "-" means "ignore if missing".
+EnvironmentFile=-{{ENV_FILE}}
+ExecStart={{NODE_BIN}} {{CONNECTOR}}
+# The connector self-bootstraps from {{OPENCLAW_HOME}}/kokochat-relay/relay.json.
+# Before pairing creates that file, the process exits 0; Restart=always plus
+# RestartSec gives a light retry loop until pairing happens.
+Restart=always
+RestartSec=10
+# Avoid hammering if something is genuinely broken.
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

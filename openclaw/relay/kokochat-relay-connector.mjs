@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 const config = loadConfig();
 const reconnectBaseMs = Number(process.env.KOKOCHAT_RELAY_RECONNECT_BASE_MS ?? 1000);
@@ -126,12 +128,72 @@ function loadConfig() {
   if (configPath) {
     return validateConfig(JSON.parse(readFileSync(configPath, "utf8")));
   }
+  // Explicit relay env (legacy / manual) takes priority when fully provided.
+  if (process.env.KOKOCHAT_RELAY_ID && process.env.KOKOCHAT_RELAY_SECRET) {
+    return validateConfig({
+      relayUrl: requiredEnv("KOKOCHAT_RELAY_URL"),
+      relayId: process.env.KOKOCHAT_RELAY_ID,
+      relaySecret: process.env.KOKOCHAT_RELAY_SECRET,
+      gatewayUrl: process.env.KOKOCHAT_LOCAL_GATEWAY_URL ?? "ws://127.0.0.1:18789"
+    });
+  }
+  // Self-bootstrap from OpenClaw home state. This is what the systemd /
+  // launchd daemon uses: it doesn't need the random per-relay config file,
+  // it reads kokochat-relay/relay.json (written at pairing time) + the
+  // gateway port from openclaw.json. If pairing hasn't happened yet,
+  // relay.json is missing — exit cleanly so the supervisor retries later
+  // (don't crash-loop hard).
+  return loadConfigFromState();
+}
+
+function resolveOpenClawHome() {
+  return (
+    process.env.OPENCLAW_CONFIG_DIR ??
+    process.env.OPENCLAW_HOME ??
+    join(homedir(), ".openclaw")
+  );
+}
+
+function loadConfigFromState() {
+  const home = resolveOpenClawHome();
+  const statePath = join(home, "kokochat-relay", "relay.json");
+  if (!existsSync(statePath)) {
+    log(
+      `no relay state at ${statePath} yet — KokoChat not paired on this home. ` +
+        `Waiting; will retry after restart.`
+    );
+    // Exit 0; the supervisor (systemd Restart=always / launchd KeepAlive)
+    // restarts us after its RestartSec, giving a light poll until pairing
+    // creates relay.json.
+    process.exit(0);
+  }
+  let state;
+  try {
+    state = JSON.parse(readFileSync(statePath, "utf8"));
+  } catch (error) {
+    throw new Error(`relay state ${statePath} is not valid JSON: ${error?.message ?? error}`);
+  }
+  const gatewayUrl =
+    process.env.KOKOCHAT_LOCAL_GATEWAY_URL ?? resolveLocalGatewayUrl(home);
   return validateConfig({
-    relayUrl: requiredEnv("KOKOCHAT_RELAY_URL"),
-    relayId: requiredEnv("KOKOCHAT_RELAY_ID"),
-    relaySecret: requiredEnv("KOKOCHAT_RELAY_SECRET"),
-    gatewayUrl: process.env.KOKOCHAT_LOCAL_GATEWAY_URL ?? "ws://127.0.0.1:18789"
+    relayUrl: state.relayUrl ?? process.env.KOKOCHAT_RELAY_URL,
+    relayId: state.relayId,
+    relaySecret: state.relaySecret,
+    gatewayUrl
   });
+}
+
+function resolveLocalGatewayUrl(home) {
+  try {
+    const config = JSON.parse(readFileSync(join(home, "openclaw.json"), "utf8"));
+    const port = Number(config?.gateway?.port);
+    if (Number.isFinite(port) && port > 0) {
+      return `ws://127.0.0.1:${port}`;
+    }
+  } catch {
+    // fall through to default
+  }
+  return "ws://127.0.0.1:18789";
 }
 
 function validateConfig(value) {

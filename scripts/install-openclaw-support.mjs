@@ -9,7 +9,7 @@ import {
   statSync,
   writeFileSync
 } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -263,6 +263,7 @@ function main() {
   }
 
   restartGatewayAfterUpgrade(openclawState);
+  installRelayConnectorDaemon(defaultWorkspace);
 
   if (dryRun) {
     log("");
@@ -613,6 +614,92 @@ function installRelayConnector(defaultWorkspace) {
   mkdirSync(dirname(target), { recursive: true });
   rmSync(target, { recursive: true, force: true });
   cpSync(RELAY_SOURCE, target, { recursive: true });
+}
+
+const RELAY_DAEMON_SERVICE = "kokochat-relay-connector.service";
+const RELAY_DAEMON_UNIT_TEMPLATE = join(
+  REPO_ROOT,
+  "openclaw",
+  "relay",
+  "deploy",
+  "kokochat-relay-connector.service"
+);
+
+/**
+ * Install the relay connector as a self-healing systemd service so it
+ * survives crashes / reboots and reconnects automatically — instead of
+ * relying on the detached process the pairing skill spawns once.
+ *
+ * Only runs on Linux with a system systemd we can write to (root). On macOS
+ * / non-root / non-systemd hosts we silently skip; the pairing-time spawn
+ * remains the fallback. The connector self-bootstraps from
+ * `${OPENCLAW_HOME}/kokochat-relay/relay.json`, so the unit needs no
+ * per-relay config path.
+ */
+function installRelayConnectorDaemon(defaultWorkspace) {
+  if (dryRun) return;
+  if (process.platform !== "linux") {
+    log("relay daemon: skipped (not Linux; pairing-time spawn remains the fallback)");
+    return;
+  }
+  if (!commandExists("systemctl")) {
+    log("relay daemon: skipped (systemctl not found)");
+    return;
+  }
+  const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
+  if (!isRoot) {
+    log("relay daemon: skipped (needs root to install a system service; run installer with sudo to enable self-healing relay)");
+    return;
+  }
+  if (!existsSync(RELAY_DAEMON_UNIT_TEMPLATE)) {
+    log(`relay daemon: skipped (unit template missing at ${RELAY_DAEMON_UNIT_TEMPLATE})`);
+    return;
+  }
+
+  const connector = join(defaultWorkspace, "relay", "kokochat-relay-connector.mjs");
+  const nodeBin = process.execPath;
+  const envFile = join(openclawHome, "openclaw.env");
+  const unit = readFileSync(RELAY_DAEMON_UNIT_TEMPLATE, "utf8")
+    .replaceAll("{{USER}}", userInfo().username)
+    .replaceAll("{{NODE_BIN}}", nodeBin)
+    .replaceAll("{{CONNECTOR}}", connector)
+    .replaceAll("{{OPENCLAW_HOME}}", openclawHome)
+    .replaceAll("{{ENV_FILE}}", envFile);
+
+  const unitPath = join("/etc/systemd/system", RELAY_DAEMON_SERVICE);
+  try {
+    writeFileSync(unitPath, unit);
+  } catch (error) {
+    log(`relay daemon: could not write ${unitPath} (${error?.message ?? error}); skipped`);
+    return;
+  }
+  log(`relay daemon: wrote ${unitPath}`);
+
+  const reload = run("systemctl", ["daemon-reload"], { capture: true, allowFailure: true });
+  if (reload.status !== 0) {
+    log("relay daemon: systemctl daemon-reload failed; skipped enable");
+    return;
+  }
+  const enable = run("systemctl", ["enable", "--now", RELAY_DAEMON_SERVICE], {
+    capture: true,
+    allowFailure: true
+  });
+  if (enable.status === 0) {
+    log(`relay daemon: enabled + started ${RELAY_DAEMON_SERVICE} (self-healing)`);
+  } else {
+    const output = `${enable.stdout ?? ""}\n${enable.stderr ?? ""}`.trim();
+    log(
+      `relay daemon: enable --now returned ${enable.status ?? "unknown"}. ${output.length > 0 ? lastLines(output, 4) : ""}`
+    );
+  }
+}
+
+function commandExists(command) {
+  const probe = run(process.platform === "win32" ? "where" : "which", [command], {
+    capture: true,
+    allowFailure: true
+  });
+  return probe.status === 0;
 }
 
 function installAgentDefinitions(workspaceByAgent) {

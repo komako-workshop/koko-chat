@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { randomBytes } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
@@ -333,6 +333,15 @@ function startRelayConnector(root, relayId, configPath) {
   if (process.env.NODE_ENV === "test" && process.env.KOKOCHAT_SKIP_RELAY_CONNECTOR_START === "1") {
     return;
   }
+  // If the self-healing systemd daemon is managing the connector, don't spawn
+  // a second one — two connectors on the same relay tunnel fight over it and
+  // make the phone flap between connected/disconnected. The daemon
+  // self-bootstraps from relay.json (which we just wrote), so a restart
+  // picks up this pairing.
+  if (relayDaemonActive()) {
+    restartRelayDaemon();
+    return;
+  }
   const connector = fileURLToPath(new URL("../../relay/kokochat-relay-connector.mjs", import.meta.url));
   if (!existsSync(connector)) {
     throw new Error(`KokoChat relay connector is missing: ${connector}`);
@@ -355,6 +364,30 @@ function startRelayConnector(root, relayId, configPath) {
   });
   child.unref();
   writeFileSync(pidFile, `${child.pid}\n`, { mode: 0o600 });
+}
+
+const RELAY_DAEMON_SERVICE = "kokochat-relay-connector.service";
+
+function relayDaemonActive() {
+  if (process.platform !== "linux") return false;
+  try {
+    const result = spawnSync("systemctl", ["is-active", "--quiet", RELAY_DAEMON_SERVICE], {
+      stdio: "ignore"
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+function restartRelayDaemon() {
+  // The daemon self-bootstraps from relay.json, which this run just wrote.
+  // Restart so it reconnects with the freshly-approved device immediately.
+  try {
+    spawnSync("systemctl", ["restart", RELAY_DAEMON_SERVICE], { stdio: "ignore" });
+  } catch {
+    // Best effort; the daemon would also pick it up on its next reconnect.
+  }
 }
 
 function stopOtherRelayConnectors(root, relayId) {
