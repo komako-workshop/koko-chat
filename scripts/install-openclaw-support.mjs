@@ -839,10 +839,17 @@ function pushExecApprovalsToGateway(approvalsPath) {
   // accepts newly allowlisted exec entries (e.g. kokochat-search) without a
   // manual restart — otherwise the first agent call still hits
   // "exec denied: allowlist miss" and prompts the user for approval.
-  const result = runOpenClaw(["approvals", "set", "--gateway", "--file", approvalsPath, "--json"], {
-    capture: true,
-    allowFailure: true
-  });
+  //
+  // `openclaw approvals set --gateway` connects as a regular client; if it
+  // hits a brand-new gateway it can stall on a scope-upgrade approval
+  // prompt. To bypass that we pass the local gateway URL + the gateway
+  // token straight from `openclaw.env`, which gives us admin scope.
+  const args = ["approvals", "set", "--gateway", "--file", approvalsPath, "--json"];
+  const localUrl = resolveLocalGatewayUrlForInstaller();
+  if (localUrl !== null) args.push("--url", localUrl);
+  const token = resolveLocalGatewayTokenForInstaller();
+  if (token !== null) args.push("--token", token);
+  const result = runOpenClaw(args, { capture: true, allowFailure: true });
   if (result.status === 0) {
     log("approvals set --gateway: ok");
     return;
@@ -855,6 +862,44 @@ function pushExecApprovalsToGateway(approvalsPath) {
       "If the first agent call hits `exec denied: allowlist miss`, restart the gateway and retry."
     ].filter(Boolean).join(" ")
   );
+}
+
+function resolveLocalGatewayUrlForInstaller() {
+  const configPath = join(openclawHome, "openclaw.json");
+  if (!existsSync(configPath)) return null;
+  try {
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    const port = Number(config?.gateway?.port);
+    if (Number.isFinite(port) && port > 0) return `ws://127.0.0.1:${port}`;
+  } catch {
+    // fall through
+  }
+  return "ws://127.0.0.1:18789";
+}
+
+function resolveLocalGatewayTokenForInstaller() {
+  if (typeof process.env.OPENCLAW_GATEWAY_TOKEN === "string" && process.env.OPENCLAW_GATEWAY_TOKEN.length > 0) {
+    return process.env.OPENCLAW_GATEWAY_TOKEN;
+  }
+  const envPath = join(openclawHome, "openclaw.env");
+  if (!existsSync(envPath)) return null;
+  try {
+    for (const rawLine of readFileSync(envPath, "utf8").split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (line.length === 0 || line.startsWith("#")) continue;
+      const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+      if (match && match[1] === "OPENCLAW_GATEWAY_TOKEN") {
+        const value = match[2].trim();
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+          return value.slice(1, -1);
+        }
+        return value;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 function readJsonObject(path) {
