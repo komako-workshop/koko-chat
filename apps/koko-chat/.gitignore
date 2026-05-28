@@ -4,3 +4,9 @@
 
 expo-env.d.ts
 # @end expo-cli
+
+# Expo prebuild output for Android — a ~920MB generated project that is
+# reproducible from app.config.js + plugins. Should never be committed.
+# (iOS is intentionally NOT here: KokoChat ships a checked-in ios/
+# project with custom Pods and Info.plist tweaks.)
+android/

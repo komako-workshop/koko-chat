@@ -18,7 +18,7 @@ KokoChat 是基于 OpenClaw 的移动端 agent 开源平台。
 
 * **Koko 是内置 AI 小搭子,但不是唯一入口**:主聊天可以召唤 mini-app,launcher / 独立页面 / 自定义 chat surface 也都是合法入口。
 * **每个具体场景是一个独立 mini-app**:有自己的入口、surface、UI 页面、本地存储、OpenClaw 一侧的 skill / agent。可以是工具、可以是娱乐、可以是长会话型的玩法。
-* **mini-app 是会越来越多的**。第一版只内置一个,后面会逐步加。开发者 / 用户也可以自己写。
+* **mini-app 是会越来越多的**。仓库里目前内置了 Koko 通用助手、Deeply 深度学习、酒馆角色卡,后续会持续添加。开发者 / 用户也可以自己写。
 * **数据在你手里**:聊天记录、角色卡、笔记 source、persona——全部留在你的手机和你的 OpenClaw 机器上,不上传任何云。
 
 当前内置的 mini-app:
@@ -46,7 +46,7 @@ KokoChat 的几条不会动摇的设计判断:
 - **Mini-app runtime**(`apps/koko-chat/sources/runtime`):`inferOnce` + 长会话原语,fenced block 协议,scoped storage,mini-app / conversation mode 注册表。
 - **内置 mini-apps**:
   - `miniapps/tavern` —— 酒馆助手(角色卡推荐)
-  - `miniapps/tavern-roleplay` —— 酒馆的隐藏角色聊天 mode,从 Tavern 卡片进入
+  - `miniapps/tavern/roleplay/mobile` —— 酒馆的隐藏角色聊天 mode,从 Tavern 卡片进入
   - `miniapps/deeply` —— Deeply 知识探索 + 课程讲解;自家 chat surface,不复用 host 共享聊天页
 - **协议层**(`packages/koko-protocol`):envelope / pairing / libsodium 加密。
 - **OpenClaw 客户端**(`packages/koko-openclaw-client`):Gateway Protocol v3,Node + RN 双入口。
@@ -61,7 +61,7 @@ apps/
   koko-chat/             KokoChat 移动 App(Expo / RN)
 miniapps/
   tavern/                酒馆角色卡 mini-app + 对应的 OpenClaw skill 源
-  tavern-roleplay/       酒馆隐藏角色聊天 mode
+    roleplay/mobile/     酒馆隐藏角色聊天 mode
   deeply/                Deeply 学习 mini-app(knowledge explore + 课程讲解)
 openclaw/                给用户机器上 OpenClaw 用的 skill 源 + dist patch 说明
 docs/                    mini-app runtime / skills 设计文档
