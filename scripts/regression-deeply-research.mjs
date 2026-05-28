@@ -4,18 +4,20 @@
  * the full transcript so we can verify prompt changes from this repo
  * actually take effect on the deeply agent.
  *
- * Two-phase pipeline (matches what the KokoChat client runs):
+ * Two-phase pipeline v2 (matches what the KokoChat client runs):
  *
- *   Phase A — research agent turn:
+ *   Phase A — plan agent turn:
  *     KokoChat wraps the user's "请围绕「...」做一份深度调研课程" into a
  *     long gatewayText (see persona.ts → buildResearchKickoffPrompt). The
- *     agent searches the web, narrates in Chinese, and finally emits one
- *     `koko.deeply.research.notes` fenced block (synthesis + flat sources).
+ *     agent does light exploratory search to calibrate, then emits one
+ *     `koko.deeply.research.plan` fenced block (courseTitle + introduction
+ *     + sections[title + searchHint]). No per-section sources yet.
  *
- *   Phase B — stateless inferOnce on the same agent:
- *     KokoChat takes Phase A's notes block, builds a new prompt
- *     (persona.ts → buildResearchOutlineFromNotesPrompt), and chat.send's
- *     it with a fresh oneshot session key. The agent emits one
+ *   Phase B — per-section search inferOnce on the same agent:
+ *     KokoChat takes Phase A's plan, builds a new prompt
+ *     (persona.ts → buildResearchOutlineFromPlanPrompt), and chat.send's
+ *     it with a fresh oneshot session key. The agent searches once per
+ *     section using each `searchHint` and emits one
  *     `koko.deeply.research.outline` fenced block (per-section sources).
  *
  *   We replicate both phases here so regression runs match production
@@ -23,11 +25,10 @@
  *   persona.ts.
  *
  *   On test:
- *     - Phase A events.json should contain KokoChat hosted search / web_fetch tool calls.
- *     - Phase A notes.json sources URLs should overlap with URLs from those
- *       tool results (i.e. the model didn't fabricate sources).
- *     - Phase B raw.txt should parse cleanly into a research outline block
- *       whose section.sources URLs are a strict subset of Phase A sources.
+ *     - Phase A raw.txt should carry a `koko.deeply.research.plan` block
+ *       whose section titles reflect a teaching structure for the topic.
+ *     - Phase B raw.txt should parse into a research outline whose
+ *       per-section sources URLs are real (spot-check with curl/HEAD).
  *
  * Usage:
  *   node scripts/regression-deeply-research.mjs --topic "一二级投资人现在怎么看AI"
@@ -36,12 +37,12 @@
  *   node scripts/regression-deeply-research.mjs --topic "..." --host 47.237.5.255
  *
  * Output goes under ./artifacts/deeply-research-test-<timestamp>.{
- *   phase-a.prompt.txt, phase-a.events.json, phase-a.raw.txt, phase-a.notes.json,
+ *   phase-a.prompt.txt, phase-a.events.json, phase-a.raw.txt, phase-a.plan.json,
  *   phase-b.prompt.txt, phase-b.events.json, phase-b.raw.txt, phase-b.outline.md
  * } so multiple runs can be diffed.
  *
  * Sync notes:
- *   - `buildResearchKickoffPromptInline` + `buildResearchOutlineFromNotesPromptInline`
+ *   - `buildResearchKickoffPromptInline` + `buildResearchOutlineFromPlanPromptInline`
  *     below mirror persona.ts. When persona.ts is edited, copy the new
  *     template bodies here too.
  */
@@ -159,26 +160,21 @@ async function main() {
       timeoutMs: 600_000
     });
 
-    const notes = extractResearchNotes(phaseARun.rawText);
-    if (notes !== null) {
+    const plan = extractResearchPlan(phaseARun.rawText);
+    if (plan !== null) {
       writeFileSync(
-        `${artifactPrefix}.phase-a.notes.json`,
-        JSON.stringify(notes, null, 2),
+        `${artifactPrefix}.phase-a.plan.json`,
+        JSON.stringify(plan, null, 2),
         "utf8"
       );
-      log(`phase-a notes: synthesis=${notes.synthesis.length} chars, sources=${notes.sources.length}`);
+      log(`phase-a plan: courseTitle="${plan.courseTitle}", sections=${plan.sections.length}`);
     } else {
-      log(`phase-a NOTES BLOCK MISSING — Phase B will be skipped. inspect phase-a.raw.txt`);
+      log(`phase-a PLAN BLOCK MISSING — Phase B will be skipped. inspect phase-a.raw.txt`);
     }
 
-    // ─── Phase B: stateless outline-from-notes inferOnce ───
-    if (notes !== null) {
-      const phaseBPrompt = buildResearchOutlineFromNotesPromptInline({
-        topic,
-        sections,
-        synthesis: notes.synthesis,
-        sources: notes.sources
-      });
+    // ─── Phase B: per-section search inferOnce ───
+    if (plan !== null) {
+      const phaseBPrompt = buildResearchOutlineFromPlanPromptInline({ topic, plan });
       const phaseBSessionKey = `agent:deeply:kokochat:deeply-course:oneshot:regression:${runIdBase}`;
       const phaseBRun = await runOneTurn({
         gateway,
@@ -186,9 +182,9 @@ async function main() {
         prompt: phaseBPrompt,
         label: "phase-b",
         artifactPrefix,
-        visibleLine: "[Phase B: 调研笔记 → outline JSON]",
-        // Phase B has no web tools, just JSON generation — 90s ceiling.
-        timeoutMs: 90_000
+        visibleLine: "[Phase B: plan → per-section search → outline JSON]",
+        // Phase B searches once per section, so it can run several minutes.
+        timeoutMs: 360_000
       });
 
       const outline = parseOutlineSummary(phaseBRun.rawText);
@@ -209,11 +205,11 @@ async function main() {
     log(`summary:`);
     log(`  phase-a tool calls: ${phaseAToolCount}`);
     log(`  phase-a raw text: ${phaseARun.rawText.length} chars`);
-    log(`  phase-a notes block: ${notes !== null ? "ok" : "MISSING"}`);
+    log(`  phase-a plan block: ${plan !== null ? "ok" : "MISSING"}`);
     log(`artifacts (prefix ${artifactPrefix}):`);
     log(`  .phase-a.prompt.txt / .phase-a.events.json / .phase-a.raw.txt`);
-    if (notes !== null) {
-      log(`  .phase-a.notes.json`);
+    if (plan !== null) {
+      log(`  .phase-a.plan.json`);
       log(`  .phase-b.prompt.txt / .phase-b.events.json / .phase-b.raw.txt / .phase-b.outline.md`);
     }
   } finally {
@@ -301,75 +297,77 @@ function buildResearchKickoffVisibleText({ topic, sections }) {
 
 /**
  * Mirror of miniapps/deeply/mobile/persona.ts → buildResearchKickoffPrompt.
- * Phase A: agent does research only, emits `koko.deeply.research.notes`.
+ * Phase A: agent explores + designs course outline, emits `koko.deeply.research.plan`.
  * Keep in sync when persona.ts changes.
  */
 function buildResearchKickoffPromptInline({ topic, sections }) {
   const visible = buildResearchKickoffVisibleText({ topic, sections });
-  void sections; // sections only matters in Phase B
-  return `[系统注入 · 深度调研课程 Phase A:调研]
+  const sectionHint = sections > 0
+    ? `用户期望约 ${sections} 节,以材料自然结构为准上下浮动。`
+    : `节数自由决定,按题目自然结构来。`;
+  return `[系统注入 · 深度调研课程 Phase A:出课程目录 plan]
 
-按 \`kokochat-deeply-research\` skill 走研报流程。这一轮**只调研、收集
-sources**,不要决定课程目录、不要拆 section、不要分配每节资料 ——
-那是 Phase B 单独的一次推理,你交接给它的就是下面 fenced block 的
-"调研笔记"。
+按 \`kokochat-deeply-research\` skill 走两阶段研报流程。这一轮的任务
+**不是收集材料**,而是**理解题目并设计一门课的教学目录**:用户想学
+什么?这道题值得讲哪些主题?怎么拆才适合学?
 
-# 3 条硬约束(其它都可商量)
+材料收集留给 Phase B —— 它会拿到你这份 plan,然后对每节按你给的
+\`searchHint\` 单独联网搜,挂上真实 sources。你**不要在 plan 里 cite URL,
+不要带 sources 字段**。
 
-1. **先调用 KokoChat hosted search 拿到真实 sources,再 emit fenced block**。
-   搜索 0 结果时,
-   fenced block 里 \`sources\` 数组必须为空,**不要凭训练数据编 URL**。
-2. \`sources\` 里每个 \`url\` 必须来自**本轮** KokoChat hosted search / web_fetch
-   真实返回。没搜到合适的就少 cite,**不要编**。
-3. 输出**唯一一个** \`koko.deeply.research.notes\` fenced block,
-   内部是合法 JSON。fenced block 之后不要再写文字。
+# 你这一轮怎么工作
 
-# 工具
+需要联网就联网,**自己判断要不要搜、搜几次**。一般情况下,如果题目带
+时间词、具体人名、近期事件,先搜一两下校准认知很值得;如果题目是
+通识/历史/概念题,直接靠模型理解可能更好。
 
-KokoChat hosted search 就是一次 \`web_fetch\` 调用,**没有别的本地工具**:
+联网用 \`web_fetch\`:
 
 \`\`\`
 web_fetch({
-  url: "https://deeply.plus/deeply/search?q=<EN keywords, urlencoded>&count=<1-10>",
+  url: "https://deeply.plus/deeply/search?q=<EN keywords>&count=5",
   maxChars: 60000
 })
 \`\`\`
 
-返回 body 是 JSON,结构是
-\`{ ok: true, provider: "brave", query, count, results: [{ title, url, snippet }] }\`。
-解析 \`results\` 拿真实 URL。\`ok=false\` 时不要编 URL,直接如实说没搜到。
-不要传其它 query 参数,服务端会忽略。
-
-页面正文也用 \`web_fetch({ url, maxChars: 60000 })\`,挑 1-2 个最有价值的 URL,
-url 必须来自上一步搜索返回的 http(s) 结果,不要 fetch 文件或自己编的 URL。
+返回 body 是 JSON,结构 \`{ ok, provider, query, count, results: [{ title, url, snippet }] }\`。
+拿 snippet 校准认知就够,**不要把搜到的 URL 写进 plan**。\`ok=false\` 时
+如实说"搜不到"就行,凭你对题目的理解继续设计目录。
 
 # Prose 节奏
 
-每次 tool 调用前后用 1-3 句中文 prose 说你打算去查什么、查到了什么。
-**每段 prose 末尾打 \`〔KP〕\`** sentinel(客户端会替换为段落分隔符,
-不打的话所有段会粘成一坨)。综合段后接 fenced block。
+每段中文 prose 末尾打 \`〔KP〕\` sentinel(客户端会替换成段落分隔)。
+搜索前后简单说一下你在想什么、搜到了什么、最终目录怎么定的。综合段
+之后接 fenced block。
 
-# Output schema(Phase A · 调研笔记)
+# Output schema
+
+输出**唯一一个** \`koko.deeply.research.plan\` fenced block,内部
+是合法 JSON,字段如下:
 
 \`\`\`json
 {
   "version": 1,
   "topic": "用户提交的原题(原样)",
-  "synthesis": "300-1200 字中文调研笔记,把你这一轮搜到的关键事实、数据、观点、分歧梳理清楚。",
-  "sources": [
-    { "title": "...", "url": "https://...", "stance": "primary",
-      "note": "<=80 字中文,说这条材料讲了什么、为什么对这个题有用" }
+  "courseTitle": "5-60 字课程标题",
+  "introduction": "200-600 字课程介绍:这门课要回答什么问题、有哪些值得展开的视角、为什么这个时间点值得看",
+  "sections": [
+    {
+      "index": 1,
+      "title": "8-30 字节标题,从教学维度命名(可以按人物 / 视角 / 阶段 / 概念,选最贴这道题的切法)",
+      "searchHint": "EN keywords for Phase B to search this section specifically; 12-40 chars; concrete enough to return useful results, not the whole topic again"
+    }
   ]
 }
 \`\`\`
 
-字段说明:
+约束:
 
-- \`sources\` 扁平列表,**不分 section**(拆 section 是 Phase B 的工作),
-  5-20 条之间,涵盖主流观点 / 反方 / 关键背景 / 高质量原始材料。
-- \`stance\` 必须是 \`primary\` / \`counterpoint\` / \`background\` 之一。
-- 不要输出 \`courseTitle\` / \`introduction\` / \`sections\` / \`outlineMarkdown\` —
-  那些字段属于 Phase B 输出。
+- \`searchHint\` 用英文关键词组,**要比原题更窄、更聚焦**,这样 Phase B
+  搜出来的才贴本节;不要每节都重抄原题。
+- 不要输出 \`sections.sources\` / \`outlineMarkdown\` —— 那些是 Phase B 的事。
+- fenced block 之外不要再写文字。
+- ${sectionHint}
 
 [用户消息]
 ${visible}`;
@@ -377,54 +375,71 @@ ${visible}`;
 
 /**
  * Mirror of miniapps/deeply/mobile/persona.ts →
- * buildResearchOutlineFromNotesPrompt. Phase B: stateless oneshot turn that
- * splits Phase A notes into a structured outline. Keep in sync.
+ * buildResearchOutlineFromPlanPrompt. Phase B: oneshot agent turn that runs
+ * per-section hosted search and emits the outline. Keep in sync.
  */
-function buildResearchOutlineFromNotesPromptInline({ topic, sections, synthesis, sources }) {
-  const sectionHint = sections > 0
-    ? `用户希望约 ${sections} 节(允许 ±20%),但仍以材料自然结构为准。`
-    : `没有预设节数 —— 按材料自然结构自由决定。`;
-  const sourcesJsonl = sources
-    .map((s, i) => `  ${i + 1}. [${s.stance}] ${s.title}\n     ${s.url}\n     ${s.note ?? s.snippet ?? ""}`)
+function buildResearchOutlineFromPlanPromptInline({ topic, plan }) {
+  const planSections = plan.sections
+    .map((s) => `  ${s.index}. ${s.title}\n     searchHint: ${s.searchHint}`)
     .join("\n");
-  return `[Phase B · 拆课程目录]
+  return `[Phase B · 按目录调研 + 挂 sources]
 
-Phase A 已经把调研材料交给你。这一轮**不调任何工具**,基于下面的素材
-出一份课程 outline JSON。
+Phase A 已经设计好了课程目录(plan,见下)。这一轮的任务是为每节
+**单独联网搜索**,挑出真实 sources 挂上,最终输出完整的
+\`koko.deeply.research.outline\`。
 
-# 输入
+**不要**自己重写 plan 的 courseTitle / introduction / 节标题 —— 直接沿用。
+你要做的就是:遍历 sections,按每节 \`searchHint\` 调 hosted search,
+从结果里挑相关的 sources 挂到该节。
 
-## 用户原题
+# 用户原题
 
 ${topic}
 
-## Sources(主输入,按行号编号)
+# Phase A plan(沿用,不要修改)
 
-${sourcesJsonl}
+courseTitle: ${plan.courseTitle}
 
-## Phase A 调研笔记(背景参考,组织视角不一定要沿用)
+introduction:
+${plan.introduction}
 
-${synthesis}
+sections:
+${planSections}
 
-# 约束
+# 联网搜索
 
-- outline 里每条 url **只能从上面 sources 列表里挑**,不要新增、不要编。
-- 节数:${sectionHint}
-- 输出**唯一一个** \`koko.deeply.research.outline\` fenced block,
-  之外不要写任何文字。
-- 字段名严格 camelCase;JSON 字符串内引用短语优先用中文引号 “...”。
+每节按 \`searchHint\` 调:
+
+\`\`\`
+web_fetch({
+  url: "https://deeply.plus/deeply/search?q=<searchHint, urlencoded>&count=5",
+  maxChars: 60000
+})
+\`\`\`
+
+返回 body 是 JSON \`{ ok, provider, query, count, results: [{ title, url, snippet }] }\`。
+从 \`results\` 里挑跟本节真正相关的几条(数量自己决定 —— 真相关的就 1 条,
+不要为了凑数硬塞)。如果一节真没合适的,sources 留空也行;**不要编 URL**。
+
+每节 sources 里的 \`url\` 必须来自**本轮**搜索真实返回。
+
+需要可以再用 \`web_fetch({ url, maxChars: 60000 })\` 抓个别 URL 的正文,
+来更好判断它该不该上 —— 但不是必须。
 
 # Output schema
+
+输出**唯一一个** \`koko.deeply.research.outline\` fenced block,内部
+是合法 JSON,字段:
 
 \`\`\`json
 {
   "version": 1,
-  "courseTitle": "5-60 字课程标题",
-  "introduction": "200-600 字课程介绍",
+  "courseTitle": "(沿用 plan 的 courseTitle)",
+  "introduction": "(沿用 plan 的 introduction)",
   "sections": [
     {
       "index": 1,
-      "title": "8-30 字节标题",
+      "title": "(沿用 plan 的节标题)",
       "sources": [
         { "title": "...", "url": "https://...", "stance": "primary",
           "snippet": "<=80 字中文,这条对本节为什么有用" }
@@ -435,26 +450,34 @@ ${synthesis}
 }
 \`\`\`
 
-- 每节 \`sources\` 数量自由(0 条也行,讲解阶段会临场再搜);
-  stance 沿用 sources 列表里的;同一 url 同一节不重复。
+- \`stance\` 必须是 \`primary\` / \`counterpoint\` / \`background\` 之一。
+- 字段名严格 camelCase;JSON 字符串内引用短语优先用中文引号 “...”。
 - \`outlineMarkdown\` 每节格式:\`## 第N节:标题\` + 每条资料一行
-  \`- [stance] 资料标题 — url\`。`;
+  \`- [stance] 资料标题 — url\`。
+- fenced block 之外不要再写任何文字。`;
 }
 
 /**
- * Pull the Phase A notes JSON out of the agent's final message. Returns
+ * Pull the Phase A plan JSON out of the agent's final message. Returns
  * `null` when the fenced block is missing or doesn't parse.
  */
-function extractResearchNotes(rawText) {
-  const match = rawText.match(/```koko\.deeply\.research\.notes\s*([\s\S]+?)```/);
+function extractResearchPlan(rawText) {
+  const match = rawText.match(/```koko\.deeply\.research\.plan\s*([\s\S]+?)```/);
   if (!match) return null;
   try {
     const json = JSON.parse(match[1].trim());
     if (json === null || typeof json !== "object") return null;
     return {
       topic: typeof json.topic === "string" ? json.topic : "",
-      synthesis: typeof json.synthesis === "string" ? json.synthesis : "",
-      sources: Array.isArray(json.sources) ? json.sources : []
+      courseTitle: typeof json.courseTitle === "string" ? json.courseTitle : "",
+      introduction: typeof json.introduction === "string" ? json.introduction : "",
+      sections: Array.isArray(json.sections)
+        ? json.sections.map((s, i) => ({
+            index: typeof s?.index === "number" ? s.index : i + 1,
+            title: typeof s?.title === "string" ? s.title : "",
+            searchHint: typeof s?.searchHint === "string" ? s.searchHint : ""
+          }))
+        : []
     };
   } catch {
     return null;

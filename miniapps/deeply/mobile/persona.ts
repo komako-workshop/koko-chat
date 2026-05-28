@@ -590,24 +590,23 @@ export function parseDeeplyBookKickoff(
 }
 
 /**
- * Phase A:深度调研 kickoff prompt(只做调研,不拆目录)。
+ * Phase A:深度调研课程 kickoff —— 探索 + 出课程目录(plan)。
  *
- * 两阶段研究的第一阶段。Agent 在这一轮:
- *   - 调 KokoChat hosted search / web_fetch 直到对题目有足够材料
- *   - 边搜边流式输出中文 prose 给用户看
- *   - **最后只输出一份扁平的调研笔记**,不出 outline、不分 section
+ * 两阶段研究 v2:
+ *   - Phase A(此 prompt):agent 先做轻度联网探索(尤其当题目带时间词 /
+ *     具体人物等可能超出训练截止的内容),然后**只输出一份"教学维度"
+ *     的课程目录** —— courseTitle / introduction / sections[title +
+ *     searchHint]。**不在 plan 里 cite URL,不挂 sources**。注意力放在
+ *     "这道题值得讲哪些主题,怎么拆"。
+ *   - Phase B(\`buildResearchOutlineFromPlanPrompt\`,客户端单独 inferOnce
+ *     调用):agent 拿到 plan 后,为每节按 searchHint 联网搜索 + 挂 sources,
+ *     最终输出 \`koko.deeply.research.outline\`。
  *
- * Phase B 由客户端在拿到 notes 之后通过单独的 inferOnce 触发,
- * 那一轮模型完全没有 web 工具,只把 notes 转成结构化的
- * \`koko.deeply.research.outline\`。两阶段是为了让"调研"和"拆目录"
- * 不再争夺同一次 attention —— 上一轮 outline-only prompt 的回归测试
- * 出现过 toolCallCount=0 但 sources 全是模型从训练数据猜的 URL 这种
- * 典型 attention split 失败。
- *
- * 配套 prompt:
- *   - Phase A 输出 schema:\`koko.deeply.research.notes\`
- *     (定义在 parseResearchNotes.ts)
- *   - Phase B prompt:\`buildResearchOutlineFromNotesPrompt\` 在本文件下方
+ * 两阶段拆开,是为了让 Phase A 不被 sources 颗粒度拖着走 ——
+ * 之前 "notes → outline" 路径里,如果 Phase A 搜到的多是综述类 article,
+ * Phase B 拆的 outline 就被推成"多/空"二分这种宽口径,而不是"按大师 / 按
+ * 视角维度"。让 Phase A 专心思考"教学结构",再让 Phase B 按结构找证据,
+ * outline 会更贴用户期望。
  */
 export function buildResearchKickoffPrompt(input: {
   topic: string;
@@ -617,138 +616,162 @@ export function buildResearchKickoffPrompt(input: {
     topic: input.topic,
     sections: input.sections
   });
-  return `[系统注入 · 深度调研课程 Phase A:调研]
+  const sectionHint = input.sections > 0
+    ? `用户期望约 ${input.sections} 节,以材料自然结构为准上下浮动。`
+    : `节数自由决定,按题目自然结构来。`;
+  return `[系统注入 · 深度调研课程 Phase A:出课程目录 plan]
 
-按 \`kokochat-deeply-research\` skill 走研报流程。这一轮**只调研、收集
-sources**,不要决定课程目录、不要拆 section、不要分配每节资料 ——
-那是 Phase B 单独的一次推理,你交接给它的就是下面 fenced block 的
-"调研笔记"。
+按 \`kokochat-deeply-research\` skill 走两阶段研报流程。这一轮的任务
+**不是收集材料**,而是**理解题目并设计一门课的教学目录**:用户想学
+什么?这道题值得讲哪些主题?怎么拆才适合学?
 
-# 3 条硬约束(其它都可商量)
+材料收集留给 Phase B —— 它会拿到你这份 plan,然后对每节按你给的
+\`searchHint\` 单独联网搜,挂上真实 sources。你**不要在 plan 里 cite URL,
+不要带 sources 字段**。
 
-1. **先调用 KokoChat hosted search 拿到真实 sources,再 emit fenced block**。
-   搜索 0 结果时 \`sources\` 数组必须为空,**不要凭训练数据编 URL**。
-2. \`sources\` 里每个 \`url\` 必须来自**本轮** KokoChat hosted search /
-   web_fetch 真实返回。没搜到合适的就少 cite,**不要编**。
-3. 输出**唯一一个** \`koko.deeply.research.notes\` fenced block,
-   内部是合法 JSON。fenced block 之后不要再写文字。
+# 你这一轮怎么工作
 
-# 工具
+需要联网就联网,**自己判断要不要搜、搜几次**。一般情况下,如果题目带
+时间词、具体人名、近期事件,先搜一两下校准认知很值得;如果题目是
+通识/历史/概念题,直接靠模型理解可能更好。
 
-KokoChat hosted search 就是一次 \`web_fetch\` 调用,**没有别的本地工具**:
+联网用 \`web_fetch\`:
 
 \`\`\`
 web_fetch({
-  url: "https://deeply.plus/deeply/search?q=<EN keywords, urlencoded>&count=<1-10>",
+  url: "https://deeply.plus/deeply/search?q=<EN keywords>&count=5",
   maxChars: 60000
 })
 \`\`\`
 
-返回 body 是 JSON,结构是
-\`{ ok: true, provider: "brave", query, count, results: [{ title, url, snippet }] }\`。
-解析 \`results\` 拿真实 URL。\`ok=false\` 时不要编 URL,直接如实说没搜到。
-不要传其它 query 参数,服务端会忽略。
-
-页面正文也用 \`web_fetch({ url, maxChars: 60000 })\`,挑 1-2 个最有价值的 URL,
-url 必须来自上一步搜索返回的 http(s) 结果,不要 fetch 文件或自己编的 URL。
+返回 body 是 JSON,结构 \`{ ok, provider, query, count, results: [{ title, url, snippet }] }\`。
+拿 snippet 校准认知就够,**不要把搜到的 URL 写进 plan**。\`ok=false\` 时
+如实说"搜不到"就行,凭你对题目的理解继续设计目录。
 
 # Prose 节奏
 
-每次 tool 调用前后用 1-3 句中文 prose 说你打算去查什么、查到了什么。
-**每段 prose 末尾打 \`〔KP〕\`** sentinel(客户端会替换为段落分隔符,
-不打的话所有段会粘成一坨)。综合段后接 fenced block。
+每段中文 prose 末尾打 \`〔KP〕\` sentinel(客户端会替换成段落分隔)。
+搜索前后简单说一下你在想什么、搜到了什么、最终目录怎么定的。综合段
+之后接 fenced block。
 
-# Output schema(Phase A · 调研笔记)
+# Output schema
+
+输出**唯一一个** \`koko.deeply.research.plan\` fenced block,内部
+是合法 JSON,字段如下:
 
 \`\`\`json
 {
   "version": 1,
   "topic": "用户提交的原题(原样)",
-  "synthesis": "300-1200 字中文调研笔记,把你这一轮搜到的关键事实、数据、观点、分歧梳理清楚。",
-  "sources": [
-    { "title": "...", "url": "https://...", "stance": "primary",
-      "note": "<=80 字中文,说这条材料讲了什么、为什么对这个题有用" }
+  "courseTitle": "5-60 字课程标题",
+  "introduction": "200-600 字课程介绍:这门课要回答什么问题、有哪些值得展开的视角、为什么这个时间点值得看",
+  "sections": [
+    {
+      "index": 1,
+      "title": "8-30 字节标题,从教学维度命名(可以按人物 / 视角 / 阶段 / 概念,选最贴这道题的切法)",
+      "searchHint": "EN keywords for Phase B to search this section specifically; 12-40 chars; concrete enough to return useful results, not the whole topic again"
+    }
   ]
 }
 \`\`\`
 
-字段说明:
+约束:
 
-- \`sources\` 扁平列表,**不分 section**(拆 section 是 Phase B 的工作),
-  5-20 条之间,涵盖主流观点 / 反方 / 关键背景 / 高质量原始材料。
-- \`stance\` 必须是 \`primary\` / \`counterpoint\` / \`background\` 之一。
-- 不要输出 \`courseTitle\` / \`introduction\` / \`sections\` / \`outlineMarkdown\` —
-  那些字段属于 Phase B 输出。
+- \`searchHint\` 用英文关键词组,**要比原题更窄、更聚焦**,这样 Phase B
+  搜出来的才贴本节;不要每节都重抄原题。
+- 不要输出 \`sections.sources\` / \`outlineMarkdown\` —— 那些是 Phase B 的事。
+- fenced block 之外不要再写文字。
+- ${sectionHint}
 
 [用户消息]
 ${visible}`;
 }
 
 /**
- * Phase B:把 Phase A 调研笔记转成结构化课程目录。
+ * Phase B:按 Phase A 的 plan 联网搜索,为每节挂 sources,出 outline。
  *
- * 这一轮在客户端通过 \`inferOnce\` 单跑(不是 mainline session),agent
- * 拿不到 web 工具,attention 全集中在 JSON 输出和 section 拆分上。
- * 输入是 Phase A 产物 + 用户原题 + 节数偏好,输出严格按
- * \`koko.deeply.research.outline\` schema。
+ * 客户端在拿到 plan 后通过 \`inferOnce\` 单跑这一 turn。Agent 仍是 deeply,
+ * 继承 \`web_fetch\` 工具,但**这一轮不是脑暴**:它的注意力集中在"按
+ * plan 给的 sections.searchHint 一节一节去搜、挑 sources、保留 plan 原本
+ * 的 courseTitle / introduction / 节标题"。
+ *
+ * 输出 schema 跟老 outline 一致(\`koko.deeply.research.outline\`),
+ * 复用既有 \`parseResearchOutline\`。
  */
-export function buildResearchOutlineFromNotesPrompt(input: {
+export function buildResearchOutlineFromPlanPrompt(input: {
   topic: string;
-  sections: number;
-  synthesis: string;
-  sources: ReadonlyArray<{
-    title: string;
-    url: string;
-    stance: "primary" | "counterpoint" | "background";
-    snippet: string;
-  }>;
+  plan: {
+    courseTitle: string;
+    introduction: string;
+    sections: ReadonlyArray<{
+      index: number;
+      title: string;
+      searchHint: string;
+    }>;
+  };
 }): string {
-  const sectionHint = input.sections > 0
-    ? `用户希望约 ${input.sections} 节(允许 ±20%),但仍以材料自然结构为准。`
-    : `没有预设节数 —— 按材料自然结构自由决定。`;
-
-  const sourcesJsonl = input.sources
-    .map((s, i) => `  ${i + 1}. [${s.stance}] ${s.title}\n     ${s.url}\n     ${s.snippet}`)
+  const planSections = input.plan.sections
+    .map((s) => `  ${s.index}. ${s.title}\n     searchHint: ${s.searchHint}`)
     .join("\n");
 
-  return `[Phase B · 拆课程目录]
+  return `[Phase B · 按目录调研 + 挂 sources]
 
-Phase A 已经把调研材料交给你。这一轮**不调任何工具**,基于下面的素材
-出一份课程 outline JSON。
+Phase A 已经设计好了课程目录(plan,见下)。这一轮的任务是为每节
+**单独联网搜索**,挑出真实 sources 挂上,最终输出完整的
+\`koko.deeply.research.outline\`。
 
-# 输入
+**不要**自己重写 plan 的 courseTitle / introduction / 节标题 —— 直接沿用。
+你要做的就是:遍历 sections,按每节 \`searchHint\` 调 hosted search,
+从结果里挑相关的 sources 挂到该节。
 
-## 用户原题
+# 用户原题
 
 ${input.topic}
 
-## Sources(主输入,按行号编号)
+# Phase A plan(沿用,不要修改)
 
-${sourcesJsonl}
+courseTitle: ${input.plan.courseTitle}
 
-## Phase A 调研笔记(背景参考,组织视角不一定要沿用)
+introduction:
+${input.plan.introduction}
 
-${input.synthesis}
+sections:
+${planSections}
 
-# 约束
+# 联网搜索
 
-- outline 里每条 url **只能从上面 sources 列表里挑**,不要新增、不要编。
-- 节数:${sectionHint}
-- 输出**唯一一个** \`koko.deeply.research.outline\` fenced block,
-  之外不要写任何文字。
-- 字段名严格 camelCase;JSON 字符串内引用短语优先用中文引号 “...”。
+每节按 \`searchHint\` 调:
+
+\`\`\`
+web_fetch({
+  url: "https://deeply.plus/deeply/search?q=<searchHint, urlencoded>&count=5",
+  maxChars: 60000
+})
+\`\`\`
+
+返回 body 是 JSON \`{ ok, provider, query, count, results: [{ title, url, snippet }] }\`。
+从 \`results\` 里挑跟本节真正相关的几条(数量自己决定 —— 真相关的就 1 条,
+不要为了凑数硬塞)。如果一节真没合适的,sources 留空也行;**不要编 URL**。
+
+每节 sources 里的 \`url\` 必须来自**本轮**搜索真实返回。
+
+需要可以再用 \`web_fetch({ url, maxChars: 60000 })\` 抓个别 URL 的正文,
+来更好判断它该不该上 —— 但不是必须。
 
 # Output schema
+
+输出**唯一一个** \`koko.deeply.research.outline\` fenced block,内部
+是合法 JSON,字段:
 
 \`\`\`json
 {
   "version": 1,
-  "courseTitle": "5-60 字课程标题",
-  "introduction": "200-600 字课程介绍",
+  "courseTitle": "(沿用 plan 的 courseTitle)",
+  "introduction": "(沿用 plan 的 introduction)",
   "sections": [
     {
       "index": 1,
-      "title": "8-30 字节标题",
+      "title": "(沿用 plan 的节标题)",
       "sources": [
         { "title": "...", "url": "https://...", "stance": "primary",
           "snippet": "<=80 字中文,这条对本节为什么有用" }
@@ -759,10 +782,11 @@ ${input.synthesis}
 }
 \`\`\`
 
-- 每节 \`sources\` 数量自由(0 条也行,讲解阶段会临场再搜);
-  stance 沿用 sources 列表里的;同一 url 同一节不重复。
+- \`stance\` 必须是 \`primary\` / \`counterpoint\` / \`background\` 之一。
+- 字段名严格 camelCase;JSON 字符串内引用短语优先用中文引号 “...”。
 - \`outlineMarkdown\` 每节格式:\`## 第N节:标题\` + 每条资料一行
-  \`- [stance] 资料标题 — url\`。`;
+  \`- [stance] 资料标题 — url\`。
+- fenced block 之外不要再写任何文字。`;
 }
 
 export function buildMaterialKickoffPrompt(input: {
