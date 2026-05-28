@@ -84,12 +84,11 @@ const SKILLS = [
     workspaceFor: "deeply",
     verifyAgent: "deeply"
   },
-  {
-    id: "kokochat-search",
-    source: join(REPO_ROOT, "openclaw", "skills", "kokochat-search"),
-    workspaceFor: "deeply",
-    verifyAgent: "deeply"
-  }
+  // kokochat-search lives on ClawHub as a standalone skill any OpenClaw user
+  // can install for their own agent. KokoChat's own deeply agent does NOT
+  // install it locally: deeply just calls `web_fetch` against the hosted
+  // `https://deeply.plus/deeply/search` endpoint directly, which avoids the
+  // exec-approval / allowlist dance for first-time pairings.
 ];
 const RELAY_SOURCE = join(REPO_ROOT, "openclaw", "relay");
 const AGENT_DEFINITIONS = {
@@ -177,12 +176,12 @@ const AGENT_DEFINITIONS = {
       "",
       "## Deep-research course path",
       "",
-      "If the user message matches the shape `请围绕「<topic>」做一份 N 节的深度调研课程`, switch into the procedure defined in the `kokochat-deeply-research` skill. In short: narrate the research process in flowing Chinese, run real web research via KokoChat's hosted search wrapper, then end with exactly one fenced block tagged `koko.deeply.research.notes` carrying synthesis + cited real-URL sources. KokoChat will run a separate Phase B inference to turn those notes into a course outline.",
+      "If the user message matches the shape `请围绕「<topic>」做一份 N 节的深度调研课程`, switch into the procedure defined in the `kokochat-deeply-research` skill. In short: narrate the research process in flowing Chinese, run real web research via KokoChat's hosted search endpoint (called through `web_fetch`), then end with exactly one fenced block tagged `koko.deeply.research.notes` carrying synthesis + cited real-URL sources. KokoChat will run a separate Phase B inference to turn those notes into a course outline.",
       "",
-      "The research tools available to this agent are:",
+      "The research tool available to this agent is the built-in `web_fetch`. There is no local exec wrapper to install. Call patterns:",
       "",
-      "- `exec` with `{{KOKOCHAT_SEARCH_BIN}} '<json>'` — run a query via KokoChat's hosted search proxy. Args: `{ \"query\": \"<EN keywords>\", \"count\": <1–10> }`. Call it when the Deeply prompt asks for web search. Do not use arbitrary shell commands, chains, pipes, redirections, or preflight file-reading commands.",
-      "- `web_fetch` — pull the main content of a specific URL as readable text. Args: `{ \"url\": \"<https://...>\", \"maxChars\": 60000 }`. Use at most twice per preparation turn, only for http(s) URLs returned by successful KokoChat search; never fetch `file://`, skill files, workspace docs, or invented URLs. If one fetch fails, continue from search snippets instead of retrying lots of other URLs.",
+      "- KokoChat hosted search — `web_fetch({ url: \"https://deeply.plus/deeply/search?q=<urlencoded EN keywords>&count=<1-10>\", maxChars: 60000 })`. The response body is JSON of shape `{ ok: true, provider: \"brave\", query, count, results: [{ title, url, snippet }] }`. Parse `results` and cite the real `url` values. If `ok` is false (e.g. `search_not_configured`, `rate_limited`), narrate that honestly and cite fewer sources rather than fabricating any. Do not pass any other query parameters; the endpoint ignores them.",
+      "- Page content — `web_fetch({ url: \"<https://...>\", maxChars: 60000 })`. Use at most twice per preparation turn, only for http(s) URLs returned by a successful KokoChat search; never fetch `file://`, skill files, workspace docs, or invented URLs. If one fetch fails, continue from search snippets instead of retrying lots of other URLs.",
       "",
       "Every URL in the final `sources` array MUST come from a real KokoChat search / `web_fetch` result — do not invent URLs. If a topic has no good hits, narrate that honestly and cite fewer sources rather than fabricating any.",
       "",
@@ -193,24 +192,13 @@ const AGENT_DEFINITIONS = {
       "Narration in this surface is REQUIRED and visible to the user (unlike the tavern skill which forbids visible prose). The user watches this stream during the 1–3 minute research run and needs to feel like you're doing real work. See the skill's `Narration Pattern (Required)` section. Each prose paragraph must end with the sentinel `〔KP〕` — the KokoChat client strips it and renders proper paragraph breaks; without it OpenClaw's wire-layer merge will visually flatten all prose into one block."
     ].join("\n"),
     tools: {
-      // minimal + alsoAllow keeps the surface tight. Deeply search goes
-      // through one allowlisted local exec wrapper that calls KokoChat's
-      // hosted search proxy; web_fetch remains built-in for reading result URLs.
+      // Deeply search and page fetch both go through the built-in web_fetch
+      // tool now — Deeply just web_fetches https://deeply.plus/deeply/search
+      // directly and parses the JSON. No exec wrapper, no allowlist, no
+      // first-time approval dance.
       profile: "minimal",
-      alsoAllow: ["exec", "process", "web_fetch"],
-      exec: {
-        security: "allowlist",
-        ask: "off",
-        timeoutSec: 120
-      }
-    },
-    execAutoAllowSkills: true,
-    execAllowlist: [
-      {
-        skillId: "kokochat-search",
-        relativePath: join("bin", "search.mjs")
-      }
-    ]
+      alsoAllow: ["web_fetch"]
+    }
   }
 };
 
@@ -657,12 +645,6 @@ function renderAgentInstructions(agentId, definition, workspace) {
       join(workspace, "skills", "kokochat-tavern-search", "bin", "fetch-card.mjs")
     );
   }
-  if (agentId === "deeply") {
-    instructions = instructions.replaceAll(
-      "{{KOKOCHAT_SEARCH_BIN}}",
-      join(workspace, "skills", "kokochat-search", "bin", "search.mjs")
-    );
-  }
   return [
     "## KokoChat Runtime Contract",
     "",
@@ -1097,16 +1079,11 @@ function agentFallbackWorkspace(agentId) {
 }
 
 function restartGatewayAfterUpgrade(openclawState) {
-  if (dryRun) return;
-  // Always nudge the gateway to reload after we touch agents / skills /
-  // exec-approvals — running OpenClaw caches those in-memory and would
-  // otherwise reject newly allowlisted exec tools (e.g. kokochat-search)
-  // with `exec denied: allowlist miss` until the next manual restart.
-  // After an upgrade we also need the new binary to take effect.
-  const reason = openclawState.upgraded === true
-    ? "OpenClaw was upgraded"
-    : "KokoChat agents / skills / exec allowlist changed";
-  log(`${reason}; restarting Gateway so the running service picks up the new config.`);
+  if (dryRun || openclawState.upgraded !== true) return;
+  // Only restart on real OpenClaw version upgrade. Skill / agent / approvals
+  // config is hot-reloaded by the running gateway, so plain install or
+  // refresh runs don't need a restart and shouldn't disrupt active sessions.
+  log("OpenClaw was upgraded; restarting Gateway so the running service uses the new version.");
   const result = runOpenClaw(["gateway", "restart"], {
     capture: true,
     allowFailure: true
@@ -1120,7 +1097,7 @@ function restartGatewayAfterUpgrade(openclawState) {
     [
       `gateway restart did not complete automatically (exit ${result.status ?? "unknown"}).`,
       output.length > 0 ? lastLines(output, 8) : null,
-      "If the phone cannot reconnect or a new skill is rejected, run `openclaw gateway restart` once and retry."
+      "If the phone cannot reconnect, run `openclaw gateway restart` once and retry pairing."
     ].filter(Boolean).join(" ")
   );
 }

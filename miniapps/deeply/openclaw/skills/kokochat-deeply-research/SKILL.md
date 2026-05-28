@@ -79,42 +79,44 @@ the search/fetch tools can / cannot do, and how to plan the research itself.
 
 ## Tools
 
-The deeply agent uses KokoChat's hosted search wrapper plus OpenClaw's built-in
-`web_fetch`.
+The deeply agent only uses OpenClaw's built-in `web_fetch`. There is no
+separate search skill or local exec wrapper to install.
 
-### KokoChat hosted search (`kokochat-search`)
+### KokoChat hosted search via `web_fetch`
 
-Run a web search via the local exec wrapper installed by KokoChat. The
-KokoChat Runtime Contract in `AGENTS.md` gives the exact absolute path for
-the wrapper; use that command shape:
+Run a web search by GETting the KokoChat hosted endpoint:
 
-```bash
-<kokochat-search/bin/search.mjs absolute path> '{"query":"EN keywords","count":5}'
+```
+web_fetch({
+  url: "https://deeply.plus/deeply/search?q=<EN keywords, urlencoded>&count=<1-10>",
+  maxChars: 60000
+})
 ```
 
-It calls KokoChat's hosted search proxy (Brave-backed in production), so the
-user does not need to configure any search API key in their own OpenClaw.
-Returns title / url / snippet per result.
+The response body is JSON of shape
+`{ ok: true, provider: "brave", query, count, results: [{ title, url, snippet }] }`.
+Parse `results` and cite the real `url` values. The hosted endpoint runs on
+KokoChat's `deeply.plus` server (Brave-backed in production); users do not
+need any search API key in their own OpenClaw.
 
 Args:
 
-- `query` (string, required): EN keywords. Translate Chinese topics into
-  English search keywords; keep user-facing prose Chinese.
+- `q` (string, required): EN keywords. Translate Chinese topics into English
+  search keywords; keep user-facing prose Chinese.
 - `count` (int 1–10, optional): default ~5; lower for targeted lookups,
   higher when scoping broadly.
 
-Pass **only** `query` and `count`. Provider-specific args like
-`domain_filter`, `date_after`, `freshness`, `country`, `language`,
-`max_tokens` will be rejected.
+Pass **only** `q` and `count`. The server ignores any other query parameter.
 
-Tool quirks worth knowing:
+Quirks:
 
-- The wrapper may return `{ "ok": false, "error": "..." }` if KokoChat's
-  hosted search is unavailable or rate-limited. Be honest; do not invent URLs.
-- Don't batch multiple search calls in one assistant turn — issue them
-  sequentially across narration steps.
+- If the JSON has `ok: false` (e.g. `search_not_configured`, `rate_limited`,
+  upstream Brave 429), narrate that honestly and cite fewer sources rather
+  than fabricating URLs.
+- Don't batch multiple `web_fetch` searches in one assistant turn — issue
+  them sequentially across narration steps.
 
-### `web_fetch`
+### `web_fetch` for page content
 
 Pull one URL's main content as readable text. Useful when a search hit
 looks unusually authoritative and you want the actual body instead of just
@@ -126,9 +128,9 @@ Args:
 - `maxChars` (int, optional): prefer `60000` so the model sees enough body.
   The Gateway may cap this lower.
 
-Only fetch `http://` / `https://` URLs that came from a successful
-KokoChat search. Never fetch `file://`, skill files, workspace docs, or URLs
-you invented. If a fetch fails (network block, private-IP guard, challenge,
+Only fetch `http://` / `https://` URLs that came from a successful KokoChat
+search. Never fetch `file://`, skill files, workspace docs, or URLs you
+invented. If a fetch fails (network block, private-IP guard, challenge,
 timeout), don't retry many other URLs — continue from search snippets.
 
 ## Research Planning (generic; no hard-coded domain templates)

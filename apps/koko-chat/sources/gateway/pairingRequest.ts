@@ -61,7 +61,6 @@ export async function buildKokoChatPairingPrompt(): Promise<string> {
   const command = [
     `KOKOCHAT_PAIRING_REQUEST=${shellSingleQuote(code)}`,
     KOKOCHAT_OPENCLAW_INSTALL_COMMAND,
-    `openclaw gateway restart || true`,
     `KOKOCHAT_PAIRING_REQUEST="$KOKOCHAT_PAIRING_REQUEST" node "$KOKOCHAT_REPO/openclaw/skills/kokochat-pairing/generate-kokochat-code.mjs"`
   ].join("\n");
   return [
