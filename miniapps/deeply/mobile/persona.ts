@@ -418,17 +418,17 @@ export function buildResearchCourseSectionPrompt(input: {
 
 - 优先策略:**直接回去看 session 历史里那份原始资料**(用户给的 URL / PDF 内容已经在前面的对话里)。讲解时引用具体段落 / 数据 / 论点,要让用户感觉到你是"读了原文",而不是泛泛复述。
 - \`web_fetch({ url })\` 用户原 URL —— 如果忘了原始 URL 的某段细节,可以再 fetch 那个 URL。**不要 fetch 用户没提到的其它 URL**。
-- \`web_fetch({ url: "https://deeply.plus/deeply/search?q=...&count=3" })\` —— **只做少量背景补充**(术语解释、事件年份等)。**不要让搜索结果成为讲解主线**;主线必须扣回用户给的资料。每节最多 1 次,query 简短聚焦,不要变成"全网调研"。`
+- \`web_fetch({ url: "https://deeply.plus/deeply/search?q=...&count=3" })\` —— **只做少量背景补充**(术语解释、事件年份等)。**不要让搜索结果成为讲解主线**;主线必须扣回用户给的资料。query 简短聚焦,别变成"全网调研"。`
       : kind === "book"
         ? `你这一轮只有 \`web_fetch\`,**侧重在"贴近原书"**:
 
-- \`web_fetch({ url: "https://deeply.plus/deeply/search?q=...&count=3" })\` —— 推荐 1-2 次,query 模式:\`"<书名> <本节关键主题> chapter summary"\` 或者中文 \`"<书名> <主题> 解读"\`。目标是拿到原书在这个主题上的**具体论点 / 例子 / 段落引文**,不是泛主题讨论。
+- \`web_fetch({ url: "https://deeply.plus/deeply/search?q=...&count=3" })\` —— 按需搜,query 模式:\`"<书名> <本节关键主题> chapter summary"\` 或者中文 \`"<书名> <主题> 解读"\`。目标是拿到原书在这个主题上的**具体论点 / 例子 / 段落引文**,不是泛主题讨论。
 - \`web_fetch({ url })\` —— 推荐挑准备阶段挂的 1-2 条 primary source(章节解读 / 高质量书评)抓正文。
 
 讲解时:**主线必须扣回原书**(具体章节、原文金句、作者本人原话),搜索拿到的二手解读用作补充和延伸,不能反客为主。`
         : `你这一轮只有 \`web_fetch\`:
 
-- \`web_fetch({ url: "https://deeply.plus/deeply/search?q=...&count=5", maxChars: 60000 })\` —— 推荐在讲解前用 1-2 次。query 用英文关键词,UrlEncoded。**特别推荐**:针对本节标题做一次更聚焦的搜索,看看有没有比准备阶段更新或者更对题的资料。返回是 JSON,\`results\` 数组里有真实 \`url\` 可继续 fetch。
+- \`web_fetch({ url: "https://deeply.plus/deeply/search?q=...&count=5", maxChars: 60000 })\` —— 讲解前先搜,query 用英文关键词,UrlEncoded。**特别推荐**:针对本节标题做更聚焦的搜索,看看有没有比准备阶段更新或者更对题的资料。够用就行,搜几次自己判断。返回是 JSON,\`results\` 数组里有真实 \`url\` 可继续 fetch。
 - \`web_fetch({ url, maxChars: 60000 })\` —— 推荐挑准备阶段挂的 1 个 primary source(或者刚搜到的最有价值的一条)抓正文。如果失败,直接基于搜索结果和准备阶段 sources 讲,不要把 fetch 失败写得像本节失败。`;
 
   return `<deeply_course_persona>
@@ -634,8 +634,7 @@ export function buildResearchKickoffPrompt(input: {
 "现在 / 最新 / 怎么看" 这类时效信号时,**必须先搜**,看看现在真实的讨论
 长什么样,再据此拆节。
 
-搜几次你自己定(通常 1-3 次,围绕题目主线 + 关键子方向),搜够了能让你
-有把握设计目录就行。
+搜几次、怎么搜你自己判断 —— 搜到对题目有把握、能设计出好目录为止。
 
 联网用 \`web_fetch\`:
 
@@ -800,7 +799,7 @@ ${userHints.join("\n")}
 
 # 你这一轮的任务
 
-1. **\`web_fetch({ url: "https://deeply.plus/deeply/search?q=...&count=5" })\` 1-2 次** 找出真实候选(query 范例:\`"<书名> book"\`、\`"<书名> author"\`、\`"<书名> 是什么书"\`,URL encode)。
+1. **\`web_fetch({ url: "https://deeply.plus/deeply/search?q=...&count=5" })\`** 找出真实候选(query 范例:\`"<书名> book"\`、\`"<书名> author"\`、\`"<书名> 是什么书"\`,URL encode;搜几次自己判断)。
 2. **判断歧义**:看是不是真的有不同作者 / 不同内容主题的同名书。
    - **绝大多数书只有 1 个候选**(比如 Sapiens, Poor Charlie's Almanack, 思考快与慢, 红楼梦)— 这时就列 1 个候选,让用户点一下确认即可。
    - **少数书真有歧义**(比如「活着」余华 vs Tolstoy,「围城」钱钟书 vs 同名电视剧)— 这时列 2-3 个不同作者 / 不同主题的候选。
@@ -930,7 +929,7 @@ export function buildBookOutlinePrompt(input: {
 
 # 调研工具
 
-\`web_fetch({ url: "https://deeply.plus/deeply/search?q=...&count=5" })\` —— 用 2-4 次,query 围绕这本**已锁定**的书:
+\`web_fetch({ url: "https://deeply.plus/deeply/search?q=...&count=5" })\` —— 围绕这本**已锁定**的书搜,搜几次自己判断:
 - 第 1 次:"<完整英文书名> chapter summary" 或 "<书名> table of contents" — 拿原书章节结构
 - 第 2 次:作者名 + "interview" 或 "lectures" — 拿作者本人的延展讲解
 - 第 3 次(可选):中文 "<书名> 解读" / "<书名> 书评" — 中文圈视角 / 译本特定问题
