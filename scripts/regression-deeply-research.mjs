@@ -42,8 +42,8 @@
  * } so multiple runs can be diffed.
  *
  * Sync notes:
- *   - `buildResearchKickoffPromptInline` + `buildResearchOutlineFromPlanPromptInline`
- *     below mirror persona.ts. When persona.ts is edited, copy the new
+ *   - `buildResearchKickoffPromptInline` below mirrors persona.ts. When
+ *     persona.ts is edited, copy the new
  *     template bodies here too.
  */
 
@@ -167,51 +167,31 @@ async function main() {
         JSON.stringify(plan, null, 2),
         "utf8"
       );
-      log(`phase-a plan: courseTitle="${plan.courseTitle}", sections=${plan.sections.length}`);
+      writeFileSync(`${artifactPrefix}.phase-a.plan.md`, renderPlanSummary(plan), "utf8");
+      log(`plan: courseTitle="${plan.courseTitle}", sections=${plan.sections.length}`);
     } else {
-      log(`phase-a PLAN BLOCK MISSING — Phase B will be skipped. inspect phase-a.raw.txt`);
+      log(`PLAN BLOCK MISSING — inspect phase-a.raw.txt`);
     }
 
-    // ─── Phase B: per-section search inferOnce ───
-    if (plan !== null) {
-      const phaseBPrompt = buildResearchOutlineFromPlanPromptInline({ topic, plan });
-      const phaseBSessionKey = `agent:deeply:kokochat:deeply-course:oneshot:regression:${runIdBase}`;
-      const phaseBRun = await runOneTurn({
-        gateway,
-        sessionKey: phaseBSessionKey,
-        prompt: phaseBPrompt,
-        label: "phase-b",
-        artifactPrefix,
-        visibleLine: "[Phase B: plan → per-section search → outline JSON]",
-        // Phase B searches once per section, so it can run several minutes.
-        timeoutMs: 360_000
-      });
-
-      const outline = parseOutlineSummary(phaseBRun.rawText);
-      writeFileSync(`${artifactPrefix}.phase-b.outline.md`, outline, "utf8");
-
-      // Cleanup oneshot session.
-      await gateway.call("sessions.delete", { key: phaseBSessionKey }, 30_000).catch((err) => {
-        log(`phase-b sessions.delete failed (ignored): ${err?.message ?? err}`);
-      });
-    }
-
-    // Cleanup phase A session.
+    // Cleanup the kickoff session.
     await gateway.call("sessions.delete", { key: phaseASessionKey }, 30_000).catch((err) => {
-      log(`phase-a sessions.delete failed (ignored): ${err?.message ?? err}`);
+      log(`sessions.delete failed (ignored): ${err?.message ?? err}`);
     });
 
     const phaseAToolCount = phaseARun.events.reduce((acc, e) => acc + (e.tools?.length ?? 0), 0);
     log(`summary:`);
-    log(`  phase-a tool calls: ${phaseAToolCount}`);
-    log(`  phase-a raw text: ${phaseARun.rawText.length} chars`);
-    log(`  phase-a plan block: ${plan !== null ? "ok" : "MISSING"}`);
+    log(`  tool calls during planning: ${phaseAToolCount}`);
+    log(`  raw text: ${phaseARun.rawText.length} chars`);
+    log(`  plan block: ${plan !== null ? "ok" : "MISSING"}`);
     log(`artifacts (prefix ${artifactPrefix}):`);
     log(`  .phase-a.prompt.txt / .phase-a.events.json / .phase-a.raw.txt`);
     if (plan !== null) {
-      log(`  .phase-a.plan.json`);
-      log(`  .phase-b.prompt.txt / .phase-b.events.json / .phase-b.raw.txt / .phase-b.outline.md`);
+      log(`  .phase-a.plan.json / .phase-a.plan.md`);
     }
+    // NOTE: per-section sources are no longer produced at course-creation
+    // time. The client lands this plan directly (sources empty); each
+    // section searches the web at lecture time via the mainline prompt,
+    // which this kickoff-only harness does not exercise.
   } finally {
     await gateway.close();
   }
@@ -374,92 +354,8 @@ ${visible}`;
 }
 
 /**
- * Mirror of miniapps/deeply/mobile/persona.ts →
- * buildResearchOutlineFromPlanPrompt. Phase B: oneshot agent turn that runs
- * per-section hosted search and emits the outline. Keep in sync.
- */
-function buildResearchOutlineFromPlanPromptInline({ topic, plan }) {
-  const planSections = plan.sections
-    .map((s) => `  ${s.index}. ${s.title}\n     searchHint: ${s.searchHint}`)
-    .join("\n");
-  return `[Phase B · 按目录调研 + 挂 sources]
-
-Phase A 已经设计好了课程目录(plan,见下)。这一轮的任务是为每节
-**单独联网搜索**,挑出真实 sources 挂上,最终输出完整的
-\`koko.deeply.research.outline\`。
-
-**不要**自己重写 plan 的 courseTitle / introduction / 节标题 —— 直接沿用。
-你要做的就是:遍历 sections,按每节 \`searchHint\` 调 hosted search,
-从结果里挑相关的 sources 挂到该节。
-
-# 用户原题
-
-${topic}
-
-# Phase A plan(沿用,不要修改)
-
-courseTitle: ${plan.courseTitle}
-
-introduction:
-${plan.introduction}
-
-sections:
-${planSections}
-
-# 联网搜索
-
-每节按 \`searchHint\` 调:
-
-\`\`\`
-web_fetch({
-  url: "https://deeply.plus/deeply/search?q=<searchHint, urlencoded>&count=5",
-  maxChars: 60000
-})
-\`\`\`
-
-返回 body 是 JSON \`{ ok, provider, query, count, results: [{ title, url, snippet }] }\`。
-从 \`results\` 里挑跟本节真正相关的几条(数量自己决定 —— 真相关的就 1 条,
-不要为了凑数硬塞)。如果一节真没合适的,sources 留空也行;**不要编 URL**。
-
-每节 sources 里的 \`url\` 必须来自**本轮**搜索真实返回。
-
-需要可以再用 \`web_fetch({ url, maxChars: 60000 })\` 抓个别 URL 的正文,
-来更好判断它该不该上 —— 但不是必须。
-
-# Output schema
-
-输出**唯一一个** \`koko.deeply.research.outline\` fenced block,内部
-是合法 JSON,字段:
-
-\`\`\`json
-{
-  "version": 1,
-  "courseTitle": "(沿用 plan 的 courseTitle)",
-  "introduction": "(沿用 plan 的 introduction)",
-  "sections": [
-    {
-      "index": 1,
-      "title": "(沿用 plan 的节标题)",
-      "sources": [
-        { "title": "...", "url": "https://...", "stance": "primary",
-          "snippet": "<=80 字中文,这条对本节为什么有用" }
-      ]
-    }
-  ],
-  "outlineMarkdown": "## 第1节:...\\n- [primary] ... — https://...\\n\\n## 第2节:..."
-}
-\`\`\`
-
-- \`stance\` 必须是 \`primary\` / \`counterpoint\` / \`background\` 之一。
-- 字段名严格 camelCase;JSON 字符串内引用短语优先用中文引号 “...”。
-- \`outlineMarkdown\` 每节格式:\`## 第N节:标题\` + 每条资料一行
-  \`- [stance] 资料标题 — url\`。
-- fenced block 之外不要再写任何文字。`;
-}
-
-/**
- * Pull the Phase A plan JSON out of the agent's final message. Returns
- * `null` when the fenced block is missing or doesn't parse.
+ * Pull the plan JSON out of the agent's final message. Returns `null`
+ * when the fenced block is missing or doesn't parse.
  */
 function extractResearchPlan(rawText) {
   const match = rawText.match(/```koko\.deeply\.research\.plan\s*([\s\S]+?)```/);
@@ -474,8 +370,7 @@ function extractResearchPlan(rawText) {
       sections: Array.isArray(json.sections)
         ? json.sections.map((s, i) => ({
             index: typeof s?.index === "number" ? s.index : i + 1,
-            title: typeof s?.title === "string" ? s.title : "",
-            searchHint: typeof s?.searchHint === "string" ? s.searchHint : ""
+            title: typeof s?.title === "string" ? s.title : ""
           }))
         : []
     };
@@ -498,32 +393,16 @@ function collectToolCalls(payload) {
   return [];
 }
 
-function parseOutlineSummary(rawText) {
-  // Pull the outline JSON out of the fenced block at the end of the
-  // assistant message, then render a short Markdown summary of titles
-  // + introduction so we can eyeball the outcome quickly.
-  const match = rawText.match(/```koko\.deeply\.research\.outline\s*([\s\S]+?)```/);
-  if (!match) {
-    return `# (no outline fenced block found)\n\n${rawText.slice(-2000)}`;
-  }
-  let json;
-  try {
-    json = JSON.parse(match[1].trim());
-  } catch (error) {
-    return `# (outline JSON parse failed: ${error.message})\n\n${match[1]}`;
-  }
+function renderPlanSummary(plan) {
+  // Short Markdown summary of the course plan so we can eyeball the
+  // teaching structure quickly.
   const lines = [];
-  lines.push(`# ${json.courseTitle ?? "(no courseTitle)"}\n`);
-  if (typeof json.introduction === "string") {
-    lines.push(json.introduction.trim() + "\n");
+  lines.push(`# ${plan.courseTitle || "(no courseTitle)"}\n`);
+  if (typeof plan.introduction === "string" && plan.introduction.length > 0) {
+    lines.push(plan.introduction.trim() + "\n");
   }
-  if (Array.isArray(json.sections)) {
-    json.sections.forEach((s, i) => {
-      const title = s?.title ?? "(no title)";
-      const idx = s?.index ?? i + 1;
-      const sourceCount = Array.isArray(s?.sources) ? s.sources.length : 0;
-      lines.push(`${idx}. ${title}  _(${sourceCount} sources)_`);
-    });
+  for (const s of plan.sections) {
+    lines.push(`${s.index}. ${s.title}`);
   }
   return lines.join("\n");
 }

@@ -39,8 +39,12 @@ const MAX_SECTIONS = 40;
 export interface DeeplyResearchPlanSection {
   index: number;
   title: string;
-  /** EN search keywords Phase B will pass to hosted search for this section. */
-  searchHint: string;
+  /**
+   * Optional EN search keywords. The current pipeline searches per-section at
+   * lecture time (not here), so this is no longer required; kept so older
+   * plans that still carry it parse cleanly.
+   */
+  searchHint?: string;
 }
 
 export interface DeeplyResearchPlan {
@@ -104,7 +108,7 @@ export function parseDeeplyResearchPlan(assistantText: string): ParseResult {
     ).slice(0, MAX_SEARCH_HINT_CHARS);
     const rawIndex = typeof item.index === "number" ? Math.trunc(item.index) : NaN;
     const index = Number.isFinite(rawIndex) && rawIndex > 0 ? rawIndex : i + 1;
-    sections.push({ index, title, searchHint });
+    sections.push(searchHint.length > 0 ? { index, title, searchHint } : { index, title });
   }
 
   if (sections.length < MIN_SECTIONS) {
@@ -116,11 +120,11 @@ export function parseDeeplyResearchPlan(assistantText: string): ParseResult {
   const trimmed = sections.slice(0, MAX_SECTIONS);
   // Stable renumber so progress UI is monotonic regardless of what the
   // model wrote.
-  const renumbered = trimmed.map((section, idx) => ({
-    index: idx + 1,
-    title: section.title,
-    searchHint: section.searchHint
-  }));
+  const renumbered = trimmed.map((section, idx) => (
+    section.searchHint !== undefined
+      ? { index: idx + 1, title: section.title, searchHint: section.searchHint }
+      : { index: idx + 1, title: section.title }
+  ));
 
   return {
     ok: true,

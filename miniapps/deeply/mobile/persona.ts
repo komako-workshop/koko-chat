@@ -590,23 +590,20 @@ export function parseDeeplyBookKickoff(
 }
 
 /**
- * Phase A:深度调研课程 kickoff —— 探索 + 出课程目录(plan)。
+ * 深度调研课程 kickoff —— 探索 + 出课程目录(plan)。
  *
- * 两阶段研究 v2:
- *   - Phase A(此 prompt):agent 先做轻度联网探索(尤其当题目带时间词 /
- *     具体人物等可能超出训练截止的内容),然后**只输出一份"教学维度"
- *     的课程目录** —— courseTitle / introduction / sections[title +
- *     searchHint]。**不在 plan 里 cite URL,不挂 sources**。注意力放在
- *     "这道题值得讲哪些主题,怎么拆"。
- *   - Phase B(\`buildResearchOutlineFromPlanPrompt\`,客户端单独 inferOnce
- *     调用):agent 拿到 plan 后,为每节按 searchHint 联网搜索 + 挂 sources,
- *     最终输出 \`koko.deeply.research.outline\`。
+ * 单轮 agent run:agent 先做轻度联网探索(尤其当题目带时间词 / 具体人物
+ * 等可能超出训练截止的内容),然后输出一份"教学维度"的课程目录 ——
+ * courseTitle / introduction / sections[title]。**不在这里挂 sources**:
+ * 每节的资料在用户进入该节讲解时,由讲解 prompt 临场联网搜(那时最相关、
+ * 最新,也不会一次性堆几十次搜索)。
  *
- * 两阶段拆开,是为了让 Phase A 不被 sources 颗粒度拖着走 ——
- * 之前 "notes → outline" 路径里,如果 Phase A 搜到的多是综述类 article,
- * Phase B 拆的 outline 就被推成"多/空"二分这种宽口径,而不是"按大师 / 按
- * 视角维度"。让 Phase A 专心思考"教学结构",再让 Phase B 按结构找证据,
- * outline 会更贴用户期望。
+ * 客户端拿到 plan 直接落库开课(applyResearchPlanToCourse),没有后续的
+ * outline inferOnce 阶段了。
+ *
+ * 设计取舍:把"设计目录"和"逐节找资料"彻底分到不同时间点 —— Phase A
+ * 只想"教什么、怎么拆",讲解时只搜"这一节"。这避免了早期 "notes →
+ * outline 一次搜 N 节" 既超时又被材料颗粒度带跑的问题。
  */
 export function buildResearchKickoffPrompt(input: {
   topic: string;
@@ -617,23 +614,23 @@ export function buildResearchKickoffPrompt(input: {
     sections: input.sections
   });
   const sectionHint = input.sections > 0
-    ? `用户期望约 ${input.sections} 节,以材料自然结构为准上下浮动。`
-    : `节数自由决定,按题目自然结构来。`;
-  return `[系统注入 · 深度调研课程 Phase A:出课程目录 plan]
+    ? `用户期望约 ${input.sections} 节,以题目自然结构为准上下浮动。`
+    : `节数自由决定,按题目自然结构来 —— 别为了铺满硬拆,也别为了简洁硬并。`;
+  return `[系统注入 · 深度调研课程:出课程目录]
 
-按 \`kokochat-deeply-research\` skill 走两阶段研报流程。这一轮的任务
-**不是收集材料**,而是**理解题目并设计一门课的教学目录**:用户想学
-什么?这道题值得讲哪些主题?怎么拆才适合学?
+按 \`kokochat-deeply-research\` skill 走。这一轮的任务**不是收集材料**,
+而是**理解题目并设计一门课的教学目录**:用户想学什么?这道题值得讲
+哪些主题?怎么拆才适合学?
 
-材料收集留给 Phase B —— 它会拿到你这份 plan,然后对每节按你给的
-\`searchHint\` 单独联网搜,挂上真实 sources。你**不要在 plan 里 cite URL,
-不要带 sources 字段**。
+每节的具体资料**不在这一轮找** —— 等用户进到某一节讲解时,我会让你
+针对那一节临场联网搜最新、最相关的材料。所以现在你**不挂 sources、不
+写 URL**,专心把目录设计好。
 
 # 你这一轮怎么工作
 
-需要联网就联网,**自己判断要不要搜、搜几次**。一般情况下,如果题目带
-时间词、具体人名、近期事件,先搜一两下校准认知很值得;如果题目是
-通识/历史/概念题,直接靠模型理解可能更好。
+需要联网就联网,**自己判断要不要搜、搜几次**。题目带时间词、具体人名、
+近期事件时,先搜一两下校准认知通常很值得;通识 / 历史 / 概念题直接靠
+理解可能更好。
 
 联网用 \`web_fetch\`:
 
@@ -644,14 +641,14 @@ web_fetch({
 })
 \`\`\`
 
-返回 body 是 JSON,结构 \`{ ok, provider, query, count, results: [{ title, url, snippet }] }\`。
-拿 snippet 校准认知就够,**不要把搜到的 URL 写进 plan**。\`ok=false\` 时
-如实说"搜不到"就行,凭你对题目的理解继续设计目录。
+返回 body 是 JSON \`{ ok, provider, query, count, results: [{ title, url, snippet }] }\`。
+拿 snippet 校准认知就够。\`ok=false\` 时如实说"搜不到",凭你的理解继续
+设计目录。
 
 # Prose 节奏
 
 每段中文 prose 末尾打 \`〔KP〕\` sentinel(客户端会替换成段落分隔)。
-搜索前后简单说一下你在想什么、搜到了什么、最终目录怎么定的。综合段
+搜索前后简单说一下你在想什么、查到了什么、最终目录怎么定的。综合段
 之后接 fenced block。
 
 # Output schema
@@ -666,127 +663,19 @@ web_fetch({
   "courseTitle": "5-60 字课程标题",
   "introduction": "200-600 字课程介绍:这门课要回答什么问题、有哪些值得展开的视角、为什么这个时间点值得看",
   "sections": [
-    {
-      "index": 1,
-      "title": "8-30 字节标题,从教学维度命名(可以按人物 / 视角 / 阶段 / 概念,选最贴这道题的切法)",
-      "searchHint": "EN keywords for Phase B to search this section specifically; 12-40 chars; concrete enough to return useful results, not the whole topic again"
-    }
+    { "index": 1, "title": "8-30 字节标题,从教学维度命名(可按人物 / 视角 / 阶段 / 概念,选最贴这道题的切法)" }
   ]
 }
 \`\`\`
 
 约束:
 
-- \`searchHint\` 用英文关键词组,**要比原题更窄、更聚焦**,这样 Phase B
-  搜出来的才贴本节;不要每节都重抄原题。
-- 不要输出 \`sections.sources\` / \`outlineMarkdown\` —— 那些是 Phase B 的事。
+- 不要输出 \`sections.sources\` / \`searchHint\` / \`outlineMarkdown\`。
 - fenced block 之外不要再写文字。
 - ${sectionHint}
 
 [用户消息]
 ${visible}`;
-}
-
-/**
- * Phase B:按 Phase A 的 plan 联网搜索,为每节挂 sources,出 outline。
- *
- * 客户端在拿到 plan 后通过 \`inferOnce\` 单跑这一 turn。Agent 仍是 deeply,
- * 继承 \`web_fetch\` 工具,但**这一轮不是脑暴**:它的注意力集中在"按
- * plan 给的 sections.searchHint 一节一节去搜、挑 sources、保留 plan 原本
- * 的 courseTitle / introduction / 节标题"。
- *
- * 输出 schema 跟老 outline 一致(\`koko.deeply.research.outline\`),
- * 复用既有 \`parseResearchOutline\`。
- */
-export function buildResearchOutlineFromPlanPrompt(input: {
-  topic: string;
-  plan: {
-    courseTitle: string;
-    introduction: string;
-    sections: ReadonlyArray<{
-      index: number;
-      title: string;
-      searchHint: string;
-    }>;
-  };
-}): string {
-  const planSections = input.plan.sections
-    .map((s) => `  ${s.index}. ${s.title}\n     searchHint: ${s.searchHint}`)
-    .join("\n");
-
-  return `[Phase B · 按目录调研 + 挂 sources]
-
-Phase A 已经设计好了课程目录(plan,见下)。这一轮的任务是为每节
-**单独联网搜索**,挑出真实 sources 挂上,最终输出完整的
-\`koko.deeply.research.outline\`。
-
-**不要**自己重写 plan 的 courseTitle / introduction / 节标题 —— 直接沿用。
-你要做的就是:遍历 sections,按每节 \`searchHint\` 调 hosted search,
-从结果里挑相关的 sources 挂到该节。
-
-# 用户原题
-
-${input.topic}
-
-# Phase A plan(沿用,不要修改)
-
-courseTitle: ${input.plan.courseTitle}
-
-introduction:
-${input.plan.introduction}
-
-sections:
-${planSections}
-
-# 联网搜索
-
-每节按 \`searchHint\` 调:
-
-\`\`\`
-web_fetch({
-  url: "https://deeply.plus/deeply/search?q=<searchHint, urlencoded>&count=5",
-  maxChars: 60000
-})
-\`\`\`
-
-返回 body 是 JSON \`{ ok, provider, query, count, results: [{ title, url, snippet }] }\`。
-从 \`results\` 里挑跟本节真正相关的几条(数量自己决定 —— 真相关的就 1 条,
-不要为了凑数硬塞)。如果一节真没合适的,sources 留空也行;**不要编 URL**。
-
-每节 sources 里的 \`url\` 必须来自**本轮**搜索真实返回。
-
-需要可以再用 \`web_fetch({ url, maxChars: 60000 })\` 抓个别 URL 的正文,
-来更好判断它该不该上 —— 但不是必须。
-
-# Output schema
-
-输出**唯一一个** \`koko.deeply.research.outline\` fenced block,内部
-是合法 JSON,字段:
-
-\`\`\`json
-{
-  "version": 1,
-  "courseTitle": "(沿用 plan 的 courseTitle)",
-  "introduction": "(沿用 plan 的 introduction)",
-  "sections": [
-    {
-      "index": 1,
-      "title": "(沿用 plan 的节标题)",
-      "sources": [
-        { "title": "...", "url": "https://...", "stance": "primary",
-          "snippet": "<=80 字中文,这条对本节为什么有用" }
-      ]
-    }
-  ],
-  "outlineMarkdown": "## 第1节:...\\n- [primary] ... — https://...\\n\\n## 第2节:..."
-}
-\`\`\`
-
-- \`stance\` 必须是 \`primary\` / \`counterpoint\` / \`background\` 之一。
-- 字段名严格 camelCase;JSON 字符串内引用短语优先用中文引号 “...”。
-- \`outlineMarkdown\` 每节格式:\`## 第N节:标题\` + 每条资料一行
-  \`- [stance] 资料标题 — url\`。
-- fenced block 之外不要再写任何文字。`;
 }
 
 export function buildMaterialKickoffPrompt(input: {

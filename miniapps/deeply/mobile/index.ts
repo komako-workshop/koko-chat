@@ -16,7 +16,7 @@ import { deeplyAvatarChatBuddy, deeplyAvatarLearning } from "./avatars";
 import { DEEPLY_MINI_APP_ID } from "./constants";
 import {
   DEEPLY_COURSE_MODE_ID,
-  applyResearchPlanAndRunPhaseB,
+  applyResearchPlanToCourse,
   applyResearchOutlineToCourse,
   loadDeeplyCourseOutline,
   loadDeeplyCourseSessionRecord,
@@ -320,10 +320,8 @@ function transformDeeplyCourseAgentResponse({
   // courseTitle + introduction + sections[title + searchHint]。客户端在这里:
   //   1. 把 fenced block 之前的 prose 留下来(用户已经在 stream 里看过了)
   //   2. 剪掉 fenced block 本身(用户不需要看 raw JSON)
-  //   3. 触发 Phase B(单独的 inferOnce,按 plan 逐节联网搜 → outline JSON)
-  //
-  // Phase B 是 fire-and-forget,后台跑;DeeplyCourseScreen 的 banner 在那期间
-  // 显示"目录已定,正在按章节联网调研"。
+  //   3. 直接把目录落库 + 切 ready(没有后续 outline inferOnce 阶段了)。
+  //      每节的资料留到用户进入该节讲解时,由讲解 prompt 临场联网搜。
   const planBlock = extractFencedBlock(text, DEEPLY_RESEARCH_PLAN_BLOCK_TYPE);
   if (planBlock !== null) {
     const prose = text.slice(0, planBlock.start).trim();
@@ -355,7 +353,7 @@ function transformDeeplyCourseAgentResponse({
       return { messages, preview: "课程目录格式错误" };
     }
 
-    applyResearchPlanAndRunPhaseB(conversation.id, planParsed.value);
+    applyResearchPlanToCourse(conversation.id, planParsed.value);
 
     const messages: ChatMessage[] = [];
     if (prose.length > 0) {
@@ -367,18 +365,17 @@ function transformDeeplyCourseAgentResponse({
         streaming: false
       } satisfies ChatMessage);
     }
-    // 脑暴收尾的"过桥"消息,提示 Phase B 在后台按节调研。banner 同步显示
-    // "目录已定,正在按章节联网调研"(applyResearchPlanAndRunPhaseB 里设的)。
+    // 目录已直接落库 ready。过桥消息告诉用户可以开始,每节资料讲解时再搜。
     messages.push({
       id: `${runId}-handoff`,
       role: "agent",
-      text: `课程目录已定(${planParsed.value.sections.length} 节)。正在按章节联网找资料,稍等片刻就能开始学。`,
+      text: `课程目录已生成(${planParsed.value.sections.length} 节)。点下方「开始第 1 节」就能学,每节我会现查最新资料再讲。`,
       runId,
       streaming: false
     } satisfies ChatMessage);
     return {
       messages,
-      preview: `目录已定 · ${planParsed.value.sections.length} 节`
+      preview: `目录已生成 · ${planParsed.value.sections.length} 节`
     };
   }
 

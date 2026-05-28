@@ -5,7 +5,6 @@ import { useConversationStore } from "@/state/conversations";
 import { DEEPLY_MINI_APP_ID } from "./constants";
 import { initDeeplyCourseProgress } from "./courseProgress";
 import { inferCourseOutline } from "./inferCourseOutline";
-import { inferResearchOutlineFromPlan } from "./inferResearchOutlineFromPlan";
 import type {
   DeeplyCourseBrief,
   DeeplyCourseBriefOption
@@ -719,68 +718,38 @@ export function applyResearchOutlineToCourse(
 }
 
 /**
- * Phase A 脑暴轮完成后,transformer 拿到 \`koko.deeply.research.plan\`
- * fenced block 解析成功时调这里。负责:
- *   1. 把 plan 缓存进 record(Phase B 失败重试只重做 Phase B,不重做脑暴)
- *   2. bootstrap 仍维持 loading,但 hint 切到"按目录调研中"
- *   3. fire-and-forget 后台跑 Phase B(inferOnce 按节联网搜 → outline JSON)
+ * Agent 出完课程目录(\`koko.deeply.research.plan\`)后,transformer 解析
+ * 成功时调这里。直接把目录落库 + 切 ready,**不再有后续的 outline
+ * inferOnce 阶段**:每节的资料留到用户进入该节讲解时,由讲解 prompt
+ * 临场联网搜。
  *
- * 成功:Phase B 内部会调 \`applyResearchOutlineToCourse\` 把目录落库 + 切 ready。
- * 失败:Phase B 内部会 setBootstrap("error",...),用户能从 banner 点重试。
+ * plan.sections 没有 sources —— 落成 outline record 时 sources 全空,
+ * 讲解 mainline prompt 在 sectionSources 为空时本就会引导临场搜索。
  */
-export function applyResearchPlanAndRunPhaseB(
+export function applyResearchPlanToCourse(
   conversationId: string,
   plan: DeeplyResearchPlan
 ): void {
   const record = loadDeeplyCourseSessionRecord(conversationId);
   if (record === null) {
-    console.warn("[deeply-course] applyResearchPlanAndRunPhaseB: no record", conversationId);
+    console.warn("[deeply-course] applyResearchPlanToCourse: no record", conversationId);
     return;
   }
-  const updatedRecord: DeeplyCourseSessionRecord = {
+  // 缓存 plan(重试时直接重新落库,不必让 agent 重新脑暴)。
+  STORAGE.setJson(`${COURSE_RECORD_PREFIX}${conversationId}`, {
     ...record,
     cachedResearchPlan: plan
-  };
-  STORAGE.setJson(`${COURSE_RECORD_PREFIX}${conversationId}`, updatedRecord);
-  useConversationStore.getState().setBootstrap(conversationId, {
-    status: "loading",
-    hint: "目录已定,正在按章节联网调研"
   });
-  void runResearchPhaseBOutline(conversationId, updatedRecord);
-}
 
-async function runResearchPhaseBOutline(
-  conversationId: string,
-  record: DeeplyCourseSessionRecord
-): Promise<void> {
-  const plan = record.cachedResearchPlan;
-  if (plan === undefined) {
-    useConversationStore.getState().setBootstrap(conversationId, {
-      status: "error",
-      error: "课程目录缺失,无法继续调研。请回到 Deeply 重发题目。"
-    });
-    return;
-  }
-  try {
-    const result = await inferResearchOutlineFromPlan({
-      topic: record.researchTopic ?? record.title,
-      plan
-    });
-    if (!result.ok) {
-      useConversationStore.getState().setBootstrap(conversationId, {
-        status: "error",
-        error: `按目录调研失败:${result.error.slice(0, 180)}`
-      });
-      return;
-    }
-    applyResearchOutlineToCourse(conversationId, result.value);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    useConversationStore.getState().setBootstrap(conversationId, {
-      status: "error",
-      error: `按目录调研失败:${message.slice(0, 180)}`
-    });
-  }
+  const outline: DeeplyResearchOutline = {
+    version: 1,
+    courseTitle: plan.courseTitle,
+    introduction: plan.introduction,
+    sections: plan.sections.map((s) => ({ index: s.index, title: s.title, sources: [] })),
+    outlineMarkdown: plan.sections.map((s) => `## 第${s.index}节:${s.title}`).join("\n\n"),
+    sources: []
+  };
+  applyResearchOutlineToCourse(conversationId, outline);
 }
 
 /**
@@ -788,10 +757,9 @@ async function runResearchPhaseBOutline(
  * - bootstrap 改回 loading,banner 切回 spinner
  * - 后台重新跑 outline 生成,完成时再 set ready / error
  *
- * Research 课**有缓存的 plan 时**只重做 Phase B,避免让 agent 重新脑暴一次,
- * 这是最常见的"按节调研失败"场景。没缓存(Phase A 自己就失败)时退到
- * 之前的"目录通用重做"路径,会让 DeeplyCourseScreen 重新 fire research
- * kickoff message 走完整 Phase A → Phase B。
+ * Research 课**有缓存的 plan 时**直接重新落库(目录早就生成好,落库是
+ * 纯本地操作)。没缓存(Phase A 自己就失败)时退到"目录通用重做"路径,
+ * 会让 DeeplyCourseScreen 重新 fire research kickoff message 重新出目录。
  *
  * 如果 conversation / record 找不到(已被归档),静默返回。
  */
@@ -803,9 +771,9 @@ export function retryDeeplyCourseOutline(conversationId: string): void {
   if (record.kind === "research" && record.cachedResearchPlan !== undefined) {
     store.setBootstrap(conversationId, {
       status: "loading",
-      hint: "正在按目录重新联网调研,稍等一下"
+      hint: "正在重新生成课程目录,稍等一下"
     });
-    void runResearchPhaseBOutline(conversationId, record);
+    applyResearchPlanToCourse(conversationId, record.cachedResearchPlan);
     return;
   }
 
