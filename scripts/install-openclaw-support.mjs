@@ -85,15 +85,8 @@ const SKILLS = [
     verifyAgent: "deeply"
   },
   {
-    id: "kokochat-deeply-search",
-    source: join(
-      REPO_ROOT,
-      "miniapps",
-      "deeply",
-      "openclaw",
-      "skills",
-      "kokochat-deeply-search"
-    ),
+    id: "kokochat-search",
+    source: join(REPO_ROOT, "openclaw", "skills", "kokochat-search"),
     workspaceFor: "deeply",
     verifyAgent: "deeply"
   }
@@ -188,7 +181,7 @@ const AGENT_DEFINITIONS = {
       "",
       "The research tools available to this agent are:",
       "",
-      "- `exec` with `{{DEEPLY_SEARCH_BIN}} '<json>'` — run a query via KokoChat's hosted search proxy. Args: `{ \"query\": \"<EN keywords>\", \"count\": <1–10> }`. Call it when the Deeply prompt asks for web search. Do not use arbitrary shell commands, chains, pipes, redirections, or preflight file-reading commands.",
+      "- `exec` with `{{KOKOCHAT_SEARCH_BIN}} '<json>'` — run a query via KokoChat's hosted search proxy. Args: `{ \"query\": \"<EN keywords>\", \"count\": <1–10> }`. Call it when the Deeply prompt asks for web search. Do not use arbitrary shell commands, chains, pipes, redirections, or preflight file-reading commands.",
       "- `web_fetch` — pull the main content of a specific URL as readable text. Args: `{ \"url\": \"<https://...>\", \"maxChars\": 60000 }`. Use at most twice per preparation turn, only for http(s) URLs returned by successful KokoChat search; never fetch `file://`, skill files, workspace docs, or invented URLs. If one fetch fails, continue from search snippets instead of retrying lots of other URLs.",
       "",
       "Every URL in the final `sources` array MUST come from a real KokoChat search / `web_fetch` result — do not invent URLs. If a topic has no good hits, narrate that honestly and cite fewer sources rather than fabricating any.",
@@ -214,7 +207,7 @@ const AGENT_DEFINITIONS = {
     execAutoAllowSkills: true,
     execAllowlist: [
       {
-        skillId: "kokochat-deeply-search",
+        skillId: "kokochat-search",
         relativePath: join("bin", "search.mjs")
       }
     ]
@@ -666,8 +659,8 @@ function renderAgentInstructions(agentId, definition, workspace) {
   }
   if (agentId === "deeply") {
     instructions = instructions.replaceAll(
-      "{{DEEPLY_SEARCH_BIN}}",
-      join(workspace, "skills", "kokochat-deeply-search", "bin", "search.mjs")
+      "{{KOKOCHAT_SEARCH_BIN}}",
+      join(workspace, "skills", "kokochat-search", "bin", "search.mjs")
     );
   }
   return [
@@ -1034,8 +1027,16 @@ function agentFallbackWorkspace(agentId) {
 }
 
 function restartGatewayAfterUpgrade(openclawState) {
-  if (dryRun || openclawState.upgraded !== true) return;
-  log("OpenClaw was upgraded; restarting Gateway so the running service uses the new version.");
+  if (dryRun) return;
+  // Always nudge the gateway to reload after we touch agents / skills /
+  // exec-approvals — running OpenClaw caches those in-memory and would
+  // otherwise reject newly allowlisted exec tools (e.g. kokochat-search)
+  // with `exec denied: allowlist miss` until the next manual restart.
+  // After an upgrade we also need the new binary to take effect.
+  const reason = openclawState.upgraded === true
+    ? "OpenClaw was upgraded"
+    : "KokoChat agents / skills / exec allowlist changed";
+  log(`${reason}; restarting Gateway so the running service picks up the new config.`);
   const result = runOpenClaw(["gateway", "restart"], {
     capture: true,
     allowFailure: true
@@ -1049,7 +1050,7 @@ function restartGatewayAfterUpgrade(openclawState) {
     [
       `gateway restart did not complete automatically (exit ${result.status ?? "unknown"}).`,
       output.length > 0 ? lastLines(output, 8) : null,
-      "If the phone cannot reconnect, run `openclaw gateway restart` once and retry pairing."
+      "If the phone cannot reconnect or a new skill is rejected, run `openclaw gateway restart` once and retry."
     ].filter(Boolean).join(" ")
   );
 }

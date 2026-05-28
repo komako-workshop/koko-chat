@@ -52,7 +52,7 @@ you can paste this request to the agent:
 > Run the installer from the repository. Do not ask for API keys. Do not edit
 > model/provider credentials. After it finishes, report the installed KokoChat
 > skills and whether the deeply agent has the allowlisted
-> `kokochat-deeply-search` exec tool.
+> `kokochat-search` exec tool.
 
 The command the agent should end up running is:
 
@@ -69,7 +69,8 @@ node "$KOKOCHAT_REPO/scripts/install-openclaw-support.mjs"
 
 Important: KokoChat's hosted Deeply search uses the `deeply.plus` API. Users do
 **not** need a Brave Search API key in their own OpenClaw config; the installer
-only installs a local `kokochat-deeply-search` wrapper and an exec allowlist.
+only installs a local `kokochat-search` wrapper (shared across mini-apps) and
+an exec allowlist for it.
 
 When the installer upgrades OpenClaw, Gateway can briefly disconnect. Let the
 script finish, then retry the same phone pairing request if the first attempt
@@ -91,11 +92,12 @@ The installer creates the KokoChat agents if needed and syncs:
   `~/.openclaw/agents/tavern-roleplay/workspace/skills/kokochat-tavern-roleplay`
 - `miniapps/deeply/openclaw/skills/kokochat-deeply-research` →
   `~/.openclaw/agents/deeply/workspace/skills/kokochat-deeply-research`
-- `miniapps/deeply/openclaw/skills/kokochat-deeply-search` →
-  `~/.openclaw/agents/deeply/workspace/skills/kokochat-deeply-search`
+- `openclaw/skills/kokochat-search` →
+  `~/.openclaw/agents/deeply/workspace/skills/kokochat-search`
+  (shared skill; other mini-apps can opt in via the installer's SKILLS list)
 
 Deeply research search is routed through KokoChat's hosted search proxy via the
-local `kokochat-deeply-search` wrapper. The user's OpenClaw does **not** need a
+local `kokochat-search` wrapper. The user's OpenClaw does **not** need a
 Brave Search API key. The installer also raises `tools.web.fetch.maxChars` and
 `tools.web.fetch.maxCharsCap` to at least `60000` so Deeply can read more page
 body text when it calls `web_fetch({ url, maxChars: 60000 })`.
@@ -107,7 +109,7 @@ openclaw skills info kokochat-pairing --agent main
 openclaw skills info kokochat-tavern-search --agent tavern
 openclaw skills info kokochat-tavern-roleplay --agent tavern-roleplay
 openclaw skills info kokochat-deeply-research --agent deeply
-openclaw skills info kokochat-deeply-search --agent deeply
+openclaw skills info kokochat-search --agent deeply
 ```
 
 ## Why these files are here

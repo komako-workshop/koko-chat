@@ -63,14 +63,14 @@ the search/fetch tools can / cannot do, and how to plan the research itself.
 The deeply agent uses KokoChat's hosted search wrapper plus OpenClaw's built-in
 `web_fetch`.
 
-### KokoChat hosted search (`kokochat-deeply-search`)
+### KokoChat hosted search (`kokochat-search`)
 
 Run a web search via the local exec wrapper installed by KokoChat. The
 KokoChat Runtime Contract in `AGENTS.md` gives the exact absolute path for
 the wrapper; use that command shape:
 
 ```bash
-<kokochat-deeply-search/bin/search.mjs absolute path> '{"query":"EN keywords","count":5}'
+<kokochat-search/bin/search.mjs absolute path> '{"query":"EN keywords","count":5}'
 ```
 
 It calls KokoChat's hosted search proxy (Brave-backed in production), so the

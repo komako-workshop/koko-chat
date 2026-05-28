@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
- * kokochat-deeply-search
+ * kokochat-search
  *
  * Tiny local OpenClaw exec tool that calls KokoChat's hosted search proxy
- * (default: https://deeply.plus/deeply/search). The Brave API key stays on
- * KokoChat's server; user OpenClaw installs only this wrapper.
+ * (default: https://deeply.plus/deeply/search — server path is currently
+ * Deeply-namespaced for legacy reasons but the wrapper itself is shared
+ * across mini-apps). The Brave API key stays on KokoChat's server; user
+ * OpenClaw installs only this wrapper.
  *
  * Input via argv[2] or stdin:
  *   { "query": "AI investor outlook 2026", "count": 5 }
@@ -34,9 +36,18 @@ async function main() {
     return fail("query is required and must be a non-empty string");
   }
 
-  const base = (env.KOKO_DEEPLY_SEARCH_BASE ?? env.KOKO_SEARCH_API_BASE ?? DEFAULT_BASE).replace(/\/+$/, "");
-  const token = (env.KOKO_DEEPLY_SEARCH_TOKEN ?? env.KOKO_SEARCH_TOKEN ?? "").trim();
-  const timeoutMs = clampInt(env.KOKO_DEEPLY_SEARCH_TIMEOUT_MS, 1_000, 60_000, DEFAULT_TIMEOUT_MS);
+  const base = (
+    env.KOKO_SEARCH_API_BASE ??
+    env.KOKO_DEEPLY_SEARCH_BASE ?? // legacy alias
+    DEFAULT_BASE
+  ).replace(/\/+$/, "");
+  const token = (env.KOKO_SEARCH_TOKEN ?? env.KOKO_DEEPLY_SEARCH_TOKEN ?? "").trim();
+  const timeoutMs = clampInt(
+    env.KOKO_SEARCH_TIMEOUT_MS ?? env.KOKO_DEEPLY_SEARCH_TIMEOUT_MS,
+    1_000,
+    60_000,
+    DEFAULT_TIMEOUT_MS
+  );
 
   try {
     const payload = await fetchSearch({

@@ -6,7 +6,7 @@ runs this skill to do Phase A: a real research pass + a `notes` fenced block.
 KokoChat then runs Phase B separately to turn those notes into a course outline.
 
 The skill is **prompt-only** — it has no `bin/`. Search goes through the
-separate `kokochat-deeply-search` wrapper skill, which calls KokoChat's hosted
+shared `kokochat-search` wrapper skill, which calls KokoChat's hosted
 search proxy (`https://deeply.plus/deeply/search`). Fetching result pages still
 uses OpenClaw's built-in `web_fetch`.
 
@@ -18,7 +18,7 @@ Run from the repo root:
 pnpm openclaw:install
 ```
 
-This copies `kokochat-deeply-research` and `kokochat-deeply-search` into
+This copies `kokochat-deeply-research` and `kokochat-search` into
 `~/.openclaw/agents/deeply/workspace/skills/`, adds both skills to the deeply
 agent's allowlist, and writes the deeply agent's tool config
 (`profile=minimal`, allowlisted `exec`, and `web_fetch`). Then restart the
@@ -45,7 +45,7 @@ The agent's job per `SKILL.md` is to:
 
 1. Narrate the research process in flowing Chinese (with `〔KP〕` sentinel
    at the end of each prose paragraph — see SKILL.md for why).
-2. Call `kokochat-deeply-search/bin/search.mjs` 1–3 times (and optionally
+2. Call `kokochat-search/bin/search.mjs` 1–3 times (and optionally
    `web_fetch` on key URLs) to gather real sources.
 3. End the reply with exactly one fenced block tagged
    `koko.deeply.research.notes` containing a JSON `{ topic, synthesis,
