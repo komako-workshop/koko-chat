@@ -140,14 +140,14 @@ export default function PairScreen() {
         keyboardDismissMode="interactive"
       >
         <Text style={styles.intro}>
-          把这台手机连接到你的 OpenClaw。复制请求发给 OpenClaw，等它返回连接码后粘贴回来。
+          把这台手机连接到你的 OpenClaw。复制命令到运行 OpenClaw 的电脑 / 服务器终端，等它输出连接码后粘贴回来。
         </Text>
 
-        <Text style={styles.stepLabel}>第 1 步 · 复制配对请求</Text>
+        <Text style={styles.stepLabel}>第 1 步 · 复制安装 / 配对命令</Text>
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>发给 OpenClaw</Text>
+          <Text style={styles.cardTitle}>在 OpenClaw 机器上运行</Text>
           <Text style={styles.cardHint}>
-            OpenClaw 会按 README 安装或更新 KokoChat 支持。低于 2026.4.15 的版本会先升级到 2026.5.22，期间可能短暂断开；脚本结束后再粘贴连接码。
+            这段命令会安装或更新 KokoChat 支持并批准这台手机。低于 2026.4.15 的 OpenClaw 会先升级到 2026.5.22；命令结束后，把最后输出的连接码粘贴回来。
           </Text>
           <Pressable
             accessibilityRole="button"
@@ -165,7 +165,7 @@ export default function PairScreen() {
               color="#FFFFFF"
             />
             <Text style={styles.copyButtonText}>
-              {copied ? "已复制" : pairingPrompt === null ? "生成中" : "复制请求"}
+              {copied ? "已复制" : pairingPrompt === null ? "生成中" : "复制命令"}
             </Text>
           </Pressable>
           <Pressable
@@ -179,7 +179,7 @@ export default function PairScreen() {
           </Pressable>
           {showPrompt ? (
             <Text selectable style={styles.promptText}>
-              {pairingPrompt ?? "正在生成配对请求…"}
+              {pairingPrompt ?? "正在生成配对命令…"}
             </Text>
           ) : null}
         </View>

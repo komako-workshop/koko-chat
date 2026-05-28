@@ -12,6 +12,18 @@ import { loadOrCreateDeviceSeed } from "@/gateway/identityStorage";
 const PAIRING_REQUEST_TYPE = "kokochat.pairingRequest";
 const KOKOCHAT_OPENCLAW_INSTALL_URL =
   "https://github.com/komako-workshop/koko-chat#openclaw-setup";
+const KOKOCHAT_OPENCLAW_INSTALL_COMMAND = `KOKOCHAT_REPO="\${HOME}/.kokochat/koko-chat"
+mkdir -p "$(dirname "$KOKOCHAT_REPO")"
+if [ -d "$KOKOCHAT_REPO/.git" ]; then
+  git -C "$KOKOCHAT_REPO" pull --ff-only
+else
+  git clone https://github.com/komako-workshop/koko-chat.git "$KOKOCHAT_REPO"
+fi
+node "$KOKOCHAT_REPO/scripts/install-openclaw-support.mjs"`;
+
+function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
 
 export interface KokoChatPairingRequest {
   type: typeof PAIRING_REQUEST_TYPE;
@@ -46,12 +58,23 @@ export async function buildKokoChatPairingRequest(): Promise<KokoChatPairingRequ
 export async function buildKokoChatPairingPrompt(): Promise<string> {
   const request = await buildKokoChatPairingRequest();
   const code = encodeJson(request);
+  const command = [
+    `KOKOCHAT_PAIRING_REQUEST=${shellSingleQuote(code)}`,
+    KOKOCHAT_OPENCLAW_INSTALL_COMMAND,
+    `KOKOCHAT_PAIRING_REQUEST="$KOKOCHAT_PAIRING_REQUEST" node "$KOKOCHAT_REPO/openclaw/skills/kokochat-pairing/generate-kokochat-code.mjs"`
+  ].join("\n");
   return [
-    "请查看 KokoChat 开源仓库 README 的 OpenClaw Setup，按说明安装或更新 KokoChat 支持，然后批准下面的配对请求，并只返回 KokoChat 连接码。",
-    "如果 OpenClaw 版本低于 2026.4.15，安装脚本会先升级到 2026.5.22；期间 Gateway 可能短暂断开或重启。等脚本结束并恢复连接后，再批准下面的配对请求：",
-    KOKOCHAT_OPENCLAW_INSTALL_URL,
+    "请在运行 OpenClaw 的电脑 / 服务器终端里粘贴并运行下面整段命令。",
     "",
-    "KokoChat 配对请求：",
-    code
+    "它会安装或更新 KokoChat support，然后批准这台手机的配对请求，最后输出 KokoChat 连接码。不要把 Brave / OpenRouter / OpenAI 等 API key 发给 KokoChat；Deeply 搜索走 KokoChat 托管服务。",
+    "",
+    "```bash",
+    command,
+    "```",
+    "",
+    "低于 2026.4.15 的 OpenClaw 会先升级到 2026.5.22；期间 Gateway 可能短暂断开或重启。等命令结束后，把最后输出的连接码粘贴回 KokoChat。",
+    "",
+    "参考说明：",
+    KOKOCHAT_OPENCLAW_INSTALL_URL
   ].join("\n");
 }
