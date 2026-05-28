@@ -729,9 +729,12 @@ export function registerDeeplyMiniApp(): void {
       let firstFenceIdx = -1;
       for (const c of fenceTypes) {
         const idx = display.indexOf(c);
-        if (idx > 0 && (firstFenceIdx === -1 || idx < firstFenceIdx)) firstFenceIdx = idx;
+        // idx >= 0 (not > 0): if the agent leads with the fenced JSON and no
+        // prose, the block is at index 0 — we still want to hide it during
+        // streaming, otherwise raw JSON flashes then vanishes on final.
+        if (idx >= 0 && (firstFenceIdx === -1 || idx < firstFenceIdx)) firstFenceIdx = idx;
       }
-      if (firstFenceIdx > 0) display = display.slice(0, firstFenceIdx).trimEnd();
+      if (firstFenceIdx >= 0) display = display.slice(0, firstFenceIdx).trimEnd();
       display = dedupSectionHeadings(display);
       return display === text ? null : display;
     }
