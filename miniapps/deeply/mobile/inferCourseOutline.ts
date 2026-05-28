@@ -35,7 +35,7 @@ export type InferCourseOutlineResult =
  * 后台跑一次 inferOnce,让 deeply-course agent 写一份 markdown 大纲。
  * 返回的 outlineMarkdown 是原始 agent 文本,sections 是 parser 的结果。
  *
- * 给 outlineMarkdown 加大 timeoutMs:这一步会生成 30-50 个章节标题
+ * 给 outlineMarkdown 加大 timeoutMs:这一步会生成一组章节标题
  * + 隐喻 + 要点,比一般 inferOnce 重,150 秒比较稳。
  */
 export async function inferCourseOutline(

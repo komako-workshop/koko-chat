@@ -16,6 +16,7 @@ import { deeplyAvatarChatBuddy, deeplyAvatarLearning } from "./avatars";
 import { DEEPLY_MINI_APP_ID } from "./constants";
 import {
   DEEPLY_COURSE_MODE_ID,
+  applyResearchNotesAndRunPhaseB,
   applyResearchOutlineToCourse,
   loadDeeplyCourseOutline,
   loadDeeplyCourseSessionRecord,
@@ -50,6 +51,10 @@ import {
   DEEPLY_RECOMMENDATIONS_BLOCK_TYPE,
   type DeeplyRecommendationItem
 } from "./parseRecommendations";
+import {
+  DEEPLY_RESEARCH_NOTES_BLOCK_TYPE,
+  parseDeeplyResearchNotes
+} from "./parseResearchNotes";
 import {
   DEEPLY_RESEARCH_OUTLINE_BLOCK_TYPE,
   isDeeplyResearchOutlineStream,
@@ -307,6 +312,81 @@ function transformDeeplyCourseAgentResponse({
     return {
       messages,
       preview: `${candidates.length} 本候选书,等你选一本`
+    };
+  }
+
+  // ─── Phase A research notes(深度调研课程第一阶段产物)───
+  // Agent 在调研轮结尾输出 `koko.deeply.research.notes` fenced block:扁平的
+  // synthesis + sources 列表。客户端在这里:
+  //   1. 把 fenced block 之前的 prose 留下来(用户已经在 stream 里看过了)
+  //   2. 剪掉 fenced block 本身(用户不需要看 raw JSON)
+  //   3. 触发 Phase B(单独的 inferOnce,把 notes → outline JSON)
+  //
+  // Phase B 是 fire-and-forget,后台跑;DeeplyCourseScreen 的 banner 在那期间
+  // 显示"调研完成,正在整理目录"。
+  const notesBlock = extractFencedBlock(text, DEEPLY_RESEARCH_NOTES_BLOCK_TYPE);
+  if (notesBlock !== null) {
+    const prose = text.slice(0, notesBlock.start).trim();
+    const notesParsed = parseDeeplyResearchNotes(text);
+
+    if (!notesParsed.ok) {
+      console.warn("[deeply-course] research.notes parse failed:", notesParsed.error);
+      const noVerifiedSources = notesParsed.error.includes("可验证来源");
+      useConversationStore.getState().setBootstrap(conversation.id, {
+        status: "error",
+        error: noVerifiedSources
+          ? "这次搜索没有拿到可验证来源,请稍后重试或换一个题目"
+          : `调研笔记格式没能解析:${truncate(notesParsed.error, 120)}`
+      });
+      const messages: ChatMessage[] = [];
+      if (prose.length > 0) {
+        messages.push({
+          id: `${runId}-prose`,
+          role: "agent",
+          text: prose,
+          runId,
+          streaming: false
+        } satisfies ChatMessage);
+      }
+      messages.push({
+        id: `${runId}-error`,
+        role: "agent",
+        text: noVerifiedSources
+          ? "🚫 这次搜索没有拿到可验证来源,我没有创建这门调研课。可以稍后重试,或换成「基于一个链接」从可靠资料开始。"
+          : `🚫 调研笔记格式没能解析(${truncate(notesParsed.error, 80)})。\n你可以右上角归档这门课,然后回 Deeply 探索重新开一个。`,
+        runId,
+        streaming: false
+      } satisfies ChatMessage);
+      return {
+        messages,
+        preview: noVerifiedSources ? "搜索没有拿到可验证来源" : "调研笔记格式错误"
+      };
+    }
+
+    applyResearchNotesAndRunPhaseB(conversation.id, notesParsed.value);
+
+    const messages: ChatMessage[] = [];
+    if (prose.length > 0) {
+      messages.push({
+        id: `${runId}-prose`,
+        role: "agent",
+        text: prose,
+        runId,
+        streaming: false
+      } satisfies ChatMessage);
+    }
+    // 调研收尾的"过桥"消息,提示 Phase B 在后台跑。banner 也会同步显示
+    // "调研完成,正在整理课程目录"(applyResearchNotesAndRunPhaseB 里设的)。
+    messages.push({
+      id: `${runId}-handoff`,
+      role: "agent",
+      text: `调研完成,收到 ${notesParsed.value.sources.length} 条可验证来源。正在为你整理课程目录,几秒钟后跳到讲解页。`,
+      runId,
+      streaming: false
+    } satisfies ChatMessage);
+    return {
+      messages,
+      preview: `调研完成 · ${notesParsed.value.sources.length} 条来源`
     };
   }
 
@@ -647,12 +727,13 @@ export function registerDeeplyMiniApp(): void {
   registerAgentResponseTransformer(DEEPLY_COURSE_MODE_ID, transformDeeplyCourseAgentResponse, {
     // Streaming 期间做两件事:
     //   1. 截掉任何已知 fence opener 之后的 raw JSON,只让 prose narration 可见
-    //      (koko.deeply.research.outline / koko.deeply.book.candidates)
+    //      (research.notes / research.outline / book.candidates)
     //   2. 兜底 dedup `## 第N节:...` 重复标题(agent 在 tool call 之间偶尔
     //      会重新打一次,prompt 已禁但 LLM 不一定 100% 听话)
     streamingDisplayText: ({ text }) => {
       let display = text;
       const fenceTypes = [
+        "```" + DEEPLY_RESEARCH_NOTES_BLOCK_TYPE,
         "```" + DEEPLY_RESEARCH_OUTLINE_BLOCK_TYPE,
         "```" + DEEPLY_BOOK_CANDIDATES_BLOCK_TYPE
       ];

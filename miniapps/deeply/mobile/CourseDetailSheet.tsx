@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -69,8 +69,8 @@ interface CourseDetailSheetProps {
  * 推荐卡点击后弹出的 commit-gate 弹窗。
  *
  * 流程:
- *   1. mount → 调 inferCourseBrief 拿"详细介绍 + 建议节数 + AI 出的选项"。
- *   2. brief 返回后渲染:介绍 + 节数 preset(轻量/标准/深度) + AI 出的 option chips + 「开始讲解」。
+ *   1. mount → 调 inferCourseBrief 拿"详细介绍 + AI 出的选项"。
+ *   2. brief 返回后渲染:介绍 + 长度 preset(自动/轻量/深度/自定义) + AI 出的 option chips + 「开始讲解」。
  *   3. 点击「开始讲解」→ 走 startDeeplyCourseSession,创建 deeply-course conversation,
  *      把当前配置写进 mini-app storage,然后跳过去。
  *
@@ -89,8 +89,8 @@ function CourseDetailSheet({
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [brief, setBrief] = useState<DeeplyCourseBrief | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // 默认 "auto" = 用 AI brief.suggestedSections。和 CourseCustomizeSheet 4 preset 保持一致:
-  // 自动 / 轻量 8 / 深度 24 / 自定义。
+  // 默认 "auto" = 不指定节数,让 outline prompt 自由拆。
+  // 手动 preset 保持:轻量 8 / 深度 24 / 自定义。
   const [sectionPreset, setSectionPreset] = useState<SectionPreset>("auto");
   const [customSectionsRaw, setCustomSectionsRaw] = useState<string>("12");
   const [starting, setStarting] = useState(false);
@@ -173,23 +173,22 @@ function CourseDetailSheet({
   const customSectionsValid =
     sectionPreset !== "custom" ? true : Number.isFinite(customSectionsNum) && customSectionsNum >= 1;
 
-  const sections = useMemo(() => {
-    const aiBase = brief?.suggestedSections ?? card.suggestedSections;
+  const sections = (() => {
     switch (sectionPreset) {
       case "auto":
-        return clampSections(aiBase);
+        return 0;
       case "light":
         return 8;
       case "deep":
         return 24;
       case "custom":
         return Number.isFinite(customSectionsNum) && customSectionsNum >= 1 ? customSectionsNum : 1;
-      // legacy "standard" 从老 record 反序列化时可能出现:走 AI base 兜底
+      // legacy "standard" 从老 record 反序列化时可能出现:按 24 节兼容。
       case "standard":
       default:
-        return clampSections(aiBase);
+        return 24;
     }
-  }, [brief, card.suggestedSections, sectionPreset, customSectionsNum]);
+  })();
 
   const onStart = useCallback(async () => {
     if (brief === null || starting) return;
@@ -210,6 +209,13 @@ function CourseDetailSheet({
       setStarting(false);
     }
   }, [brief, card, conversationId, customSectionsValid, handleClose, sectionPreset, sections, starting]);
+
+  const startButtonLabel =
+    status !== "ready"
+      ? "开始讲解"
+      : sectionPreset === "auto"
+        ? "开始讲解"
+        : `开始讲解 · 约 ${sections} 节`;
 
   const backdropOpacity = anim.interpolate({
     inputRange: [0, 1],
@@ -296,7 +302,7 @@ function CourseDetailSheet({
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <Text style={styles.startButtonText}>
-                {status === "ready" ? `开始讲解 · ${sections} 节` : "开始讲解"}
+                {startButtonLabel}
               </Text>
             )}
           </Pressable>
@@ -349,10 +355,10 @@ interface SectionPresetCard {
   sub: string;
 }
 const SECTION_PRESETS: SectionPresetCard[] = [
-  { id: "auto", label: "自动", sub: "AI 决定" },
+  { id: "auto", label: "自动", sub: "" },
   { id: "light", label: "轻量", sub: "约 8 节" },
   { id: "deep", label: "深度", sub: "约 24 节" },
-  { id: "custom", label: "自定义", sub: "你来定节数" }
+  { id: "custom", label: "自定义", sub: "" }
 ];
 
 function ReadyState({
@@ -383,24 +389,22 @@ function ReadyState({
                 ]}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
-                accessibilityLabel={`${preset.label} ${preset.sub}`}
+                accessibilityLabel={preset.sub.length > 0 ? `${preset.label} ${preset.sub}` : preset.label}
               >
                 <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
                   {preset.label}
                 </Text>
-                <Text style={[styles.chipMeta, active && styles.chipMetaActive]}>
-                  {preset.sub}
-                </Text>
+                {preset.sub.length > 0 ? (
+                  <Text style={[styles.chipMeta, active && styles.chipMetaActive]}>
+                    {preset.sub}
+                  </Text>
+                ) : null}
               </Pressable>
             );
           })}
         </View>
 
-        {sectionPreset === "auto" ? (
-          <Text style={styles.configHint}>
-            AI 根据这门课的内容,建议讲 {sections} 节。
-          </Text>
-        ) : sectionPreset === "custom" ? (
+        {sectionPreset === "custom" ? (
           <View style={styles.customSectionsRow}>
             <TextInput
               value={customSectionsRaw}
@@ -414,8 +418,8 @@ function ReadyState({
             />
             <Text style={styles.customSectionsSuffix}>节</Text>
           </View>
-        ) : (
-          <Text style={styles.configHint}>当前选择:{sections} 节</Text>
+        ) : sectionPreset === "auto" ? null : (
+          <Text style={styles.configHint}>当前选择:约 {sections} 节</Text>
         )}
       </View>
     </View>
@@ -423,11 +427,6 @@ function ReadyState({
 }
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
-
-function clampSections(n: number): number {
-  if (!Number.isFinite(n)) return 20;
-  return Math.max(10, Math.min(60, Math.round(n)));
-}
 
 function kindLabel(kind: string): string {
   switch (kind) {

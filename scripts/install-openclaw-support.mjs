@@ -24,6 +24,8 @@ const MIN_OPENCLAW_VERSION = "2026.4.15";
 const MIN_OPENCLAW_VERSION_PARTS = [2026, 4, 15];
 const TARGET_OPENCLAW_VERSION = "2026.5.22";
 const DEFAULT_WEB_SEARCH_PROVIDER = "duckduckgo";
+const DEFAULT_WEB_FETCH_MAX_CHARS = 60_000;
+const DEFAULT_WEB_FETCH_MAX_CHARS_CAP = 60_000;
 let openclawBin = "openclaw";
 
 const REQUIRED_AGENTS = [
@@ -78,6 +80,19 @@ const SKILLS = [
       "openclaw",
       "skills",
       "kokochat-deeply-research"
+    ),
+    workspaceFor: "deeply",
+    verifyAgent: "deeply"
+  },
+  {
+    id: "kokochat-deeply-search",
+    source: join(
+      REPO_ROOT,
+      "miniapps",
+      "deeply",
+      "openclaw",
+      "skills",
+      "kokochat-deeply-search"
     ),
     workspaceFor: "deeply",
     verifyAgent: "deeply"
@@ -169,27 +184,40 @@ const AGENT_DEFINITIONS = {
       "",
       "## Deep-research course path",
       "",
-      "If the user message matches the shape `请围绕「<topic>」做一份 N 节的深度调研课程`, switch into the procedure defined in the `kokochat-deeply-research` skill. In short: narrate the research process in flowing Chinese, run real web research via the OpenClaw built-in tools, then end with exactly one fenced block tagged `koko.deeply.research.outline` carrying the structured outline + cited real-URL sources.",
+      "If the user message matches the shape `请围绕「<topic>」做一份 N 节的深度调研课程`, switch into the procedure defined in the `kokochat-deeply-research` skill. In short: narrate the research process in flowing Chinese, run real web research via KokoChat's hosted search wrapper, then end with exactly one fenced block tagged `koko.deeply.research.notes` carrying synthesis + cited real-URL sources. KokoChat will run a separate Phase B inference to turn those notes into a course outline.",
       "",
-      "The web research tools available to this agent are:",
+      "The research tools available to this agent are:",
       "",
-      "- `web_search` — run a query via the gateway-configured search provider (defaults to key-free DuckDuckGo unless the user configured another provider). Args: `{ \"query\": \"<EN keywords>\", \"count\": <1–10> }`. Call at most 3 times total per research turn with different angles. Do not batch multiple searches in one assistant turn, and do not pass provider-specific args like `domain_filter`, `date_after`, `freshness`, `country`, `language`, `max_tokens`, or `max_tokens_per_page`.",
-      "- `web_fetch` — pull the main content of a specific URL as readable text. Args: `{ \"url\": \"<https://...>\" }`. Use at most once per preparation turn, only for an http(s) URL returned by a successful `web_search`; never fetch `file://`, skill files, workspace docs, or invented URLs. If it fails, continue from search snippets instead of retrying other URLs.",
+      "- `exec` with `{{DEEPLY_SEARCH_BIN}} '<json>'` — run a query via KokoChat's hosted search proxy. Args: `{ \"query\": \"<EN keywords>\", \"count\": <1–10> }`. Call it when the Deeply prompt asks for web search. Do not use arbitrary shell commands, chains, pipes, redirections, or preflight file-reading commands.",
+      "- `web_fetch` — pull the main content of a specific URL as readable text. Args: `{ \"url\": \"<https://...>\", \"maxChars\": 60000 }`. Use at most twice per preparation turn, only for http(s) URLs returned by successful KokoChat search; never fetch `file://`, skill files, workspace docs, or invented URLs. If one fetch fails, continue from search snippets instead of retrying lots of other URLs.",
       "",
-      "Every URL in the final `sources` array MUST come from a real `web_search` / `web_fetch` result — do not invent URLs. If a topic has no good hits, narrate that honestly and cite fewer sources rather than fabricating any.",
+      "Every URL in the final `sources` array MUST come from a real KokoChat search / `web_fetch` result — do not invent URLs. If a topic has no good hits, narrate that honestly and cite fewer sources rather than fabricating any.",
       "",
-      "The final `koko.deeply.research.outline` block MUST contain a JSON object only: it starts with `{`, ends with `}`, and uses camelCase fields `version`, `courseTitle`, `introduction`, `sections`, `outlineMarkdown`. Never emit YAML or the legacy outline schema (`title:`, `sections_count:`, `source_ids:`, `learning_goals:`, `discussion_questions:`).",
+      "Before searching, infer a generic research plan from the user's topic itself: key subjects, time/scope, controversy structure, and best evidence types (primary text, interview, transcript, filing, paper, official data, high-quality secondary synthesis, etc.). Do not hard-code domain-specific people, organizations, industries, or examples into the procedure; only follow what the user's topic implies. Queries should first target the exact topic and key subjects, then expand to counterpoints, background, or more authoritative original evidence. Avoid filling sources with broad trend pages when narrower material exists.",
+      "",
+      "The final `koko.deeply.research.notes` block MUST contain a JSON object only: it starts with `{`, ends with `}`, and uses camelCase fields `version`, `topic`, `synthesis`, `sources`. Never emit YAML or a course outline from Phase A.",
       "",
       "Narration in this surface is REQUIRED and visible to the user (unlike the tavern skill which forbids visible prose). The user watches this stream during the 1–3 minute research run and needs to feel like you're doing real work. See the skill's `Narration Pattern (Required)` section. Each prose paragraph must end with the sentinel `〔KP〕` — the KokoChat client strips it and renders proper paragraph breaks; without it OpenClaw's wire-layer merge will visually flatten all prose into one block."
     ].join("\n"),
     tools: {
-      // minimal + alsoAllow keeps the surface tight: agent only gets the two
-      // built-in web tools it actually needs, not the full coding-profile
-      // bundle (exec/process/file_write/etc). Course turn that triggers this
-      // path is purely network-driven research, no local execution.
+      // minimal + alsoAllow keeps the surface tight. Deeply search goes
+      // through one allowlisted local exec wrapper that calls KokoChat's
+      // hosted search proxy; web_fetch remains built-in for reading result URLs.
       profile: "minimal",
-      alsoAllow: ["web_search", "web_fetch"]
-    }
+      alsoAllow: ["exec", "process", "web_fetch"],
+      exec: {
+        security: "allowlist",
+        ask: "off",
+        timeoutSec: 120
+      }
+    },
+    execAutoAllowSkills: true,
+    execAllowlist: [
+      {
+        skillId: "kokochat-deeply-search",
+        relativePath: join("bin", "search.mjs")
+      }
+    ]
   }
 };
 
@@ -636,6 +664,12 @@ function renderAgentInstructions(agentId, definition, workspace) {
       join(workspace, "skills", "kokochat-tavern-search", "bin", "fetch-card.mjs")
     );
   }
+  if (agentId === "deeply") {
+    instructions = instructions.replaceAll(
+      "{{DEEPLY_SEARCH_BIN}}",
+      join(workspace, "skills", "kokochat-deeply-search", "bin", "search.mjs")
+    );
+  }
   return [
     "## KokoChat Runtime Contract",
     "",
@@ -732,7 +766,7 @@ function configureAgentOpenClawConfig(installed) {
   if (dryRun) return;
 
   const config = readJsonObject(configPath);
-  ensureDefaultWebSearchProvider(config);
+  ensureDefaultWebToolConfig(config);
 
   const agents = isRecord(config.agents) ? config.agents : {};
   config.agents = agents;
@@ -815,22 +849,47 @@ function readJsonObject(path) {
   return parsed;
 }
 
-function ensureDefaultWebSearchProvider(config) {
+function ensureDefaultWebToolConfig(config) {
   const tools = isRecord(config.tools) ? config.tools : {};
   config.tools = tools;
   const web = isRecord(tools.web) ? tools.web : {};
   tools.web = web;
   const search = isRecord(web.search) ? web.search : {};
   web.search = search;
+  const fetch = isRecord(web.fetch) ? web.fetch : {};
+  web.fetch = fetch;
 
   const provider = typeof search.provider === "string" ? search.provider.trim() : "";
   if (provider.length > 0) {
     log(`web_search provider: keep existing ${provider}`);
-    return;
+  } else {
+    search.provider = DEFAULT_WEB_SEARCH_PROVIDER;
+    log(`web_search provider: default ${DEFAULT_WEB_SEARCH_PROVIDER} (key-free)`);
   }
 
-  search.provider = DEFAULT_WEB_SEARCH_PROVIDER;
-  log(`web_search provider: default ${DEFAULT_WEB_SEARCH_PROVIDER} (key-free)`);
+  ensureMinimumNumberConfig(fetch, "maxChars", DEFAULT_WEB_FETCH_MAX_CHARS, "web_fetch maxChars");
+  ensureMinimumNumberConfig(
+    fetch,
+    "maxCharsCap",
+    DEFAULT_WEB_FETCH_MAX_CHARS_CAP,
+    "web_fetch maxCharsCap"
+  );
+}
+
+function ensureMinimumNumberConfig(target, key, minimum, label) {
+  const current = typeof target[key] === "number" && Number.isFinite(target[key])
+    ? Math.floor(target[key])
+    : null;
+  if (current !== null && current >= minimum) {
+    log(`${label}: keep existing ${current}`);
+    return;
+  }
+  target[key] = minimum;
+  if (current === null) {
+    log(`${label}: default ${minimum}`);
+  } else {
+    log(`${label}: raise ${current} -> ${minimum}`);
+  }
 }
 
 function ensureAgentConfigEntry(list, agentId) {

@@ -343,7 +343,7 @@ export function buildContinueSectionUserText(section: number): string {
  *   - Research 课程:**准备阶段**只给出 N 节标题 + 每节关联的 source 指针,
  *     不写"要点"。**讲解阶段**(这个函数生成的 prompt),agent 看到当前节
  *     标题 + 该节 sources + 整门课的 introduction,**鼓励它再次调
- *     web_search / web_fetch 临场基于真实材料创作内容**,而不是回退到
+ *     KokoChat hosted search / web_fetch 临场基于真实材料创作内容**,而不是回退到
  *     training data 的泛通论。
  *
  * 这样研报课程的每一节都是当下重新调研的产物,而不是 outline 时已经决定
@@ -368,8 +368,8 @@ export function buildResearchCourseSectionPrompt(input: {
    * agent 作为 chat.send attachment / web_fetch 抓回正文)。
    *
    * 两种模式 95% prompt 共用,只在「工具」和「本节资料」段落侧重不同:
-   *   - research:鼓励 agent 再 web_search 拿更新角度,sources 是"资料指针"
-   *   - material:优先复用 session 历史里那份原始资料,web_search 只补背景
+   *   - research:鼓励 agent 再 KokoChat hosted search 拿更新角度,sources 是"资料指针"
+   *   - material:优先复用 session 历史里那份原始资料,搜索只补背景
    *   - book:围绕"原书章节结构 + 权威解读",sources 是书评 / chapter summary
    */
   kind?: "research" | "material" | "book";
@@ -382,8 +382,8 @@ export function buildResearchCourseSectionPrompt(input: {
   const sourcesIntro = kind === "material"
     ? "(下面列出的资料都指向用户提供的原始材料(URL / PDF / 文件)的某个部分。讲解时要回去看那段原文,不要靠泛通论。)"
     : kind === "book"
-      ? "(本节准备阶段没有挂资料指针 —— 你可以现场用 web_search 找该书的章节摘要 / 书评再讲。)"
-      : "(本节准备阶段没有挂资料指针 —— 你可以现场用 web_search 找几条再讲。)";
+      ? "(本节准备阶段没有挂资料指针 —— 你可以现场用 KokoChat hosted search 找该书的章节摘要 / 书评再讲。)"
+      : "(本节准备阶段没有挂资料指针 —— 你可以现场用 KokoChat hosted search 找几条再讲。)";
 
   const sourcesBlock = input.sectionSources.length === 0
     ? sourcesIntro
@@ -410,7 +410,7 @@ export function buildResearchCourseSectionPrompt(input: {
   const modeIntro =
     kind === "material" ? "这门课是**资料精读模式**:用户在 kickoff 那一轮已经把原始资料(URL 正文 / PDF / 文件)交给你,本 session 早些时候的对话历史里有那份资料的完整内容(OpenClaw 已经把 attachment 自动 stage,也可能有 web_fetch 抓回的正文)。**本节的具体讲解内容由你这一轮基于那份资料临场创作**,不是从准备好的\"核心隐喻 / 要点\"展开。"
       : kind === "book" ? "这门课是**精读模式**:用户选了一本书,kickoff 阶段你已经 disambiguate 了具体版本并搜集了章节解读 / 书评 / 作者访谈作 sources。**本节的具体讲解内容由你这一轮临场创作**,但必须紧扣这本书的真实内容 —— 引用要回到原书的具体章节 / 论点,不要把它讲成泛泛的主题课。"
-        : "这门课是**研报模式**:准备阶段已经把每节标题和资料指针定好了,**本节的具体讲解内容由你这一轮临场创作**,而不是从准备好的\"核心隐喻 / 要点\"展开。你**可以并且鼓励**在讲解前用 web_search / web_fetch 再补几下,确保用到的是最新的、跟用户问题最相关的材料。";
+        : "这门课是**研报模式**:准备阶段已经把每节标题和资料指针定好了,**本节的具体讲解内容由你这一轮临场创作**,而不是从准备好的\"核心隐喻 / 要点\"展开。你**可以并且鼓励**在讲解前用 KokoChat hosted search / web_fetch 再补几下,确保用到的是最新的、跟用户问题最相关的材料。";
 
   const toolsBlock =
     kind === "material"
@@ -418,17 +418,17 @@ export function buildResearchCourseSectionPrompt(input: {
 
 - 优先策略:**直接回去看 session 历史里那份原始资料**(用户给的 URL / PDF 内容已经在前面的对话里)。讲解时引用具体段落 / 数据 / 论点,要让用户感觉到你是"读了原文",而不是泛泛复述。
 - \`web_fetch({ url })\` —— 如果忘了原始 URL 的某段细节,可以再 fetch 那个 URL(尤其用户给的资料是 URL 时)。**不要 fetch 用户没提到的其它 URL**。
-- \`web_search({ query, count })\` —— **只做少量背景补充**(比如某个术语的解释、某个事件的发生年份等)。**不要让 web_search 结果成为讲解主线**;主线必须扣回用户给的资料。每节最多 1 次,query 简短聚焦,不要变成"全网调研"。`
+- KokoChat hosted search —— **只做少量背景补充**(比如某个术语的解释、某个事件的发生年份等)。**不要让搜索结果成为讲解主线**;主线必须扣回用户给的资料。每节最多 1 次,query 简短聚焦,不要变成"全网调研"。`
       : kind === "book"
         ? `你这一轮有两个工具,**侧重在"贴近原书"**:
 
-- \`web_search({ query, count })\` —— 推荐 1-2 次。query 模式:\`"<书名> <本节关键主题> chapter summary"\` 或者中文 \`"<书名> <主题> 解读"\`。目标是拿到原书在这个主题上的**具体论点 / 例子 / 段落引文**,不是泛主题讨论。
+- KokoChat hosted search —— 推荐 1-2 次。query 模式:\`"<书名> <本节关键主题> chapter summary"\` 或者中文 \`"<书名> <主题> 解读"\`。目标是拿到原书在这个主题上的**具体论点 / 例子 / 段落引文**,不是泛主题讨论。
 - \`web_fetch({ url })\` —— 推荐挑准备阶段挂的 1-2 条 primary source(章节解读 / 高质量书评)抓正文,确保引用的是有出处的具体说法。
 
-讲解时:**主线必须扣回原书**(具体章节、原文金句、作者本人原话),web_search 拿到的二手解读用作补充和延伸,不能反客为主。`
+讲解时:**主线必须扣回原书**(具体章节、原文金句、作者本人原话),搜索拿到的二手解读用作补充和延伸,不能反客为主。`
         : `你这一轮有两个工具:
 
-- \`web_search({ query, count })\` —— 推荐在讲解前用 1-2 次。query 用英文关键词。**特别推荐**:针对本节标题做一次更聚焦的搜索,看看有没有比准备阶段更新或者更对题的资料。
+- KokoChat hosted search —— 推荐在讲解前用 1-2 次。query 用英文关键词。**特别推荐**:针对本节标题做一次更聚焦的搜索,看看有没有比准备阶段更新或者更对题的资料。
 - \`web_fetch({ url, maxChars: 60000 })\` —— 推荐挑准备阶段挂的 1 个 primary source(或者刚 search 到的最有价值的一条)抓正文,这样讲解时引用的是真实段落,不是 snippet 一句话。如果失败,直接基于搜索结果和准备阶段 sources 讲,不要把 fetch 失败写得像本节失败。`;
 
   return `<deeply_course_persona>
@@ -464,7 +464,7 @@ ${toolsBlock}
 
 之后(包括所有 tool 调用之间 / 之后的 prose、引用、讲解段落)**整个 turn 永远不要再出现 \`## 第${input.section}节\` 这一行**。
 
-⚠️ 常见错误:调完 web_search / web_fetch 后,你可能会"再来一次"地重新打一行 \`## 第${input.section}节:...\`,然后才开始正文。**这是错的,会让用户看到两遍标题**。tool 调用完后直接续写正文(或者短 prose 承接),**不要重复 heading**。
+⚠️ 常见错误:调完搜索 / web_fetch 后,你可能会"再来一次"地重新打一行 \`## 第${input.section}节:...\`,然后才开始正文。**这是错的,会让用户看到两遍标题**。tool 调用完后直接续写正文(或者短 prose 承接),**不要重复 heading**。
 
 - 第一行前不允许有任何其它文字、空行、emoji、引号、编号。
 - 必须用中文冒号 ":"。
@@ -474,7 +474,7 @@ ${toolsBlock}
 # 讲解风格
 
 - 遵守"诠释者人设":一次只讲透一个洞见,留白等用户消化,排版讲究呼吸感(短段落 / 引用 / 列表)。
-- 讲到具体观点 / 数据 / 实验时,**自然地引用 sources**:用 markdown 链接形式 \`[来源标题](url)\`,1-3 次,不要堆砌。引用要来自上面 \`section_sources\` 或者你刚 web_search / web_fetch 拿到的真实 url,不要编造别的 url。
+- 讲到具体观点 / 数据 / 实验时,**自然地引用 sources**:用 markdown 链接形式 \`[来源标题](url)\`,1-3 次,不要堆砌。引用要来自上面 \`section_sources\` 或者你刚搜索 / web_fetch 拿到的真实 url,不要编造别的 url。
 - 讲完本节内容后只附:**1-2 句收尾凝缩** + **一句承接下一节** 即可。**不要列"好奇点 / 延伸问题 / 你可以问…"等候选追问列表** —— 界面会自动出快捷回复 chip。
 - 整段 markdown 正文不要用三反引号代码块,不要主动输出任何 \`\`\`koko.deeply.*\`\`\` fenced block。
 
@@ -590,19 +590,24 @@ export function parseDeeplyBookKickoff(
 }
 
 /**
- * Research kickoff 的 gatewayText 包装。
+ * Phase A:深度调研 kickoff prompt(只做调研,不拆目录)。
  *
- * 此 prompt 故意保持精简。前几个版本累加了大量"防 anti-pattern"细则
- * (sentinel marker 完整解释 / DuckDuckGo bot-detection / camelCase 字段
- * 名警告 / 禁止 snake_case 旧 schema / Provider 参数白名单 / 4 维度调研
- * 规划 ...),长 prompt 反而把"先 web_search 再输出 / sources 必须来自
- * 真实返回"这条核心硬约束淹没了:2026-05-28 的回归测试里 toolCallCount=0
- * 但 sources 数组仍然塞满了来自训练数据猜的 URL。
+ * 两阶段研究的第一阶段。Agent 在这一轮:
+ *   - 调 KokoChat hosted search / web_fetch 直到对题目有足够材料
+ *   - 边搜边流式输出中文 prose 给用户看
+ *   - **最后只输出一份扁平的调研笔记**,不出 outline、不分 section
  *
- * 现在的版本只突出 5 条不可商量的硬约束 + 紧凑的工具说明 + JSON schema。
- * 其他风格细节(prose 节奏 / sentinel marker 设计动机 / tool quirks)
- * 留给 kokochat-deeply-research SKILL.md。kickoff prompt 是当下要做什么,
- * skill 是 agent 的长期手册,两者不重复。
+ * Phase B 由客户端在拿到 notes 之后通过单独的 inferOnce 触发,
+ * 那一轮模型完全没有 web 工具,只把 notes 转成结构化的
+ * \`koko.deeply.research.outline\`。两阶段是为了让"调研"和"拆目录"
+ * 不再争夺同一次 attention —— 上一轮 outline-only prompt 的回归测试
+ * 出现过 toolCallCount=0 但 sources 全是模型从训练数据猜的 URL 这种
+ * 典型 attention split 失败。
+ *
+ * 配套 prompt:
+ *   - Phase A 输出 schema:\`koko.deeply.research.notes\`
+ *     (定义在 parseResearchNotes.ts)
+ *   - Phase B prompt:\`buildResearchOutlineFromNotesPrompt\` 在本文件下方
  */
 export function buildResearchKickoffPrompt(input: {
   topic: string;
@@ -612,37 +617,115 @@ export function buildResearchKickoffPrompt(input: {
     topic: input.topic,
     sections: input.sections
   });
-  const sectionHint = input.sections > 0
-    ? `用户希望约 ${input.sections} 节(允许 ±20%),但仍以课题自然结构为准。`
-    : `没有预设节数 —— 按课题自然结构自由决定,题目窄就少分,题目宽就多分。`;
-  return `[系统注入 · 深度调研课程 kickoff]
+  return `[系统注入 · 深度调研课程 Phase A:调研]
 
-按 \`kokochat-deeply-research\` skill 走研报流程。这一轮只**准备目录**,
-不写讲解内容;讲解发生在后续 turn。
+按 \`kokochat-deeply-research\` skill 走研报流程。这一轮**只调研、收集
+sources**,不要决定课程目录、不要拆 section、不要分配每节资料 ——
+那是 Phase B 单独的一次推理,你交接给它的就是下面 fenced block 的
+"调研笔记"。
 
-# 5 条硬约束(其它都可商量)
+# 3 条硬约束(其它都可商量)
 
-1. **先 web_search,再 emit fenced block**。tool 调用次数为 0 时,
+1. **先调用 KokoChat hosted search,再 emit fenced block**。搜索结果为 0 时,
    fenced block 里 \`sources\` 数组必须为空,**不要凭训练数据编 URL**。
-2. \`sources\` 里每个 \`url\` 必须来自**本轮** web_search / web_fetch
-   真实返回。没搜到合适的就少 cite,某节 0 条也 OK,**不要编**。
-3. **目录节数由你定**。${sectionHint}
-4. 输出**唯一一个** \`koko.deeply.research.outline\` fenced block,
-   内部是合法 JSON,字段按下面 schema。fenced block 之后不要再写文字。
-5. JSON 字符串内部引用短语优先用中文引号 “...”,避免裸 \`"\` 破坏解析。
+2. \`sources\` 里每个 \`url\` 必须来自**本轮** KokoChat hosted search / web_fetch
+   真实返回。没搜到合适的就少 cite,**不要编**。
+3. 输出**唯一一个** \`koko.deeply.research.notes\` fenced block,
+   内部是合法 JSON。fenced block 之后不要再写文字。
 
 # 工具
 
-- \`web_search({ query: "EN keywords", count: 1-10 })\`:最多 5 次,
-  通常 3 次够。只传 \`query\` + \`count\`,不传其它参数。
-- \`web_fetch({ url, maxChars: 60000 })\`:最多 2 次,且 url 必须来自
-  上一步 web_search 返回的 http(s) 结果,不要 fetch 文件 / 自己编的 URL。
+- KokoChat hosted search:按 AGENTS.md 里允许的 \`kokochat-deeply-search\`
+  exec wrapper 调用。输入只传 \`query\` + \`count\`,不传其它参数。
+- \`web_fetch({ url, maxChars: 60000 })\`:挑 1-2 个最有价值的 URL 拿正文。
+  url 必须来自上一步搜索返回的 http(s) 结果,不要 fetch 文件
+  或自己编的 URL。
 
 # Prose 节奏
 
-每次 tool 调用前后都用 1-3 句中文 prose 说你打算去查什么、查到了什么。
+每次 tool 调用前后用 1-3 句中文 prose 说你打算去查什么、查到了什么。
 **每段 prose 末尾打 \`〔KP〕\`** sentinel(客户端会替换为段落分隔符,
 不打的话所有段会粘成一坨)。综合段后接 fenced block。
+
+# Output schema(Phase A · 调研笔记)
+
+\`\`\`json
+{
+  "version": 1,
+  "topic": "用户提交的原题(原样)",
+  "synthesis": "300-1200 字中文调研笔记,把你这一轮搜到的关键事实、数据、观点、分歧梳理清楚。",
+  "sources": [
+    { "title": "...", "url": "https://...", "stance": "primary",
+      "note": "<=80 字中文,说这条材料讲了什么、为什么对这个题有用" }
+  ]
+}
+\`\`\`
+
+字段说明:
+
+- \`sources\` 扁平列表,**不分 section**(拆 section 是 Phase B 的工作),
+  5-20 条之间,涵盖主流观点 / 反方 / 关键背景 / 高质量原始材料。
+- \`stance\` 必须是 \`primary\` / \`counterpoint\` / \`background\` 之一。
+- 不要输出 \`courseTitle\` / \`introduction\` / \`sections\` / \`outlineMarkdown\` —
+  那些字段属于 Phase B 输出。
+
+[用户消息]
+${visible}`;
+}
+
+/**
+ * Phase B:把 Phase A 调研笔记转成结构化课程目录。
+ *
+ * 这一轮在客户端通过 \`inferOnce\` 单跑(不是 mainline session),agent
+ * 拿不到 web 工具,attention 全集中在 JSON 输出和 section 拆分上。
+ * 输入是 Phase A 产物 + 用户原题 + 节数偏好,输出严格按
+ * \`koko.deeply.research.outline\` schema。
+ */
+export function buildResearchOutlineFromNotesPrompt(input: {
+  topic: string;
+  sections: number;
+  synthesis: string;
+  sources: ReadonlyArray<{
+    title: string;
+    url: string;
+    stance: "primary" | "counterpoint" | "background";
+    snippet: string;
+  }>;
+}): string {
+  const sectionHint = input.sections > 0
+    ? `用户希望约 ${input.sections} 节(允许 ±20%),但仍以材料自然结构为准。`
+    : `没有预设节数 —— 按材料自然结构自由决定。`;
+
+  const sourcesJsonl = input.sources
+    .map((s, i) => `  ${i + 1}. [${s.stance}] ${s.title}\n     ${s.url}\n     ${s.snippet}`)
+    .join("\n");
+
+  return `[Phase B · 拆课程目录]
+
+Phase A 已经把调研材料交给你。这一轮**不调任何工具**,基于下面的素材
+出一份课程 outline JSON。
+
+# 输入
+
+## 用户原题
+
+${input.topic}
+
+## Sources(主输入,按行号编号)
+
+${sourcesJsonl}
+
+## Phase A 调研笔记(背景参考,组织视角不一定要沿用)
+
+${input.synthesis}
+
+# 约束
+
+- outline 里每条 url **只能从上面 sources 列表里挑**,不要新增、不要编。
+- 节数:${sectionHint}
+- 输出**唯一一个** \`koko.deeply.research.outline\` fenced block,
+  之外不要写任何文字。
+- 字段名严格 camelCase;JSON 字符串内引用短语优先用中文引号 “...”。
 
 # Output schema
 
@@ -650,14 +733,14 @@ export function buildResearchKickoffPrompt(input: {
 {
   "version": 1,
   "courseTitle": "5-60 字课程标题",
-  "introduction": "200-600 字课程介绍,用户进课程页第一眼看到的",
+  "introduction": "200-600 字课程介绍",
   "sections": [
     {
       "index": 1,
       "title": "8-30 字节标题",
       "sources": [
         { "title": "...", "url": "https://...", "stance": "primary",
-          "snippet": "<=80 字中文,说明这条对本节为什么有用" }
+          "snippet": "<=80 字中文,这条对本节为什么有用" }
       ]
     }
   ],
@@ -665,12 +748,10 @@ export function buildResearchKickoffPrompt(input: {
 }
 \`\`\`
 
-每节 \`sources\` 0-4 条(0 = 没搜到合适的就空)。
-\`stance\` 必须是 \`primary\` / \`counterpoint\` / \`background\` 之一。
-字段名严格 camelCase,不要用 snake_case 或其它 alias。
-
-[用户消息]
-${visible}`;
+- 每节 \`sources\` 数量自由(0 条也行,讲解阶段会临场再搜);
+  stance 沿用 sources 列表里的;同一 url 同一节不重复。
+- \`outlineMarkdown\` 每节格式:\`## 第N节:标题\` + 每条资料一行
+  \`- [stance] 资料标题 — url\`。`;
 }
 
 export function buildMaterialKickoffPrompt(input: {
@@ -697,8 +778,8 @@ export function buildMaterialKickoffPrompt(input: {
 
 # 工具与材料读取
 
-1. 先用 \`web_fetch({ url: "${input.url}" })\` 抓正文。若抓取失败,再用 \`web_search\` 搜这个页面标题/域名,找同一资料或可靠摘要。
-2. 可以用 \`web_search\` 做少量背景补充,但课程主线必须来自用户提供的这条链接,不要喧宾夺主。
+1. 先用 \`web_fetch({ url: "${input.url}" })\` 抓正文。若抓取失败,再用 KokoChat hosted search 搜这个页面标题/域名,找同一资料或可靠摘要。
+2. 可以用 KokoChat hosted search 做少量背景补充,但课程主线必须来自用户提供的这条链接,不要喧宾夺主。
 3. 如果资料很长,先建立目录/主题索引,再挑出适合拆课的 5-20 个核心段落/概念。
 
 # 准备阶段交付
@@ -718,7 +799,7 @@ export function buildMaterialKickoffPrompt(input: {
 - \`sections\`:必填。${input.sections > 0
     ? `用户选择的是约 ${input.sections} 节;请按资料自然结构组织,不要为了凑数机械拆分或合并。`
     : ""}每节必须有 2-4 条 \`sources\`:
-  - source.url 用用户提供的这条 URL,或你 web_fetch/web_search 得到的真实 URL
+  - source.url 用用户提供的这条 URL,或你 web_fetch/搜索得到的真实 URL
   - 同一节 \`sources\` 内不要重复同一个 URL。
   - source.stance 必须是 \`primary\` / \`counterpoint\` / \`background\` 之一。基于同一份资料的主要段落通常用 \`primary\`,补充背景资料用 \`background\`,反方/限制用 \`counterpoint\`。
   - 每条 source 的 snippet 是「这一节会用到什么材料」,不是泛泛摘要
@@ -740,7 +821,7 @@ ${visible}`;
  *
  * Phase A:用户只输了书名,可能歧义大(同名书 / 不同版本 / 不同译本)。
  * agent 这一轮要:
- *   1. web_search 找 1-5 个真实候选;
+ *   1. KokoChat hosted search 找 1-5 个真实候选;
  *   2. 输出 `koko.deeply.book.candidates` fenced block 给客户端;
  *   3. **不出 outline**,等用户在 chat 里点候选卡片确认。
  *
@@ -789,7 +870,7 @@ ${userHints.join("\n")}
 
 # 你这一轮的任务
 
-1. **web_search 1-2 次** 找出真实候选(query 范例:\`"<书名> book"\`、\`"<书名> author"\`、\`"<书名> 是什么书"\`)。
+1. **KokoChat hosted search 1-2 次** 找出真实候选(query 范例:\`"<书名> book"\`、\`"<书名> author"\`、\`"<书名> 是什么书"\`)。
 2. **判断歧义**:看是不是真的有不同作者 / 不同内容主题的同名书。
    - **绝大多数书只有 1 个候选**(比如 Sapiens, Poor Charlie's Almanack, 思考快与慢, 红楼梦)— 这时就列 1 个候选,让用户点一下确认即可。
    - **少数书真有歧义**(比如「活着」余华 vs Tolstoy,「围城」钱钟书 vs 同名电视剧)— 这时列 2-3 个不同作者 / 不同主题的候选。
@@ -831,7 +912,7 @@ fenced block **之前**必须有 2-3 段中文 prose narration,每段末尾打 \
 - **title 和 author 必填**。author 是 disambiguation 的核心。
 - **subject 必填**。它是用户识别"是这本不是那本"的关键。不要写"由 X 出版社出版"、"周克希译本"、"1998 年版"这种出版/版本信息,而是写"讲什么内容、什么时代、什么体裁"。
 - \`tagline\` 字段可选,绝大多数情况省略;只在 author + subject 还不足以让用户区分时填一句。
-- **不要编造**。如果不确信 author,就 web_search 再查。
+- **不要编造**。如果不确信 author,就再搜索确认。
 
 # 顺序提醒
 
@@ -919,7 +1000,7 @@ export function buildBookOutlinePrompt(input: {
 
 # 调研工具
 
-\`web_search({ query, count })\` —— 用 2-4 次,query 围绕这本**已锁定**的书:
+KokoChat hosted search —— 用 2-4 次,query 围绕这本**已锁定**的书:
 - 第 1 次:"<完整英文书名> chapter summary" 或 "<书名> table of contents" — 拿原书章节结构
 - 第 2 次:作者名 + "interview" 或 "lectures" — 拿作者本人的延展讲解
 - 第 3 次(可选):中文 "<书名> 解读" / "<书名> 书评" — 中文圈视角 / 译本特定问题
@@ -927,7 +1008,7 @@ export function buildBookOutlinePrompt(input: {
 
 \`web_fetch({ url })\` —— 推荐挑 1-2 个**最有信号**的(比如官方 chapter list / 高赞书评 / 维基条目)抓正文。
 
-**所有最终 sources url 必须来自 web_search / web_fetch 真实返回,不许编造。**
+**所有最终 sources url 必须来自搜索 / web_fetch 真实返回,不许编造。**
 
 # Prose 节奏
 
@@ -961,7 +1042,7 @@ fenced block 之前必须有 2-4 段中文 prose narration,每段末尾打 \`〔
 - \`sections\` 必填。${input.sections > 0
     ? `用户选择的是约 ${input.sections} 节;请按原书章节脉络自然组织,不要为了凑数机械拆分或合并。`
     : ""}理想情况下,每节 title 跟原书章节有可对应关系。
-- 每节 \`sources\` **2-4 条**,**url 必须来自 web_search / web_fetch 实际返回**,同一节内不要重复同一个 URL。
+- 每节 \`sources\` 按相关性自由挑选,**url 必须来自搜索 / web_fetch 实际返回**,同一节内不要重复同一个 URL。
 - \`stance\`:作者本人的章节内容 / 官方 chapter list / 权威书评归 \`primary\`;反对意见或常见误读归 \`counterpoint\`;补充背景(作者其它书、访谈、相关概念)归 \`background\`。
 - JSON 字符串内部不要裸用英文双引号 \`"\`。引用短语请优先用中文引号“...”,或把英文双引号写成 \`\\"\`,否则移动端无法解析。
 
@@ -976,7 +1057,7 @@ ${input.visibleText}`;
 /**
  * 把 agent 输出 text 里**重复**的 `## 第N节:...` 标题行去掉,只保留首次出现。
  *
- * 背景:agent 在 tool call(web_search / web_fetch)之间,prose 续写时
+ * 背景:agent 在 tool call(搜索 / web_fetch)之间,prose 续写时
  * 有时会"自我提示"重新打一行 `## 第N节:标题` 再继续讲解,导致用户看到
  * 两遍标题。prompt 里已经禁止了这种行为,但 LLM 不一定 100% 听话,这里
  * 做客户端兜底。

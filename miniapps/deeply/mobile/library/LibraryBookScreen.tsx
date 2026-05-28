@@ -41,10 +41,10 @@ interface PresetCard {
   sub: string;
 }
 const SECTION_PRESETS: PresetCard[] = [
-  { id: "auto", label: "自动", sub: "AI 决定" },
+  { id: "auto", label: "自动", sub: "" },
   { id: "light", label: "轻量", sub: "约 8 节" },
   { id: "deep", label: "深度", sub: "约 24 节" },
-  { id: "custom", label: "自定义", sub: "你来定节数" }
+  { id: "custom", label: "自定义", sub: "" }
 ];
 
 type FetchStatus = "loading" | "ready" | "error" | "not_found";
@@ -234,19 +234,15 @@ export function LibraryBookScreen({ bookId }: Props): React.ReactElement {
                   <Text style={[styles.presetChipLabel, active && styles.presetChipLabelActive]}>
                     {preset.label}
                   </Text>
-                  <Text style={[styles.presetChipMeta, active && styles.presetChipMetaActive]}>
-                    {preset.sub}
-                  </Text>
+                  {preset.sub.length > 0 ? (
+                    <Text style={[styles.presetChipMeta, active && styles.presetChipMetaActive]}>
+                      {preset.sub}
+                    </Text>
+                  ) : null}
                 </Pressable>
               );
             })}
           </View>
-
-          {sectionPreset === "auto" ? (
-            <Text style={styles.presetHint}>
-              AI 看完资料后,根据这本书的内容自然决定节数。
-            </Text>
-          ) : null}
 
           {sectionPreset === "custom" ? (
             <View style={styles.customRow}>
@@ -843,4 +839,3 @@ const styles = StyleSheet.create({
     height: 8
   }
 });
-

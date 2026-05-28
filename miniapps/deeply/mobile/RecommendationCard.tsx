@@ -22,7 +22,7 @@ import {
  *   └────────────────────────────────────────┘
  *
  * 点击 → 打开 CourseDetailSheet:
- *   - 后台调一次 inferOnce 拿这门课的详细介绍 + 建议节数 + AI 自由出的 0-2 个选项
+ *   - 后台调一次 inferOnce 拿这门课的详细介绍 + AI 自由出的 0-2 个选项
  *   - 用户配置完点「开始讲解」→ 创建 deeply-course conversation,
  *     跳到课程讲解 surface
  */

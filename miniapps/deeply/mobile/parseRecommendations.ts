@@ -16,7 +16,7 @@
  *
  * items 是 IM 流形式,允许 text 引子 / card 推荐穿插。Schema 故意比酒馆
  * 更小:Deeply 推荐的是"待生成的课题",还没有真实 URL / 头像 / tag,
- * 卡片字段就只是 title / subtitle / reason / suggestedSections。
+ * 卡片字段就只是 title / subtitle / reason。
  *
  * 客户端绝不直接信任 LLM 文本,这里是唯一允许把原始 assistant text 转成
  * typed value(可以被 React 渲染)的入口。
@@ -42,7 +42,7 @@ export interface DeeplyRecommendationCard {
   subtitle: string;
   /** 学习理由,1-3 句话,给用户看的推销文案。Deeply UI 里以 ❝引号包起来呈现。 */
   reason: string;
-  /** 建议这门课展开几节(20-50)。LLM 直觉判断。 */
+  /** Legacy field kept for older cached / direct card blocks. New prompts leave it 0. */
   suggestedSections: number;
 }
 
@@ -169,8 +169,12 @@ function parseCard(value: unknown, index: number): Read<DeeplyRecommendationCard
   if (subtitle.error !== undefined) return { error: subtitle.error };
   const reason = readNonEmpty(value.reason, `${where}.reason`);
   if (reason.error !== undefined) return { error: reason.error };
-  const sections = readSections(value.suggestedSections, `${where}.suggestedSections`);
-  if (sections.error !== undefined) return { error: sections.error };
+  let suggestedSections = 0;
+  if (value.suggestedSections !== undefined) {
+    const sections = readSections(value.suggestedSections, `${where}.suggestedSections`);
+    if (sections.error !== undefined) return { error: sections.error };
+    suggestedSections = sections.value;
+  }
 
   return {
     value: {
@@ -178,7 +182,7 @@ function parseCard(value: unknown, index: number): Read<DeeplyRecommendationCard
       title: title.value,
       subtitle: subtitle.value,
       reason: reason.value,
-      suggestedSections: sections.value
+      suggestedSections
     }
   };
 }

@@ -19,8 +19,8 @@
   ↓ 点任意一张
   ↓
 CourseDetailSheet                 commit gate 弹窗
-  inferOnce 调一次,出详细介绍 + 建议节数;
-  用户挑「轻量 / 标准 / 深度」preset 决定真正节数;
+  inferOnce 调一次,出详细介绍;
+  用户可挑「自动 / 轻量 / 深度 / 自定义」长度 preset;
   点「开始讲解」→ 创建 deeply-course conversation
   ↓
 /deeply/course/[id]               课程讲解(DeeplyCourseScreen)
@@ -38,7 +38,7 @@ CourseDetailSheet                 commit gate 弹窗
 | `persona.ts` | 知识探索 + 课程讲解的 system persona,以及多个 prompt builder |
 | `DeeplyExploreScreen.tsx` | `/deeply` 自家 chat surface(博学朋友风 + 推荐课程按钮) |
 | `DeeplyCourseScreen.tsx` | `/deeply/course/[id]` 课程讲解 surface(进度 + chip + 抽屉接入点) |
-| `CourseDetailSheet.tsx` | 推荐卡点击后的 commit-gate 弹窗(brief inferOnce + 节数 preset) |
+| `CourseDetailSheet.tsx` | 推荐卡点击后的 commit-gate 弹窗(brief inferOnce + 长度 preset) |
 | `CourseOutlineDrawer.tsx` | 右侧目录抽屉(读 / 未读 / 当前 三态 badge,点行跳节) |
 | `RecommendationCard.tsx` | 单张推荐课程卡(white + ❝reason + shadow,deeply 原版视觉) |
 | `courseSession.ts` | `startDeeplyCourseSession` 创建 conversation + 后台跑 outline + 持久化 record |
@@ -46,7 +46,7 @@ CourseDetailSheet                 commit gate 弹窗
 | `courseSheetStore.ts` | CourseDetailSheet 的开 / 关全局 store(避免每张卡自己挂 Modal,跳出 demo frame) |
 | `courseOutlineDrawerStore.ts` | OutlineDrawer 的开 / 关全局 store |
 | `inferCourseBrief.ts` | brief 推理封装 |
-| `inferCourseOutline.ts` | 课程大纲推理封装(150s 超时,允许 ±20% 节数浮动) |
+| `inferCourseOutline.ts` | 课程大纲推理封装(150s 超时) |
 | `inferCourseQuickReplies.ts` | 好奇点 chip 推理封装 |
 | `parseRecommendations.ts` | `koko.deeply.recommendations` fenced block 解析 |
 | `parseCourseBrief.ts` | `koko.deeply.course-brief` fenced block 解析 |

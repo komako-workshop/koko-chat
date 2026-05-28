@@ -10,7 +10,7 @@ import type { DeeplyOutlineSection } from "./parseCourseOutline";
  *
  *   - `currentSection`:主线进度,**单调不回退**。"继续:下一节" chip
  *     基于它决定下一节是几。
- *   - `totalSections`:整门课总节数(等于 outline.length)。
+ *   - `totalSections`:整门课章节数量(等于 outline.length)。
  *   - `readSections`:已讲过的节集合,支持跳读(可能非连续)。
  *   - `activeSection`:当前正在讲 / 最近讲到的节,用作目录高亮。
  *     **允许回退**(用户重听某节时不该污染 currentSection)。
@@ -111,7 +111,7 @@ function setState(conversationId: string, next: DeeplyCourseProgress): void {
   emit(conversationId);
 }
 
-/** 在 outline 生成完成时调用,设置总节数,如果之前没初始化就把进度重置。 */
+/** 在 outline 生成完成时调用,设置章节数量,如果之前没初始化就把进度重置。 */
 export function initDeeplyCourseProgress(
   conversationId: string,
   sections: DeeplyOutlineSection[]

@@ -5,6 +5,7 @@ import { useConversationStore } from "@/state/conversations";
 import { DEEPLY_MINI_APP_ID } from "./constants";
 import { initDeeplyCourseProgress } from "./courseProgress";
 import { inferCourseOutline } from "./inferCourseOutline";
+import { inferResearchOutlineFromNotes } from "./inferResearchOutlineFromNotes";
 import type {
   DeeplyCourseBrief,
   DeeplyCourseBriefOption
@@ -14,6 +15,7 @@ import type {
   DeeplyCardKind,
   DeeplyRecommendationCard
 } from "./parseRecommendations";
+import type { DeeplyResearchNotes } from "./parseResearchNotes";
 import type {
   DeeplyResearchOutline,
   DeeplyResearchSource
@@ -71,7 +73,7 @@ export type DeeplyCourseSessionKind = "topic" | "research" | "material" | "book"
 /**
  * 课程长度 preset。
  *
- * - `auto`:让 agent 在材料收集 / 分析阶段后自定推断节数。record.sections=0。
+ * - `auto`:不指定节数。record.sections=0。
  * - `light`(8 节)、`standard`(24 节,legacy)、`deep`(24 节):用户用 preset 指定具体节数。
  * - `custom`:用户自己填一个节数。
  *
@@ -92,8 +94,7 @@ export interface DeeplyCourseSessionRecord {
   /**
    * 课程目标节数。
    *
-   * - `0` 表示「自动」:agent 在完成材料收集/分析后,基于材料量和课题
-   *   自然结构自行决定节数。这一栏在 outline 落库前是预期值,落库后
+   * - `0` 表示「自动」:创建阶段不指定节数。outline 落库后
    *   `applyResearchOutlineToCourse` 会覆盖为实际节数。
    * - 大于 0:用户指定的具体节数(可能是 preset 8/24,也可能是自定义)。
    */
@@ -110,6 +111,17 @@ export interface DeeplyCourseSessionRecord {
    * 会把它注入到给 mainline session 的 research 引导消息里。
    */
   researchTopic?: string;
+  /**
+   * Research-only:Phase A(agent 调研轮)产出的扁平 notes(synthesis +
+   * sources 列表)。缓存在 record 里有两个用途:
+   *
+   *   1. Phase B inferOnce 失败时,用户在 bootstrap error banner 上点重试,
+   *      可以直接重做 Phase B 而不用让 agent 再花几分钟重新调研。
+   *   2. 调试时可以离线 inspect agent 到底搜到了什么。
+   *
+   * Phase A 成功一次就写一次,后续不再变。Phase B 反复重试只读它、不改它。
+   */
+  cachedResearchNotes?: DeeplyResearchNotes;
   /**
    * Material-only:用户在 CourseCustomizeSheet "基于一个链接" 里贴的 URL。
    *
@@ -196,7 +208,7 @@ export interface DeeplyCourseSourcesRecord {
 
 export interface StartDeeplyCourseInput {
   card: DeeplyRecommendationCard;
-  // ↓ 下面的 sections/sectionPreset 也支持 auto:sections=0 时 agent 决定。
+  // ↓ 下面的 sections/sectionPreset 也支持 auto:sections=0 时不指定长度。
   brief: DeeplyCourseBrief;
   sections: number;
   sectionPreset: SectionPreset;
@@ -516,7 +528,7 @@ export interface StartDeeplyLibraryCourseInput {
    * 用作聊天列表 row 的头像;空时落回 deeply mini-app 默认头像。
    */
   cover?: string;
-  /** AI 建议节数(从 book.s 折算的整数,大约 8-50)。 */
+  /** 用户选择的长度;0 = 自动。 */
   sections: number;
   parentConversationId: string | null;
 }
@@ -706,9 +718,80 @@ export function applyResearchOutlineToCourse(
 }
 
 /**
+ * Phase A 调研轮完成后,transformer 拿到 \`koko.deeply.research.notes\`
+ * fenced block 解析成功时调这里。负责:
+ *   1. 把 notes 缓存进 record(Phase B 失败重试只重做 Phase B,不重做调研)
+ *   2. bootstrap 仍维持 loading,但 hint 切到"整理目录中"
+ *   3. fire-and-forget 后台跑 Phase B(inferOnce → outline JSON)
+ *
+ * 成功:Phase B 内部会调 \`applyResearchOutlineToCourse\` 把目录落库 + 切 ready。
+ * 失败:Phase B 内部会 setBootstrap("error",...),用户能从 banner 点重试。
+ */
+export function applyResearchNotesAndRunPhaseB(
+  conversationId: string,
+  notes: DeeplyResearchNotes
+): void {
+  const record = loadDeeplyCourseSessionRecord(conversationId);
+  if (record === null) {
+    console.warn("[deeply-course] applyResearchNotesAndRunPhaseB: no record", conversationId);
+    return;
+  }
+  const updatedRecord: DeeplyCourseSessionRecord = {
+    ...record,
+    cachedResearchNotes: notes
+  };
+  STORAGE.setJson(`${COURSE_RECORD_PREFIX}${conversationId}`, updatedRecord);
+  useConversationStore.getState().setBootstrap(conversationId, {
+    status: "loading",
+    hint: "调研完成,正在整理课程目录"
+  });
+  void runResearchPhaseBOutline(conversationId, updatedRecord);
+}
+
+async function runResearchPhaseBOutline(
+  conversationId: string,
+  record: DeeplyCourseSessionRecord
+): Promise<void> {
+  const notes = record.cachedResearchNotes;
+  if (notes === undefined) {
+    useConversationStore.getState().setBootstrap(conversationId, {
+      status: "error",
+      error: "调研笔记缺失,无法整理目录。请回到 Deeply 重发题目。"
+    });
+    return;
+  }
+  try {
+    const result = await inferResearchOutlineFromNotes({
+      topic: record.researchTopic ?? record.title,
+      sections: record.sections,
+      notes
+    });
+    if (!result.ok) {
+      useConversationStore.getState().setBootstrap(conversationId, {
+        status: "error",
+        error: `整理课程目录失败:${result.error.slice(0, 180)}`
+      });
+      return;
+    }
+    applyResearchOutlineToCourse(conversationId, result.value);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    useConversationStore.getState().setBootstrap(conversationId, {
+      status: "error",
+      error: `整理课程目录失败:${message.slice(0, 180)}`
+    });
+  }
+}
+
+/**
  * 用户点 bootstrap error banner 的「重试」按钮时调:
  * - bootstrap 改回 loading,banner 切回 spinner
  * - 后台重新跑 outline 生成,完成时再 set ready / error
+ *
+ * Research 课**有缓存的 notes 时**只重做 Phase B,避免让 agent 重新调研一次,
+ * 这是最常见的"目录格式问题"场景。没缓存(Phase A 自己就失败)时退到
+ * 之前的"目录通用重做"路径,会让 DeeplyCourseScreen 重新 fire research
+ * kickoff message 走完整 Phase A → Phase B。
  *
  * 如果 conversation / record 找不到(已被归档),静默返回。
  */
@@ -716,6 +799,16 @@ export function retryDeeplyCourseOutline(conversationId: string): void {
   const store = useConversationStore.getState();
   const record = loadDeeplyCourseSessionRecord(conversationId);
   if (record === null) return;
+
+  if (record.kind === "research" && record.cachedResearchNotes !== undefined) {
+    store.setBootstrap(conversationId, {
+      status: "loading",
+      hint: "正在重新整理课程目录,稍等一下"
+    });
+    void runResearchPhaseBOutline(conversationId, record);
+    return;
+  }
+
   store.setBootstrap(conversationId, {
     status: "loading",
     hint: "正在重新为你定课程目录,稍等一下"

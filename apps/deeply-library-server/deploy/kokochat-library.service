@@ -9,6 +9,11 @@ User=ecs-user
 Group=ecs-user
 WorkingDirectory=/opt/koko-chat/apps/deeply-library-server
 Environment=NODE_ENV=production
+# Optional secrets / knobs:
+#   BRAVE_SEARCH_API_KEY=...
+#   KOKO_SEARCH_TOKEN=...
+#   KOKO_SEARCH_RATE_LIMIT_PER_MINUTE=60
+EnvironmentFile=-/etc/kokochat-library.env
 # loopback only — Caddy 在 :443 接受公网,反代到这里。
 Environment=LIBRARY_HOST=127.0.0.1
 Environment=LIBRARY_PORT=8788

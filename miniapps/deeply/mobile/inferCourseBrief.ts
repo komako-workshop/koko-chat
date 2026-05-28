@@ -78,8 +78,7 @@ export function clearCourseBriefCache(): void {
  * Call deeply agent for the "course brief" of a recommended card.
  *
  * Used by the bottom sheet that appears when a user taps a recommendation
- * card: returns the detailed introduction + suggested section count +
- * agent-decided extra option dimensions.
+ * card: returns the detailed introduction and agent-decided extra option dimensions.
  *
  * 命中 in-memory cache 时直接返回,跳过 LLM call。失败不 cache,允许重试。
  */

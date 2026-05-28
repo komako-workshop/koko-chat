@@ -69,8 +69,14 @@ docs/research/roleplay-import-sample/
 /preview.png
 /app.json
 /artifacts/
+/apps/koko-chat/artifacts/
 tmp-debug/
 tmp-shots/
+
+# Generated dev viewers (e.g. scripts/build-deeply-pipeline-doc.mjs writes a
+# self-contained HTML viewer here from regression artifacts). The generator
+# is committed; the output is reproducible and shouldn't bloat git.
+docs/dev/
 
 # Deeply icon generation lab — generated images & run log live alongside
 # source `generate.py`; the source is kept,outputs are local to each iteration.

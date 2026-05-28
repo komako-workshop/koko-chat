@@ -1,7 +1,7 @@
 ---
 name: kokochat-deeply-research
-version: 0.3.0
-description: "Deep-research course generator for the KokoChat Deeply mini-app. Use when the user asks to build a deep-research course on a specific topic (KokoChat sends a kickoff message of the shape '请围绕「...」做一份深度调研课程'). Use the OpenClaw built-in `web_search` and `web_fetch` tools to gather real sources, narrate the research process to the user in flowing Chinese prose, and finally emit one fenced block containing the structured outline + cited sources."
+version: 0.5.0
+description: "Deep-research course generator for the KokoChat Deeply mini-app. Use when the user asks to build a deep-research course on a specific topic (KokoChat sends a kickoff message of the shape '请围绕「...」做一份深度调研课程'). This is the Phase A side of a two-phase pipeline: use KokoChat's hosted search wrapper plus `web_fetch` to collect real sources, narrate the research in flowing Chinese prose, and finally emit one `koko.deeply.research.notes` fenced block with synthesis + a flat sources list. The host runs a separate inference (Phase B) afterwards to split those notes into a course outline."
 metadata: { "openclaw": { "emoji": "🔍" } }
 ---
 
@@ -9,9 +9,29 @@ metadata: { "openclaw": { "emoji": "🔍" } }
 
 OpenClaw side of the KokoChat **Deeply** mini-app's deep-research course path.
 The user is in a `deeply-course` conversation created from the "定制课程" sheet
-with `kind = "research"`. They want a **structured, source-cited course outline
-on a possibly time-sensitive or contested topic** — anchored in real web
-sources, not your training priors.
+with `kind = "research"`.
+
+## Two-phase pipeline (this skill is Phase A)
+
+KokoChat splits research course generation into two model passes:
+
+- **Phase A — this turn (the agent run you are in now)**: research only.
+  Search the web, narrate the process to the user in Chinese prose, and emit
+  one `koko.deeply.research.notes` fenced block at the end containing a
+  300–1200 字 synthesis plus a flat list of 5–20 cited sources. You do
+  **not** decide on course sections, write section titles, or assign sources
+  per section — those are Phase B's job.
+
+- **Phase B — separate stateless `inferOnce` the client triggers right after
+  you finish**: the same agent, but no web tools available. Phase B reads
+  your notes block, decides how many sections to use, and emits the final
+  `koko.deeply.research.outline` JSON. You will never see Phase B run; just
+  hand off clean notes and Phase B will handle the rest.
+
+This split exists because asking one turn to plan tools, narrate prose, AND
+emit a strict per-section JSON schema repeatedly burned attention budget on
+the schema and led to "toolCallCount=0 but plausible-looking sources" — the
+2026-05-28 hallucination regression.
 
 ## When this skill fires
 
@@ -27,22 +47,34 @@ every turn.
 
 ## What the host sends with the kickoff
 
-KokoChat injects a kickoff prompt right before the visible user line. That
-prompt is the authoritative source of truth for **this turn's hard
-constraints** (5 numbered rules), the JSON output schema, and the prose
-sentinel `〔KP〕` requirement. **Always follow what the kickoff prompt says.**
+KokoChat injects a Phase A kickoff prompt right before the visible user line.
+That prompt is the authoritative source of truth for **this turn's hard
+constraints** (3 numbered rules), the `koko.deeply.research.notes` JSON
+schema, and the prose sentinel `〔KP〕` requirement. **Always follow what the
+kickoff prompt says.** Do not produce a `koko.deeply.research.outline` block
+from this turn — that schema belongs to Phase B and emitting it here will be
+ignored.
 
 This skill file only adds background you need across all such turns: what
-the two web tools can / cannot do, and how to plan the research itself.
+the search/fetch tools can / cannot do, and how to plan the research itself.
 
 ## Tools
 
-Two OpenClaw built-in web tools, both already allowed for the deeply agent.
+The deeply agent uses KokoChat's hosted search wrapper plus OpenClaw's built-in
+`web_fetch`.
 
-### `web_search`
+### KokoChat hosted search (`kokochat-deeply-search`)
 
-Run a web search via the gateway's configured provider. KokoChat's installer
-defaults this to key-free DuckDuckGo when no provider is configured.
+Run a web search via the local exec wrapper installed by KokoChat. The
+KokoChat Runtime Contract in `AGENTS.md` gives the exact absolute path for
+the wrapper; use that command shape:
+
+```bash
+<kokochat-deeply-search/bin/search.mjs absolute path> '{"query":"EN keywords","count":5}'
+```
+
+It calls KokoChat's hosted search proxy (Brave-backed in production), so the
+user does not need to configure any search API key in their own OpenClaw.
 Returns title / url / snippet per result.
 
 Args:
@@ -58,12 +90,10 @@ Pass **only** `query` and `count`. Provider-specific args like
 
 Tool quirks worth knowing:
 
-- DuckDuckGo is key-free but anti-bot sensitive. Batched / very rapid
-  searches can hit a challenge page. If a search clearly returns
-  bot-detection garbage instead of results, **stop searching** and synthesise
-  from what you already have honestly, rather than retrying forever.
-- Don't batch multiple `web_search` calls in one assistant turn — issue
-  them sequentially across narration steps.
+- The wrapper may return `{ "ok": false, "error": "..." }` if KokoChat's
+  hosted search is unavailable or rate-limited. Be honest; do not invent URLs.
+- Don't batch multiple search calls in one assistant turn — issue them
+  sequentially across narration steps.
 
 ### `web_fetch`
 
@@ -78,7 +108,7 @@ Args:
   The Gateway may cap this lower.
 
 Only fetch `http://` / `https://` URLs that came from a successful
-`web_search`. Never fetch `file://`, skill files, workspace docs, or URLs
+KokoChat search. Never fetch `file://`, skill files, workspace docs, or URLs
 you invented. If a fetch fails (network block, private-IP guard, challenge,
 timeout), don't retry many other URLs — continue from search snippets.
 
@@ -107,9 +137,13 @@ topic is very narrow, **prefer fewer real sources over more weak ones**.
 ## What is NOT in this skill any more
 
 Schema, field rules, prose sentinel marker (`〔KP〕`), exact step-by-step
-narration order, and the "5 hard rules" all live in the host-injected
-kickoff prompt now. Treating those as the source of truth keeps this file
-small and stops the model from being overwhelmed by duplicated, slightly
+narration order, and the "3 hard rules" all live in the host-injected
+Phase A kickoff prompt now. Treating those as the source of truth keeps this
+file small and stops the model from being overwhelmed by duplicated, slightly
 divergent instructions across two layers (which is exactly what caused the
 2026-05-28 regression where the model emitted plausible-looking sources
-without ever calling `web_search`).
+without ever calling search).
+
+The `koko.deeply.research.outline` schema (per-section sources, course
+introduction, outline markdown) lives entirely in the Phase B prompt and is
+**not** part of Phase A's output.

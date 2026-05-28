@@ -55,8 +55,8 @@ export interface ChatEventPayload extends JsonRecord {
 export type { ChatMessage };
 
 const REMOTE_SESSION_HISTORY_TIMEOUT_MS = 8_000;
-const PENDING_SESSION_SYNC_HISTORY_LIMIT = 12;
-const PENDING_SESSION_SYNC_MAX_CHARS = 80_000;
+const PENDING_SESSION_SYNC_HISTORY_LIMIT = 32;
+const PENDING_SESSION_SYNC_MAX_CHARS = 256_000;
 const PENDING_SESSION_SYNC_TIMEOUT_MS = 8_000;
 const PENDING_SESSION_SYNC_RETRY_MS = 5_000;
 const PENDING_SESSION_SYNC_MAX_RETRIES = 36;
@@ -574,6 +574,7 @@ function applyRecoveredAgentFinal(
 ): boolean {
   let applied = false;
   let preview: string | undefined;
+  let shouldFinishRecoveredRun = false;
 
   useConversationStore.getState().setMessages(conversationId, (prev) => {
     const pendingIndex = findLastRecoverableAgentIndex(prev);
@@ -585,6 +586,7 @@ function applyRecoveredAgentFinal(
       if (transformed !== null) {
         preview = transformed.preview;
         applied = true;
+        shouldFinishRecoveredRun = true;
         return [...prev, ...transformed.messages];
       }
       const existingRunIndex = findLastAgentIndexByRunId(prev, runId);
@@ -600,10 +602,12 @@ function applyRecoveredAgentFinal(
         };
         preview = previewFromText(fullText);
         applied = true;
+        if (!keepStreaming) shouldFinishRecoveredRun = true;
         return next;
       }
       preview = previewFromText(fullText);
       applied = true;
+      if (!keepStreaming) shouldFinishRecoveredRun = true;
       return [
         ...prev,
         {
@@ -620,6 +624,7 @@ function applyRecoveredAgentFinal(
     if (transformed !== null) {
       preview = transformed.preview;
       next.splice(pendingIndex, 1, ...transformed.messages);
+      shouldFinishRecoveredRun = true;
     } else {
       const existing = next[pendingIndex];
       if (existing === undefined) return prev;
@@ -630,6 +635,7 @@ function applyRecoveredAgentFinal(
         streaming: keepStreaming
       };
       preview = previewFromText(fullText);
+      if (!keepStreaming) shouldFinishRecoveredRun = true;
     }
     applied = true;
     return next;
@@ -637,6 +643,9 @@ function applyRecoveredAgentFinal(
 
   if (applied) {
     useConversationStore.getState().touch(conversationId, preview);
+    if (shouldFinishRecoveredRun) {
+      markAgentRunFinished(conversationId);
+    }
   }
   return applied;
 }
@@ -1001,8 +1010,12 @@ async function dispatchUserMessage(
   get: () => GatewayState,
   input: DispatchUserMessageInput
 ): Promise<void> {
-  const { client } = get();
-  if (client === null) {
+  let { client, status } = get();
+  if (client === null || status !== "connected") {
+    await get().reconnectIfPossible();
+    ({ client, status } = get());
+  }
+  if (client === null || status !== "connected") {
     throw new Error("not connected");
   }
   const meta = useConversationStore
@@ -1290,7 +1303,15 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           );
           const assistant = target.localUserText === undefined
             ? findLatestRemoteAssistant(remoteMessages)
-            : findRemoteAssistantAfterLocalUser(remoteMessages, target.localUserText);
+            : (
+                findRemoteAssistantAfterLocalUser(remoteMessages, target.localUserText) ??
+                // Tool-heavy sessions or long injected prompts can push/truncate
+                // the visible local user text out of the bounded history window.
+                // The sessionKey is already scoped to this conversation, so the
+                // latest assistant turn is the safest recovery candidate instead
+                // of retrying forever.
+                findLatestRemoteAssistant(remoteMessages)
+              );
           if (assistant === null) {
             needsRetry = true;
             continue;

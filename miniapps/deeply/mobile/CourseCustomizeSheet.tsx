@@ -85,8 +85,7 @@ const ENTRIES: EntryDef[] = [
 /**
  * "讲多长" 4 个 preset。
  *
- * - `auto`:不指定节数;在材料收集 / 分析完成后,agent 根据材料量自然决定。
- *   sections=0 喂给 startDeeply* 表示 "由 agent 自定"。
+ * - `auto`:不指定节数;sections=0 喂给 startDeeply*。
  * - `light` / `deep`:固定节数 preset(8 / 24)。
  * - `custom`:让用户自己填一个 3-40 之间的整数。
  *
@@ -103,8 +102,8 @@ interface SectionPresetCard {
 
 const SECTION_PRESETS: SectionPresetCard[] = [
   { id: "auto", label: "自动", sub: "", sections: 0 },
-  { id: "light", label: "轻量", sub: "8 节", sections: 8 },
-  { id: "deep", label: "深度", sub: "24 节", sections: 24 },
+  { id: "light", label: "轻量", sub: "约 8 节", sections: 8 },
+  { id: "deep", label: "深度", sub: "约 24 节", sections: 24 },
   { id: "custom", label: "自定义", sub: "", sections: 0 }
 ];
 
@@ -445,9 +444,11 @@ function CourseCustomizeSheet({
                             <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
                               {preset.label}
                             </Text>
-                            <Text style={[styles.chipMeta, active && styles.chipMetaActive]}>
-                              {preset.sub}
-                            </Text>
+                            {preset.sub.length > 0 ? (
+                              <Text style={[styles.chipMeta, active && styles.chipMetaActive]}>
+                                {preset.sub}
+                              </Text>
+                            ) : null}
                           </Pressable>
                         );
                       })}

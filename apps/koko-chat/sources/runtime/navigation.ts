@@ -68,6 +68,11 @@ export function openTavernSettings(): void {
   router.push("/tavern/settings");
 }
 
+/** Push the OpenClaw pairing screen from mini-app owned surfaces. */
+export function openPairingScreen(): void {
+  router.push("/pair");
+}
+
 /**
  * Push the Deeply library category drill-down. `name` is the Chinese
  * category label (e.g. "文明的逻辑") — encoded into the URL by this helper.

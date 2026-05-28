@@ -6,8 +6,7 @@
  *
  * 关键设计:options 完全由 agent 自由决定(0-2 个),既不预设"难度"也不
  * 预设"风格"。Agent 看到对话上下文和卡片本身,自己判断需要再问什么 ——
- * 跟 Cursor / Claude Code 的 plan 风格一致。"想讲多少节" 是固定控件,
- * 不在 options 数组里。
+ * 跟 Cursor / Claude Code 的 plan 风格一致。
  */
 import { extractFencedBlock } from "@/runtime/messageBlocks";
 
@@ -80,8 +79,12 @@ export function parseDeeplyCourseBrief(assistantText: string): ParseResult {
   if (intro.value.length > INTRO_MAX_CHARS) {
     return { ok: false, error: `introduction 长度超过 ${INTRO_MAX_CHARS}` };
   }
-  const sections = readSections(raw.suggestedSections, "suggestedSections");
-  if (sections.error !== undefined) return { ok: false, error: sections.error };
+  let suggestedSections = 0;
+  if (raw.suggestedSections !== undefined) {
+    const sections = readSections(raw.suggestedSections, "suggestedSections");
+    if (sections.error !== undefined) return { ok: false, error: sections.error };
+    suggestedSections = sections.value;
+  }
 
   const options: DeeplyCourseBriefOption[] = [];
   if (raw.options !== undefined) {
@@ -106,7 +109,7 @@ export function parseDeeplyCourseBrief(assistantText: string): ParseResult {
     value: {
       version: 1,
       introduction: intro.value,
-      suggestedSections: sections.value,
+      suggestedSections,
       options
     }
   };

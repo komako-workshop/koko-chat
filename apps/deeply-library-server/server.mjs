@@ -20,6 +20,12 @@
  *   LIBRARY_HOST     默认 0.0.0.0(LAN / 容器都能访问);prod 显式设
  *                    127.0.0.1,Caddy 负责暴露公网
  *   LIBRARY_POOL_PATH override 数据文件路径(默认 miniapps/deeply/data/library-pool.json)
+ *   BRAVE_SEARCH_API_KEY / BRAVE_API_KEY
+ *                    可选。配置后启用 KokoChat 托管搜索代理 `/deeply/search`。
+ *                    Brave key 只留在服务端,不会下发到用户 OpenClaw。
+ *   KOKO_SEARCH_TOKEN
+ *                    可选。设置后 `/deeply/search` 要求 Bearer token 或
+ *                    x-koko-search-token。未设置时仍有基础 IP 限流。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -37,8 +43,23 @@ const PORT = Number(process.env.LIBRARY_PORT ?? 8788);
 //   - prod 走 cloudflared tunnel 也是从本机 127.0.0.1 反代过去,绑 0.0.0.0
 //     不影响安全(防火墙 / cloudflared 才是边界)。
 const HOST = process.env.LIBRARY_HOST ?? "0.0.0.0";
+const BRAVE_SEARCH_API_KEY = (
+  process.env.BRAVE_SEARCH_API_KEY ??
+  process.env.BRAVE_API_KEY ??
+  ""
+).trim();
+const KOKO_SEARCH_TOKEN = (process.env.KOKO_SEARCH_TOKEN ?? "").trim();
+const SEARCH_RATE_LIMIT_PER_MINUTE = clampInt(
+  process.env.KOKO_SEARCH_RATE_LIMIT_PER_MINUTE,
+  1,
+  600,
+  60
+);
+const SEARCH_TIMEOUT_MS = clampInt(process.env.KOKO_SEARCH_TIMEOUT_MS, 1_000, 30_000, 10_000);
+const BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
 
 const LIST_FIELDS = ["id", "t", "a", "c", "d", "s", "pr", "img", "h"];
+const searchRateBuckets = new Map();
 
 function loadPool() {
   if (!fs.existsSync(POOL_PATH)) {
@@ -79,16 +100,189 @@ function slim(book) {
   return out;
 }
 
+function clampInt(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
+}
+
+function getClientId(c) {
+  const forwarded = c.req.header("x-forwarded-for") ?? "";
+  const firstForwarded = forwarded.split(",")[0]?.trim();
+  return firstForwarded || c.req.header("x-real-ip") || "unknown";
+}
+
+function consumeSearchRateLimit(clientId) {
+  const now = Date.now();
+  const windowMs = 60_000;
+  const bucket = searchRateBuckets.get(clientId);
+  if (bucket === undefined || now >= bucket.resetAt) {
+    searchRateBuckets.set(clientId, {
+      count: 1,
+      resetAt: now + windowMs
+    });
+    return { ok: true, remaining: SEARCH_RATE_LIMIT_PER_MINUTE - 1 };
+  }
+  if (bucket.count >= SEARCH_RATE_LIMIT_PER_MINUTE) {
+    return {
+      ok: false,
+      retryAfterSec: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))
+    };
+  }
+  bucket.count += 1;
+  return {
+    ok: true,
+    remaining: Math.max(0, SEARCH_RATE_LIMIT_PER_MINUTE - bucket.count)
+  };
+}
+
+function assertSearchAuthorized(c) {
+  if (KOKO_SEARCH_TOKEN.length === 0) return true;
+  const auth = c.req.header("authorization") ?? "";
+  const bearer = auth.replace(/^Bearer\s+/i, "").trim();
+  const headerToken = (c.req.header("x-koko-search-token") ?? "").trim();
+  return bearer === KOKO_SEARCH_TOKEN || headerToken === KOKO_SEARCH_TOKEN;
+}
+
+async function parseSearchRequest(c) {
+  if (c.req.method === "GET") {
+    return {
+      query: c.req.query("q") ?? c.req.query("query") ?? "",
+      count: c.req.query("count") ?? c.req.query("limit")
+    };
+  }
+  const body = await c.req.json().catch(() => ({}));
+  return {
+    query: typeof body?.query === "string" ? body.query : "",
+    count: body?.count ?? body?.limit
+  };
+}
+
+async function runBraveSearch({ query, count }) {
+  const url = new URL(BRAVE_SEARCH_ENDPOINT);
+  url.searchParams.set("q", query);
+  url.searchParams.set("count", String(count));
+  url.searchParams.set("safesearch", "moderate");
+  url.searchParams.set("text_decorations", "false");
+  url.searchParams.set("spellcheck", "true");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        "X-Subscription-Token": BRAVE_SEARCH_API_KEY
+      }
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const upstreamMessage =
+        typeof payload?.message === "string"
+          ? payload.message
+          : typeof payload?.error === "string"
+            ? payload.error
+            : `HTTP ${response.status}`;
+      const error = new Error(upstreamMessage);
+      error.status = response.status;
+      throw error;
+    }
+    const webResults = Array.isArray(payload?.web?.results) ? payload.web.results : [];
+    return webResults
+      .map((item) => {
+        const title = typeof item?.title === "string" ? cleanText(item.title) : "";
+        const url = typeof item?.url === "string" ? item.url.trim() : "";
+        const snippet = typeof item?.description === "string" ? cleanText(item.description) : "";
+        if (title.length === 0 || !/^https?:\/\//i.test(url)) return null;
+        return { title, url, snippet };
+      })
+      .filter((item) => item !== null)
+      .slice(0, count);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function cleanText(value) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function makeServer(pool) {
   const { byId, byCategory, categoryCounts } = buildIndices(pool);
 
   const app = new Hono();
   // dev 期允许任意 origin;生产环境可以收紧到 KokoChat 客户端域名 / Expo Go 等。
-  app.use("*", cors({ origin: "*", allowMethods: ["GET", "OPTIONS"] }));
+  app.use("*", cors({ origin: "*", allowMethods: ["GET", "POST", "OPTIONS"] }));
 
   app.get("/healthz", (c) =>
-    c.json({ ok: true, totalBooks: pool.length, categories: categoryCounts.size })
+    c.json({
+      ok: true,
+      totalBooks: pool.length,
+      categories: categoryCounts.size,
+      search: {
+        provider: "brave",
+        enabled: BRAVE_SEARCH_API_KEY.length > 0,
+        auth: KOKO_SEARCH_TOKEN.length > 0 ? "token" : "none",
+        rateLimitPerMinute: SEARCH_RATE_LIMIT_PER_MINUTE
+      }
+    })
   );
+
+  /**
+   * GET/POST /deeply/search — KokoChat 托管搜索代理。
+   *
+   * Deeply agent 通过用户本机 OpenClaw 的 exec skill 调用这个 endpoint。
+   * Brave API key 只存在 deeply.plus 服务端环境变量里,不会进入用户设备。
+   */
+  async function handleDeeplySearch(c) {
+    if (BRAVE_SEARCH_API_KEY.length === 0) {
+      return c.json({ ok: false, error: "search_not_configured" }, 503);
+    }
+    if (!assertSearchAuthorized(c)) {
+      return c.json({ ok: false, error: "unauthorized" }, 401);
+    }
+
+    const clientId = getClientId(c);
+    const rate = consumeSearchRateLimit(clientId);
+    if (!rate.ok) {
+      c.header("Retry-After", String(rate.retryAfterSec));
+      return c.json({ ok: false, error: "rate_limited" }, 429);
+    }
+
+    const input = await parseSearchRequest(c);
+    const query = typeof input.query === "string" ? cleanText(input.query).slice(0, 500) : "";
+    const count = clampInt(input.count, 1, 10, 5);
+    if (query.length === 0) {
+      return c.json({ ok: false, error: "query_required" }, 400);
+    }
+
+    try {
+      const results = await runBraveSearch({ query, count });
+      c.header("X-RateLimit-Remaining", String(rate.remaining ?? 0));
+      return c.json({
+        ok: true,
+        provider: "brave",
+        query,
+        count: results.length,
+        results,
+        fetchedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      const status = typeof error?.status === "number" ? error.status : 502;
+      return c.json(
+        {
+          ok: false,
+          error: "upstream_search_failed",
+          message: error instanceof Error ? error.message : String(error)
+        },
+        status >= 400 && status < 600 ? status : 502
+      );
+    }
+  }
+
+  app.get("/deeply/search", handleDeeplySearch);
+  app.post("/deeply/search", handleDeeplySearch);
 
   /** GET /library/categories — 9 个分类及书数,按数量降序。 */
   app.get("/library/categories", (c) => {

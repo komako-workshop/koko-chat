@@ -111,7 +111,7 @@ export function parseDeeplyResearchOutline(assistantText: string): ParseResult {
   try {
     raw = JSON.parse(body);
   } catch (error) {
-    raw = parseLegacyYamlResearchOutline(body);
+    raw = parseJsonWithLooseStringQuotes(body) ?? parseLegacyYamlResearchOutline(body);
     if (raw === null) {
       return {
         ok: false,
@@ -306,12 +306,16 @@ function collectSectionsLoose(rawSections: unknown[]): DeeplyResearchSection[] {
 
 function collectSourcesLoose(rawSources: unknown[]): DeeplyResearchSource[] {
   const out: DeeplyResearchSource[] = [];
+  const seenUrls = new Set<string>();
   for (const item of rawSources) {
     if (!isRecord(item)) continue;
     const title = trimString(item.title) || trimString(item.name);
     const url = trimString(item.url) || trimString(item.link);
     if (title.length === 0) continue;
     if (url.length === 0 || !/^https?:\/\//i.test(url)) continue;
+    const urlKey = url.toLowerCase();
+    if (seenUrls.has(urlKey)) continue;
+    seenUrls.add(urlKey);
     const stanceRaw = trimString(item.stance) as DeeplyResearchSourceStance;
     const stance = STANCES.includes(stanceRaw) ? stanceRaw : "primary";
     const snippet = (
@@ -329,6 +333,83 @@ function collectSourcesLoose(rawSources: unknown[]): DeeplyResearchSource[] {
 
 function stripSectionPrefix(title: string): string {
   return title.replace(/^第\s*[零〇一二两三四五六七八九十百\d]+\s*节\s*[:：]\s*/, "").trim();
+}
+
+function parseJsonWithLooseStringQuotes(body: string): unknown | null {
+  const trimmed = body.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
+
+  try {
+    return JSON.parse(escapeLooseStringQuotes(trimmed));
+  } catch {
+    return null;
+  }
+}
+
+function escapeLooseStringQuotes(input: string): string {
+  let out = "";
+  let inString = false;
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i] ?? "";
+    if (!inString) {
+      out += ch;
+      if (ch === "\"") inString = true;
+      continue;
+    }
+
+    if (ch === "\\") {
+      out += ch;
+      if (i + 1 < input.length) {
+        i += 1;
+        out += input[i] ?? "";
+      }
+      continue;
+    }
+
+    if (ch === "\"") {
+      if (isClosingJsonStringQuote(input, i)) {
+        out += ch;
+        inString = false;
+      } else {
+        out += "\\\"";
+      }
+      continue;
+    }
+
+    out += ch;
+  }
+  return out;
+}
+
+function isClosingJsonStringQuote(input: string, quoteIndex: number): boolean {
+  let nextIndex = quoteIndex + 1;
+  while (nextIndex < input.length && isJsonWhitespace(input[nextIndex] ?? "")) nextIndex += 1;
+  const next = input[nextIndex] ?? "";
+  if (next === "" || next === ":" || next === "}" || next === "]") return true;
+  if (next !== ",") return false;
+
+  let afterComma = nextIndex + 1;
+  while (afterComma < input.length && isJsonWhitespace(input[afterComma] ?? "")) afterComma += 1;
+  return isLikelyJsonValueStart(input[afterComma] ?? "");
+}
+
+function isJsonWhitespace(ch: string): boolean {
+  return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";
+}
+
+function isLikelyJsonValueStart(ch: string): boolean {
+  return (
+    ch === "\"" ||
+    ch === "{" ||
+    ch === "[" ||
+    ch === "}" ||
+    ch === "]" ||
+    ch === "-" ||
+    ch === "t" ||
+    ch === "f" ||
+    ch === "n" ||
+    (ch >= "0" && ch <= "9")
+  );
 }
 
 /**

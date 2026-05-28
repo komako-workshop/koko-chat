@@ -886,7 +886,7 @@ export function DeeplyCourseScreen({
                   ? "agent 正在搜资料、读资料、做综合,完成后我们就可以开始讲了。"
                   : record.kind === "book" || record.kind === "library"
                     ? "agent 在找这本书的章节解读 + 权威书评,通常 1-3 分钟。"
-                    : "agent 正在按你刚选的节数生成目录,通常 30-90 秒。")}
+                    : "agent 正在生成课程目录,通常 30-90 秒。")}
             </Text>
           </View>
         </View>

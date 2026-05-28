@@ -24,6 +24,7 @@ pnpm --filter @koko/deeply-library-server dev
 | `GET /library/books?cat=&page=&limit=&fields=list\|full` | 分页列表(默认按 pr 降序) |
 | `GET /library/books/:id` | 单本全字段(含 `ue/de` 知识谱系) |
 | `GET /library/search?q=&limit=` | title/author 子串搜索 |
+| `GET/POST /deeply/search` | KokoChat 托管搜索代理(Brave-backed),给 Deeply agent 用 |
 
 `fields=list` 只返回 `id/t/a/c/d/s/pr/img/h`(给主页/分类页用);
 `fields=full` 返回原始全字段(避免大量调用)。
@@ -50,7 +51,7 @@ sudo systemctl status kokochat-library --no-pager
 curl -s http://127.0.0.1:8788/healthz   # {"ok":true,...}
 
 # Caddyfile:在 deeply.plus 块里 vercel_pages 之后、godbti 之前加
-#   @library path /library/* /healthz
+#   @library path /library/* /deeply/search /healthz
 #   handle @library {
 #     reverse_proxy 127.0.0.1:8788
 #   }
@@ -106,3 +107,22 @@ rsync -avz --delete miniapps/deeply/data/covers/ \
 | `LIBRARY_HOST` | `127.0.0.1` | 监听 host。loopback 因为 Caddy 反代,不直接暴露公网 |
 | `LIBRARY_PORT` | `8788` | 监听端口 |
 | `LIBRARY_POOL_PATH` | `/opt/koko-chat/miniapps/deeply/data/library-pool.json` | 数据文件绝对路径 |
+| `BRAVE_SEARCH_API_KEY` | secret | Brave Search API key,只放服务端 |
+| `KOKO_SEARCH_TOKEN` | optional secret | 设置后 `/deeply/search` 要求 Bearer token 或 `x-koko-search-token` |
+| `KOKO_SEARCH_RATE_LIMIT_PER_MINUTE` | `60` | 每 IP 每分钟搜索限流 |
+
+生产建议把 secret 放到 `/etc/kokochat-library.env`:
+
+```bash
+sudo install -m 600 -o root -g root /dev/null /etc/kokochat-library.env
+sudoedit /etc/kokochat-library.env
+# BRAVE_SEARCH_API_KEY=...
+# KOKO_SEARCH_RATE_LIMIT_PER_MINUTE=60
+
+sudo systemctl daemon-reload
+sudo systemctl restart kokochat-library
+curl -s https://deeply.plus/healthz | jq .search
+curl -s -X POST https://deeply.plus/deeply/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"AI investors 2026","count":3}' | jq .
+```

@@ -94,9 +94,21 @@ fi
 node "$KOKOCHAT_REPO/scripts/install-openclaw-support.mjs"
 ```
 
+如果你已经在目标机器的 OpenClaw 会话里，也可以直接让 OpenClaw 自己照着
+[`openclaw/README.md`](./openclaw/README.md) 执行安装。给它这句话即可：
+
+> Install or update KokoChat OpenClaw support from
+> <https://github.com/komako-workshop/koko-chat/blob/main/openclaw/README.md>.
+> Do not ask for API keys or edit model credentials. Run the installer and
+> report whether `kokochat-deeply-search` is installed for the deeply agent.
+
 低版本升级时 Gateway 可能会短暂断开并重启一次。等脚本完整结束后，再回到 KokoChat 粘贴连接码；如果手机还没恢复连接，先等十几秒，或在 OpenClaw 机器上手动运行一次 `openclaw gateway restart`。
 
 KokoChat 默认走官方 relay。手机不需要和 OpenClaw 服务器在同一局域网，OpenClaw Gateway 也不需要暴露 LAN 端口。`kokochat-pairing` 会在 OpenClaw 机器上启动一个本地 connector；手机连 relay，connector 再连本机 OpenClaw Gateway；relay 只转发 WebSocket 帧，不直接连接你的 Gateway。
+
+Deeply 的联网调研搜索走 KokoChat 托管搜索(`https://deeply.plus/deeply/search`)。
+用户的 OpenClaw 不需要配置 Brave API key；安装脚本只会给 deeply agent 装一个
+本地 `kokochat-deeply-search` wrapper 和对应 exec allowlist。
 
 如果你要改用自托管 relay，在生成连接码前设置:
 
@@ -128,6 +140,7 @@ node scripts/install-openclaw-support.mjs
 - 自动把这些 skills 写入对应 agent 的 allowlist。
 - 自动写入 KokoChat 小程序 agent 指令，并给 `tavern` agent 开启必要的 `exec` 工具权限和脚本 allowlist。
 - 如果用户没有配置 `tools.web.search.provider`，默认写入免 key 的 `duckduckgo`，让 Deeply 调研课程不依赖用户自备搜索 API key。
+- 把 `tools.web.fetch.maxChars` / `tools.web.fetch.maxCharsCap` 至少设为 `60000`，让 Deeply 可以抓到更完整的网页正文；已有更高配置会保留。
 - 用 `openclaw skills info` 验证这些 skills 能被目标 agent 看见；旧版 OpenClaw CLI 不支持按 agent 查询时会跳过对应验证。
 - 如果脚本刚刚升级了 OpenClaw，会在配置写完后 best-effort 重启 Gateway，让正在运行的服务切到新版本。
 

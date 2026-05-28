@@ -20,6 +20,7 @@ import {
 import { MarkdownText } from "@/components/MarkdownText";
 import { useAndroidKeyboardSpacerHeight } from "@/components/useAndroidKeyboardSpacerHeight";
 import { MessageBlockView } from "@/runtime/messageBlocks";
+import { openPairingScreen } from "@/runtime/navigation";
 import { useGatewayStore } from "@/state/gateway";
 import {
   useConversationStore,
@@ -404,7 +405,6 @@ export function DeeplyExploreScreen({
   }, [sheetIsOpen, sheetCardBottomY]);
 
   const isConnected = status === "connected";
-  const isRecoveringConnection = status === "connecting" || status === "handshaking";
   const canSend = isConnected && !sending && draft.trim().length > 0;
   // 打开「定制课程」sheet 本身不依赖 sending —— sheet 是独立的 UI 操作,
   // 用户在等回复时也应该能起一个新的 research course。只在没连上 gateway
@@ -521,7 +521,6 @@ export function DeeplyExploreScreen({
     >
       <ConnectionBanner
         isConnected={isConnected}
-        isRecoveringConnection={isRecoveringConnection}
       />
 
       <FlatList
@@ -639,26 +638,23 @@ function useSingletonConversation(enabled = true): string | null {
 }
 
 function ConnectionBanner({
-  isConnected,
-  isRecoveringConnection
+  isConnected
 }: {
   isConnected: boolean;
-  isRecoveringConnection: boolean;
 }): React.ReactElement | null {
   if (isConnected) return null;
-  if (isRecoveringConnection) {
-    return (
-      <View style={styles.banner}>
-        <Text style={styles.bannerTitle}>正在连接 OpenClaw</Text>
-        <Text style={styles.bannerHint}>恢复本地 Gateway 连接,稍等一下就能开聊。</Text>
-      </View>
-    );
-  }
   return (
-    <View style={styles.banner}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="前往配对 OpenClaw"
+      onPress={openPairingScreen}
+      style={({ pressed }) => [styles.banner, pressed && styles.bannerPressed]}
+    >
       <Text style={styles.bannerTitle}>未连接 OpenClaw</Text>
-      <Text style={styles.bannerHint}>需要在 KokoChat 里完成 OpenClaw 配对,Deeply 才能开口。</Text>
-    </View>
+      <Text style={styles.bannerHint}>
+        需要在 KokoChat 里完成 OpenClaw 配对,Deeply 才能开口 · 点这里去配对
+      </Text>
+    </Pressable>
   );
 }
 
@@ -755,6 +751,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: DEEPLY_PANEL_BORDER
+  },
+  bannerPressed: {
+    backgroundColor: DEEPLY_RECOMMEND_BG_PRESSED
   },
   bannerTitle: {
     color: DEEPLY_INK,
