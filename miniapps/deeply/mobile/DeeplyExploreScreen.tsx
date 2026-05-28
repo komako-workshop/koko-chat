@@ -18,6 +18,7 @@ import {
 } from "react-native";
 
 import { MarkdownText } from "@/components/MarkdownText";
+import { useAndroidKeyboardSpacerHeight } from "@/components/useAndroidKeyboardSpacerHeight";
 import { MessageBlockView } from "@/runtime/messageBlocks";
 import { useGatewayStore } from "@/state/gateway";
 import {
@@ -133,6 +134,7 @@ export function DeeplyExploreScreen({
   const messages = useConversationStore((s) =>
     conversationId === null ? EMPTY : s.messages[conversationId] ?? EMPTY
   );
+  const keyboardSpacerHeight = useAndroidKeyboardSpacerHeight();
   const status = useGatewayStore((s) => s.status);
   const sendUserMessage = useGatewayStore((s) => s.sendUserMessage);
 
@@ -514,8 +516,8 @@ export function DeeplyExploreScreen({
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={headerHeight}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
     >
       <ConnectionBanner
         isConnected={isConnected}
@@ -600,6 +602,7 @@ export function DeeplyExploreScreen({
           </Pressable>
         </View>
       </View>
+      {keyboardSpacerHeight > 0 ? <View style={{ height: keyboardSpacerHeight }} /> : null}
 
       {/* CourseDetailSheet 由推荐卡点击触发;CourseCustomizeSheet 由
           「定制课程」chip 触发。两者都挂在 explore root 里走 absoluteFill

@@ -186,6 +186,7 @@ Field rules (**所有字段都不能省略**):
 - 必须 fenced block:最后一段是 ` ```koko.deeply.research.outline `,合法 JSON,不要 trailing comma、不要单引号、不要 JS 注释。
 - fenced block 之后**不要再写任何文字**。
 - JSON 字段名必须严格使用 camelCase: `version`, `courseTitle`, `introduction`, `sections`, `outlineMarkdown`。不要输出旧 schema / snake_case 字段,例如 `course_title`, `course_summary`, `suggested_course_flow`。
+- fenced block 的内容必须以 `{` 开头、以 `}` 结束。**禁止 YAML / Markdown outline / 旧 schema**,例如 `title: ...`, `sections_count: ...`, `source_ids: ...`, `learning_goals: ...`, `discussion_questions: ...` 都是不合格输出。
 - **url 必须来自 web_search / web_fetch 实际返回**,不要编造、不要 cite 不存在的页面。
 - **不要在这一轮把任何一节的内容讲透** —— 你只是在为讲解阶段做素材准备。
 - 不要输出讲解型字段,例如 `learning_goals`, `key_points`, `case_studies`, `discussion_questions`, `risk_framework`。每节只要 `index`, `title`, `sources`。

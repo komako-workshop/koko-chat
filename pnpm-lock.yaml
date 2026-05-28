@@ -147,14 +147,11 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
-  miniapps/tavern-roleplay/mobile:
+  miniapps/tavern/mobile:
     devDependencies:
       '@types/react':
         specifier: ~19.1.17
         version: 19.1.17
-      expo-router:
-        specifier: ~6.0.23
-        version: 6.0.23(8b8edca78f33d7508a9b877b4aef6701)
       react:
         specifier: 19.1.0
         version: 19.1.0
@@ -168,11 +165,14 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
-  miniapps/tavern/mobile:
+  miniapps/tavern/roleplay/mobile:
     devDependencies:
       '@types/react':
         specifier: ~19.1.17
         version: 19.1.17
+      expo-router:
+        specifier: ~6.0.23
+        version: 6.0.23(8b8edca78f33d7508a9b877b4aef6701)
       react:
         specifier: 19.1.0
         version: 19.1.0

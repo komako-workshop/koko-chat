@@ -9,7 +9,7 @@ import { useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LibraryHomeScreen } from "../../../../../miniapps/deeply/mobile/library/LibraryHomeScreen";
-import { LibraryBackButton } from "./_backButton";
+import { LibraryBackButton } from "@/components/LibraryBackButton";
 
 export default function DeeplyLibraryHomeRoute(): React.ReactElement {
   const navigation = useNavigation();

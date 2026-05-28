@@ -9,7 +9,7 @@
 - Local working tree included in build archive: yes, with uncommitted changes in:
   - `apps/koko-chat/sources/state/gateway.ts`
   - `miniapps/deeply/mobile/persona.ts`
-  - `miniapps/tavern-roleplay/mobile/index.ts`
+  - `miniapps/tavern/roleplay/mobile/index.ts`
 - Latest TestFlight build:
   - EAS build id: `76b006b5-762f-4514-9825-1c1898e7ed8e`
   - App version: `0.0.1`

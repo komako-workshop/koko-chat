@@ -10,7 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LibraryBookScreen } from "../../../../../../miniapps/deeply/mobile/library/LibraryBookScreen";
 import { getBookById } from "../../../../../../miniapps/deeply/mobile/library/libraryData";
-import { LibraryBackButton } from "../_backButton";
+import { LibraryBackButton } from "@/components/LibraryBackButton";
 
 export default function DeeplyLibraryBookRoute(): React.ReactElement {
   const navigation = useNavigation();

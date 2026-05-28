@@ -20,7 +20,7 @@
     // typecheck on its own. If this mode later moves to its own package,
     // these paths become a thin published interface and the alias goes away.
     "paths": {
-      "@/*": ["../../../apps/koko-chat/sources/*"]
+      "@/*": ["../../../../apps/koko-chat/sources/*"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"]

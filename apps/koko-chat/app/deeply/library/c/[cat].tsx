@@ -9,7 +9,7 @@ import { useLocalSearchParams, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LibraryCategoryScreen } from "../../../../../../miniapps/deeply/mobile/library/LibraryCategoryScreen";
-import { LibraryBackButton } from "../_backButton";
+import { LibraryBackButton } from "@/components/LibraryBackButton";
 
 export default function DeeplyLibraryCategoryRoute(): React.ReactElement {
   const navigation = useNavigation();

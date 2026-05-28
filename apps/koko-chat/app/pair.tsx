@@ -131,8 +131,8 @@ export default function PairScreen() {
     <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={headerHeight}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
       <ScrollView
         contentContainerStyle={styles.scroll}

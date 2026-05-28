@@ -31,7 +31,7 @@ import {
 } from "@/state/tavernPersona";
 import { KokoColors, KokoRadius } from "@/theme/koko";
 
-import { startTavernRoleplaySession } from "../../tavern-roleplay/mobile";
+import { startTavernRoleplaySession } from "../roleplay/mobile";
 import browseData from "./assets/browse-data.json";
 import { applyTavernMacros } from "./macros";
 

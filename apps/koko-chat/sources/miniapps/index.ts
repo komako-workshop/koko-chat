@@ -1,7 +1,7 @@
 import { registerKokoMiniApp } from "./koko";
 import { registerDeeplyMiniApp } from "../../../../miniapps/deeply/mobile";
 import { registerTavernMiniApp } from "../../../../miniapps/tavern/mobile";
-import { registerTavernRoleplayMiniApp } from "../../../../miniapps/tavern-roleplay/mobile";
+import { registerTavernRoleplayMiniApp } from "../../../../miniapps/tavern/roleplay/mobile";
 
 /**
  * Aggregate mini-app registration. `app/_layout.tsx` imports this module once

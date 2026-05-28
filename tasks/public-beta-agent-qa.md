@@ -53,7 +53,7 @@ apps/koko-chat/sources/gateway/         # RN WebSocket client / pairing
 apps/koko-chat/app/chat/[id].tsx        # 通用聊天 UI
 miniapps/deeply/mobile/                 # Deeply mini-app
 miniapps/tavern/mobile/                 # Tavern 搜索 mini-app
-miniapps/tavern-roleplay/mobile/        # Tavern 角色聊天 mini-app
+miniapps/tavern/roleplay/mobile/        # Tavern 角色聊天 mini-app
 ```
 
 本机 OpenClaw 常见日志:
@@ -622,4 +622,3 @@ message 和对应版本。
 
 4. **Deeply / Tavern prompt 输出不是确定性单元测试。**
    质量问题要多次采样,记录分布,不要只用一次结果下结论。
-

@@ -16,6 +16,7 @@ import {
 } from "react-native";
 
 import { MarkdownText } from "@/components/MarkdownText";
+import { useAndroidKeyboardSpacerHeight } from "@/components/useAndroidKeyboardSpacerHeight";
 import { MessageBlockView } from "@/runtime/messageBlocks";
 import { useGatewayStore } from "@/state/gateway";
 import {
@@ -221,6 +222,7 @@ export function DeeplyCourseScreen({
   const messages = useConversationStore((s) =>
     conversationId === null ? EMPTY : s.messages[conversationId] ?? EMPTY
   );
+  const keyboardSpacerHeight = useAndroidKeyboardSpacerHeight();
   const status = useGatewayStore((s) => s.status);
   const sendUserMessage = useGatewayStore((s) => s.sendUserMessage);
 
@@ -836,8 +838,8 @@ export function DeeplyCourseScreen({
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={headerHeight}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
     >
       <CourseSubHeader
         record={record}
@@ -1032,6 +1034,7 @@ export function DeeplyCourseScreen({
           </Pressable>
         </View>
       </View>
+      {keyboardSpacerHeight > 0 ? <View style={{ height: keyboardSpacerHeight }} /> : null}
 
       {/* 课程目录抽屉:右上角按钮(在 host route headerRight 里)调 open,
           这里 mount 监听 store 在 demo frame 内渲染。 */}

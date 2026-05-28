@@ -23,9 +23,11 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 
 import { CachedImage } from "@/components/CachedImage";
 import { MarkdownText } from "@/components/MarkdownText";
+import { useAndroidKeyboardSpacerHeight } from "@/components/useAndroidKeyboardSpacerHeight";
 import { useGatewayStore } from "@/state/gateway";
 import { useConversationStore, type ChatMessage, type ConversationMeta } from "@/state/conversations";
 import { getBootstrapRetryHandler } from "@/runtime/bootstrapRetries";
+import { getConversationModeDescriptor } from "@/runtime/conversationModes";
 import { MessageBlockView } from "@/runtime/messageBlocks";
 import { getMiniAppListImage } from "@/runtime/miniApps";
 import { KokoColors, KokoRadius } from "@/theme/koko";
@@ -313,12 +315,19 @@ export default function ChatScreen() {
   const activeAgentRunCount = useGatewayStore((s) =>
     conversationId !== null ? s.activeAgentRuns[conversationId] ?? 0 : 0
   );
+  const responderName =
+    conversation?.title.trim() ||
+    (conversation !== null
+      ? getConversationModeDescriptor(conversation.mode)?.displayName
+      : undefined) ||
+    "Koko";
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [listReady, setListReady] = useState(messages.length === 0);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const headerHeight = useHeaderHeight();
+  const keyboardSpacerHeight = useAndroidKeyboardSpacerHeight();
   const messagesLengthRef = useRef(messages.length);
   const isNearBottomRef = useRef(true);
   const scrollMetricsRef = useRef({
@@ -618,8 +627,8 @@ export default function ChatScreen() {
     <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={headerHeight}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
         {isBootstrapping ? (
           <View style={[styles.banner, styles.bannerRow]}>
@@ -729,7 +738,7 @@ export default function ChatScreen() {
                   : bootstrapError !== null
                     ? "角色卡加载失败，无法发送"
                     : isAgentResponding
-                      ? "Koko 正在回复…"
+                      ? `${responderName} 正在回复…`
                       : isConnected
                       ? "说点什么…"
                       : "连接 OpenClaw 后可以聊天"
@@ -759,6 +768,7 @@ export default function ChatScreen() {
             </Pressable>
           </View>
         </View>
+        {keyboardSpacerHeight > 0 ? <View style={{ height: keyboardSpacerHeight }} /> : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

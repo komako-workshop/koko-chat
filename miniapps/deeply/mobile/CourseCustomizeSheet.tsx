@@ -302,11 +302,10 @@ function CourseCustomizeSheet({
         style={[styles.backdropFill, { opacity: backdropOpacity }]}
       />
       <Pressable style={styles.backdropPressable} onPress={handleClose} />
-      {/* iOS 上键盘弹起会挡 sheet。把 sheet 包进 KeyboardAvoidingView,
-          iOS 用 padding 推上去,Android 默认 windowSoftInputMode=adjustResize
-          会自动处理,这里用 height 兜底。 */}
+      {/* 底部 sheet/input dock 需要 padding 避让键盘。Android 不带 header
+          offset,避免旧的 height 模式把内容额外压短。 */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior="padding"
         style={styles.keyboardAvoid}
         pointerEvents="box-none"
       >

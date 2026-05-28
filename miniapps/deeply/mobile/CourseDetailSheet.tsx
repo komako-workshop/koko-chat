@@ -4,7 +4,6 @@ import {
   Animated,
   Easing,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -231,7 +230,7 @@ function CourseDetailSheet({
       />
       <Pressable style={styles.backdropPressable} onPress={handleClose} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior="padding"
         style={styles.keyboardAvoid}
         pointerEvents="box-none"
       >

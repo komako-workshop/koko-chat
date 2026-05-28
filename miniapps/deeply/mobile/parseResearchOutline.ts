@@ -111,10 +111,13 @@ export function parseDeeplyResearchOutline(assistantText: string): ParseResult {
   try {
     raw = JSON.parse(body);
   } catch (error) {
-    return {
-      ok: false,
-      error: `JSON 解析失败:${error instanceof Error ? error.message : String(error)}`
-    };
+    raw = parseLegacyYamlResearchOutline(body);
+    if (raw === null) {
+      return {
+        ok: false,
+        error: `JSON 解析失败:${error instanceof Error ? error.message : String(error)}`
+      };
+    }
   }
   if (!isRecord(raw)) {
     return { ok: false, error: "fenced block 内部必须是 JSON 对象" };
@@ -326,6 +329,188 @@ function collectSourcesLoose(rawSources: unknown[]): DeeplyResearchSource[] {
 
 function stripSectionPrefix(title: string): string {
   return title.replace(/^第\s*[零〇一二两三四五六七八九十百\d]+\s*节\s*[:：]\s*/, "").trim();
+}
+
+/**
+ * Compatibility for older / noncompliant agents that emit a YAML-ish legacy
+ * outline inside the correct fenced block. We only parse the fields needed to
+ * reconstruct the current JSON contract, and leave arbitrary YAML unsupported.
+ */
+function parseLegacyYamlResearchOutline(body: string): Record<string, unknown> | null {
+  const lines = body.split(/\r?\n/);
+  const title = readTopLevelScalar(lines, "courseTitle") || readTopLevelScalar(lines, "title");
+  if (title.length === 0) return null;
+
+  const topLevelSources = parseLegacyYamlSources(lines);
+  const sourceById = new Map(topLevelSources.flatMap((source) => (source.id ? [[source.id, source]] : [])));
+  const sections = parseLegacyYamlSections(lines, sourceById);
+  if (sections.length === 0) return null;
+
+  const introduction =
+    readFoldedTopLevelBlock(lines, "introduction") ||
+    readFoldedTopLevelBlock(lines, "research_note") ||
+    readTopLevelScalar(lines, "introduction") ||
+    readTopLevelScalar(lines, "research_note");
+
+  return {
+    version: 1,
+    courseTitle: title,
+    introduction,
+    sections,
+    sources: topLevelSources,
+    outlineMarkdown: buildOutlineMarkdownFromSections(sections)
+  };
+}
+
+function parseLegacyYamlSections(
+  lines: string[],
+  sourceById: Map<string, { title: string; url: string; stance: DeeplyResearchSourceStance; snippet: string }>
+): Array<{ index: number; title: string; sources: DeeplyResearchSource[] }> {
+  const start = findTopLevelLine(lines, "sections");
+  if (start < 0) return [];
+  const end = findNextTopLevelLine(lines, start + 1);
+  const sections: Array<{ index: number; title: string; sourceIds: string[] }> = [];
+  let current: { index: number; title: string; sourceIds: string[] } | null = null;
+  let inSourceIds = false;
+
+  for (let i = start + 1; i < (end < 0 ? lines.length : end); i += 1) {
+    const line = lines[i] ?? "";
+    const itemMatch = /^\s{2}-\s+(?:index|section):\s*(\d+)\s*$/.exec(line);
+    if (itemMatch !== null) {
+      if (current !== null) sections.push(current);
+      current = { index: Number(itemMatch[1]), title: "", sourceIds: [] };
+      inSourceIds = false;
+      continue;
+    }
+    if (current === null) continue;
+    const scalarMatch = /^\s{4}([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
+    if (scalarMatch !== null) {
+      const key = scalarMatch[1] ?? "";
+      const value = readYamlScalarValue(scalarMatch[2] ?? "");
+      inSourceIds = key === "source_ids" || key === "sourceIds";
+      if (key === "title") current.title = value;
+      continue;
+    }
+    if (inSourceIds) {
+      const sourceIdMatch = /^\s{6}-\s*(.+?)\s*$/.exec(line);
+      if (sourceIdMatch !== null) current.sourceIds.push(readYamlScalarValue(sourceIdMatch[1] ?? ""));
+    }
+  }
+  if (current !== null) sections.push(current);
+
+  return sections.flatMap((section, idx) => {
+    if (section.title.length === 0) return [];
+    const sources = section.sourceIds
+      .flatMap((id) => {
+        const source = sourceById.get(id);
+        return source === undefined ? [] : [{ ...source }];
+      })
+      .slice(0, MAX_SOURCES);
+    return [
+      {
+        index: Number.isFinite(section.index) && section.index > 0 ? section.index : idx + 1,
+        title: section.title,
+        sources
+      }
+    ];
+  });
+}
+
+function parseLegacyYamlSources(
+  lines: string[]
+): Array<{ id?: string; title: string; url: string; stance: DeeplyResearchSourceStance; snippet: string }> {
+  const start = findTopLevelLine(lines, "sources");
+  if (start < 0) return [];
+  const out: Array<{ id?: string; title: string; url: string; stance: DeeplyResearchSourceStance; snippet: string }> = [];
+  let current: Record<string, string> | null = null;
+
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i] ?? "";
+    if (/^\S/.test(line)) break;
+    const itemMatch = /^\s{2}-\s+([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
+    if (itemMatch !== null) {
+      if (current !== null) pushLegacyYamlSource(out, current);
+      current = { [itemMatch[1] ?? ""]: readYamlScalarValue(itemMatch[2] ?? "") };
+      continue;
+    }
+    if (current === null) continue;
+    const scalarMatch = /^\s{4}([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
+    if (scalarMatch !== null) current[scalarMatch[1] ?? ""] = readYamlScalarValue(scalarMatch[2] ?? "");
+  }
+  if (current !== null) pushLegacyYamlSource(out, current);
+  return out;
+}
+
+function pushLegacyYamlSource(
+  out: Array<{ id?: string; title: string; url: string; stance: DeeplyResearchSourceStance; snippet: string }>,
+  source: Record<string, string>
+): void {
+  const title = source.title ?? source.name ?? "";
+  const url = source.url ?? source.link ?? "";
+  if (title.length === 0 || !/^https?:\/\//i.test(url)) return;
+  const stanceRaw = (source.stance ?? "") as DeeplyResearchSourceStance;
+  const stance = STANCES.includes(stanceRaw) ? stanceRaw : "primary";
+  const snippet = (source.snippet ?? source.relevance ?? source.summary ?? source.description ?? "").slice(0, MAX_SNIPPET_CHARS);
+  out.push({
+    ...(source.id !== undefined && source.id.length > 0 ? { id: source.id } : {}),
+    title,
+    url,
+    stance,
+    snippet
+  });
+}
+
+function buildOutlineMarkdownFromSections(
+  sections: Array<{ index: number; title: string; sources: DeeplyResearchSource[] }>
+): string {
+  return sections
+    .map((section) => {
+      const lines = [`## 第${section.index}节:${section.title}`];
+      for (const source of section.sources) lines.push(`- [${source.stance}] ${source.title} — ${source.url}`);
+      return lines.join("\n");
+    })
+    .join("\n\n");
+}
+
+function readTopLevelScalar(lines: string[], key: string): string {
+  const line = lines.find((item) => item.startsWith(`${key}:`));
+  if (line === undefined) return "";
+  return readYamlScalarValue(line.slice(key.length + 1));
+}
+
+function readFoldedTopLevelBlock(lines: string[], key: string): string {
+  const index = lines.findIndex((line) => line.trim() === `${key}: >` || line.trim() === `${key}: |`);
+  if (index < 0) return "";
+  const out: string[] = [];
+  for (let i = index + 1; i < lines.length; i += 1) {
+    const line = lines[i] ?? "";
+    if (/^\S/.test(line)) break;
+    const trimmed = line.trim();
+    if (trimmed.length > 0) out.push(trimmed);
+  }
+  return out.join(" ").trim();
+}
+
+function findTopLevelLine(lines: string[], key: string): number {
+  return lines.findIndex((line) => line.trim() === `${key}:` && line.startsWith(key));
+}
+
+function findNextTopLevelLine(lines: string[], start: number): number {
+  for (let i = start; i < lines.length; i += 1) {
+    if (/^[A-Za-z_][\w-]*:\s*/.test(lines[i] ?? "")) return i;
+  }
+  return -1;
+}
+
+function readYamlScalarValue(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length >= 2) {
+    const quote = trimmed[0];
+    if ((quote === "\"" || quote === "'") && trimmed[trimmed.length - 1] === quote) {
+      return trimmed.slice(1, -1).trim();
+    }
+  }
+  return trimmed;
 }
 
 function trimString(value: unknown): string {

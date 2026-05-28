@@ -2,3 +2,4 @@ packages:
   - 'packages/*'
   - 'apps/*'
   - 'miniapps/*/mobile'
+  - 'miniapps/*/*/mobile'

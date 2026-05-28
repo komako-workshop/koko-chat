@@ -14,7 +14,7 @@ KokoChat 新增了一个本地 Expo native module：`koko-background-task`。它
 - `apps/koko-chat/sources/runtime/backgroundTasks.ts`
 - `apps/koko-chat/sources/state/gateway.ts`
 - `apps/koko-chat/sources/runtime/openclaw.ts`
-- `miniapps/tavern-roleplay/mobile/index.ts`
+- `miniapps/tavern/roleplay/mobile/index.ts`
 
 ## 测试目标
 

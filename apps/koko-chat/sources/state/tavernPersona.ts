@@ -14,7 +14,7 @@
  *
  * This store lives in the host workspace (rather than next to the rest of
  * the Tavern mini-app code) so that mini-apps that depend on it — both
- * `tavern/mobile` and `tavern-roleplay/mobile` — can import it through
+ * `tavern/mobile` and `tavern/roleplay/mobile` — can import it through
  * the `@/state/tavernPersona` alias without taking a direct dependency
  * on `zustand`. Storage uses the host's per-mini-app MMKV namespace
  * (the same one `tavern-roleplay` uses for cached cards) keyed at

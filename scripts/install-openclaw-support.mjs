@@ -178,6 +178,8 @@ const AGENT_DEFINITIONS = {
       "",
       "Every URL in the final `sources` array MUST come from a real `web_search` / `web_fetch` result — do not invent URLs. If a topic has no good hits, narrate that honestly and cite fewer sources rather than fabricating any.",
       "",
+      "The final `koko.deeply.research.outline` block MUST contain a JSON object only: it starts with `{`, ends with `}`, and uses camelCase fields `version`, `courseTitle`, `introduction`, `sections`, `outlineMarkdown`. Never emit YAML or the legacy outline schema (`title:`, `sections_count:`, `source_ids:`, `learning_goals:`, `discussion_questions:`).",
+      "",
       "Narration in this surface is REQUIRED and visible to the user (unlike the tavern skill which forbids visible prose). The user watches this stream during the 1–3 minute research run and needs to feel like you're doing real work. See the skill's `Narration Pattern (Required)` section. Each prose paragraph must end with the sentinel `〔KP〕` — the KokoChat client strips it and renders proper paragraph breaks; without it OpenClaw's wire-layer merge will visually flatten all prose into one block."
     ].join("\n"),
     tools: {

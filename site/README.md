@@ -47,10 +47,24 @@ HTML 里多处引用都指向这个文件。
 ### 更新内容
 
 ```bash
-rsync -avz --delete --exclude='/README.md' site/ komako:/var/www/kokochat-site/
+rsync -avz --delete \
+  --exclude='/README.md' \
+  --exclude='/downloads/' \
+  site/ komako:/var/www/kokochat-site/
 ```
 
 `--exclude='/README.md'` 是为了避免把这份开发文档推到公网目录。
+`--exclude='/downloads/'` 是为了避免更新页面时误删服务器上的 APK。
+
+### 更新 Android APK
+
+Android 下载按钮指向 OSS 自定义域,更新包时覆盖 `kokochat/android/latest.apk`:
+
+```bash
+source ~/.aliyun-kokochat-oss.env
+# 上传 artifacts/android/kokochat-android-v*.apk 到:
+# https://docs.metacreate.cc/kokochat/android/latest.apk
+```
 
 无需 reload nginx——这是纯静态文件 + 短缓存(`index.html` 5 分钟,
 `assets/` 30 天 immutable),改完几分钟内生效。如果想立刻看到 HTML 改动:

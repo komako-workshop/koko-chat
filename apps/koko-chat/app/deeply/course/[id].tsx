@@ -16,7 +16,7 @@ import { KokoRadius } from "@/theme/koko";
 
 import { openDeeplyCourseOutlineDrawer } from "../../../../../miniapps/deeply/mobile/courseOutlineDrawerStore";
 import { DeeplyCourseScreen } from "../../../../../miniapps/deeply/mobile/DeeplyCourseScreen";
-import { LibraryBackButton } from "../library/_backButton";
+import { LibraryBackButton } from "@/components/LibraryBackButton";
 
 export default function DeeplyCourseRoute(): React.ReactElement {
   const navigation = useNavigation();

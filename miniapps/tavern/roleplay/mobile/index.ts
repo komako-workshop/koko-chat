@@ -21,7 +21,7 @@ import { useGatewayStore } from "@/state/gateway";
 
 import { resolvePersonaName } from "@/state/tavernPersona";
 
-import { applyTavernMacros } from "../../tavern/mobile/macros";
+import { applyTavernMacros } from "../../mobile/macros";
 
 /**
  * Tavern Roleplay mode: 酒馆产品里的角色聊天子模式。

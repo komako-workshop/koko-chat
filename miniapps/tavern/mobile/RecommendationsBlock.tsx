@@ -13,7 +13,7 @@ import { CachedImage } from "@/components/CachedImage";
 import type { BlockRenderer } from "@/runtime/messageBlocks";
 
 import { type TavernRecommendationCard } from "./parseRecommendations";
-import { startTavernRoleplaySession } from "../../tavern-roleplay/mobile";
+import { startTavernRoleplaySession } from "../roleplay/mobile";
 
 /**
  * The card renders inside a `blockOnlyBubble` (transparent, no padding) sitting

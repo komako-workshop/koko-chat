@@ -14,7 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { KokoColors, KokoRadius } from "@/theme/koko";
 import { DeeplyExploreScreen } from "../../../../miniapps/deeply/mobile/DeeplyExploreScreen";
-import { LibraryBackButton } from "./library/_backButton";
+import { LibraryBackButton } from "@/components/LibraryBackButton";
 
 export default function DeeplyHomeRoute(): React.ReactElement {
   // header 里左边渲染 Deeply 头像,告诉用户这里是 Deeply 而不是泛 KokoChat。
