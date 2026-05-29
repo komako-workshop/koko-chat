@@ -19,6 +19,7 @@ import {
   useDeeplyCustomizeSheetState
 } from "./customizeSheetStore";
 import { useGatewayStore } from "@/state/gateway";
+import { DEEPLY_RECOMMEND_INTENT } from "./constants";
 import {
   startDeeplyBookCourse,
   startDeeplyMaterialCourse,
@@ -251,17 +252,17 @@ function CourseCustomizeSheet({
         });
       } else {
         // mode === "interest" —— 完全不同的路径:不创建 course conversation,
-        // 直接把"给我推荐课程"的 visible text 发到当前 explore conversation。
+        // 直接把 visible text + 内部 recommend intent 发到当前 explore conversation。
         // agent 走现有 explore outbound builder + koko.deeply.recommendations
         // transformer 链路,在 chat 里出推荐卡片。用户点卡片走 CourseDetailSheet
-        // → 开课。整条 disambiguation 链路免写。
+        // → 开课。用户手打相似推荐文案不会触发这条内部路径。
         if (conversationId === null) {
           throw new Error("没找到主页对话,关 sheet 后从 Deeply 主页再点这个按钮一次");
         }
         const visible = interestDirectionTrimmed.length > 0
           ? `围绕「${interestDirectionTrimmed}」给我推荐几个值得学的课程`
           : `给我推荐几个值得学的课程吧`;
-        await sendUserMessage(conversationId, visible);
+        await sendUserMessage(conversationId, visible, { intent: DEEPLY_RECOMMEND_INTENT });
       }
       handleClose();
     } catch (err) {

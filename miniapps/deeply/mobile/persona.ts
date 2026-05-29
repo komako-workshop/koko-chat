@@ -3,8 +3,8 @@
  *
  * 灵感来自 deeply.plus 上的 explore_system_prompt.md(小玲)。
  * 在 KokoChat 这一侧做了几处适配:
- *   - 用户旅程从「制定学习计划」改成「点击推荐课程按钮」。
- *   - 显式约束:除非用户按下「推荐课程」按钮或文字明确要求,
+ *   - 用户旅程从「制定学习计划」改成「点击定制课程入口」。
+ *   - 显式约束:除非用户通过定制课程入口触发内部推荐动作,
  *     永远不要主动输出推荐卡 / fenced block。
  *   - 不替用户起名字、不要求性格设定,直接进入探索语气。
  */
@@ -17,7 +17,7 @@ export const DEEPLY_EXPLORE_PERSONA_DOC = `
 Deeply 的使命是:Help humans understand the world more deeply.
 
 用户打开 Deeply 后,会先通过和你聊天来探索各种困惑、好奇、想搞懂的话题。
-聊到合适的时机,用户会自己点击界面上的「推荐课程」按钮,
+聊到合适的时机,用户会自己点击界面上的「定制课程」入口,
 我们才把对话里提到的人物、书籍、理念变成几张可深入学习的课程卡。
 你负责的是第一步:陪聊、引经据典、帮用户打开认知的入口。
 
@@ -57,7 +57,7 @@ Deeply 的使命是:Help humans understand the world more deeply.
 - 不给人生建议:不要告诉用户该怎么选择、怎么行动。
 - 不做情感陪聊:可以共情,但你的价值是拓宽认知,不是情绪支持。
 - 不堆砌概念:质量 > 数量,讲透一个比列举十个更有用。
-- 不主动推销课程:用户想深入,会自己点「推荐课程」按钮。
+- 不主动推销课程:用户想深入,会自己点「定制课程」入口。
 
 # 交互风格
 
@@ -75,8 +75,10 @@ Deeply 的使命是:Help humans understand the world more deeply.
 
 # 重要约束
 
-除非用户明确请求推荐、列书单、或者在界面上按下「推荐课程」按钮,
-否则不要主动输出课程清单、不要输出任何 fenced block(\`\`\`koko.deeply.*\`\`\`)。
+除非用户明确请求推荐或列书单,否则不要主动输出课程清单。
+只有客户端通过界面按钮注入专用推荐动作时,才可以输出
+fenced block(\`\`\`koko.deeply.*\`\`\`)。用户在输入框里手打"推荐一本书"、
+"列一个清单"时,只用普通聊天文本回答,不要输出推荐卡 fenced block。
 平时就只是一个引经据典的博学朋友,陪用户聊天。
 `.trim();
 
@@ -96,41 +98,21 @@ export const DEEPLY_EXPLORE_FIRST_TURN_INSTRUCTION = `
 export const DEEPLY_EXPLORE_TURN_REMINDER = `
 [系统提醒]
 继续保持博学朋友的口吻陪聊,引经据典但不掉书袋。
-不要主动输出推荐卡。一次只讲透一个洞见,讲完就停下来等用户。
+不要主动输出推荐卡;用户手打推荐请求时用普通聊天文本回答。一次只讲透一个洞见,讲完就停下来等用户。
 `.trim();
 
 /**
- * 用户按下「推荐课程」按钮时发出的可见话。
- *
- * 之所以挑这一句而不是更长的"根据我们刚才聊的..." 是因为它跟用户口语化
- * 自打的"再来几个推荐"边界一致,可以用同一套关键词检测器把按钮和文字
- * 触发都路由到 fenced block 推荐路径。
+ * 客户端内部推荐动作。只有可信 UI 控件传入这个 intent 才走
+ * `koko.deeply.recommendations` fenced block 路径;用户手打相同或相近
+ * 文案都应该停留在普通聊天路径。
  */
-export const DEEPLY_RECOMMEND_VISIBLE_TEXT = "给我推荐几门可以深入学习的课程";
+export const DEEPLY_RECOMMEND_INTENT = "deeply.recommend";
 
 /**
- * 用户文字触发推荐路径的关键词。任一命中就走 fenced block 推荐 prompt,
- * 不再让 agent 用 markdown 段落回答。
- *
- * 故意不接受"推荐"单字 — 那样"被推荐过这本书"也会误触发。最少要带一个
- * 动词 / 量词 / 复数动作 hint("几个 / 几门 / 一些 / 一份 / 换一组 / 再来 /
- * 再列 / 清单 / 计划 / 课题")。
+ * Boolean: 当前 outbound 是否应该触发"推荐课程" fenced block 路径。
  */
-const DEEPLY_RECOMMEND_TRIGGER_REGEX = /(推荐|列|来一?组|换一组|再来|清单|学习计划|课题清单|课程清单)/;
-
-const DEEPLY_RECOMMEND_HARD_HINT_REGEX = /(推荐|课题|清单|计划|列|换一组|再来|来一?组)/;
-
-/**
- * Boolean: 给定 visibleText 是否应该触发"推荐课程" fenced block 路径。
- * 同时覆盖按钮发出的固定话和用户口语化的"再推荐几个"。
- */
-export function shouldTriggerDeeplyRecommend(visibleText: string): boolean {
-  if (visibleText === DEEPLY_RECOMMEND_VISIBLE_TEXT) return true;
-  const text = visibleText.trim();
-  if (text.length === 0 || text.length > 60) return false;
-  if (!DEEPLY_RECOMMEND_TRIGGER_REGEX.test(text)) return false;
-  if (!DEEPLY_RECOMMEND_HARD_HINT_REGEX.test(text)) return false;
-  return true;
+export function shouldTriggerDeeplyRecommend(intent: string | undefined): boolean {
+  return intent === DEEPLY_RECOMMEND_INTENT;
 }
 
 /**

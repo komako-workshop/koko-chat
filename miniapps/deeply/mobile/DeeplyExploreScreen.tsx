@@ -55,19 +55,19 @@ const COURSE_SHEET_REVEAL_GAP = 16;
  *
  * 这是 Deeply mini-app 自己拥有的聊天屏,不复用 host 的共享 chat 页。
  * 它仍然依附 conversation store + outbound builder + gateway 这些共享原语,
- * 只是 UI / 输入区 / 推荐课程按钮等产品形态完全由 mini-app 决定。
+ * 只是 UI / 输入区 / 定制课程入口等产品形态完全由 mini-app 决定。
  *
  * 视觉哲学(对齐 deeply.plus 原版):
  *  - 暖纸张白底,黑灰文字。
  *  - AI 不戴气泡、不戴头像,纯 markdown 平铺,像在读一篇短信。
  *  - 用户消息是右对齐的深色胶囊气泡,黑底白字。
- *  - 输入栏是浅灰胶囊容器,内嵌「推荐课程」chip + 多行输入 + 圆形发送钮。
+ *  - 输入栏是浅灰胶囊容器,内嵌「定制课程」chip + 多行输入 + 圆形发送钮。
  *
  * 行为:
  *  - mount 时找 mode === "deeply" 的单例会话,没有就创建一个。
  *  - 普通发送走 outbound builder 注入持续 reminder。
- *  - 推荐课程按钮 = 发送一句固定的"推荐"意图文本,由 outbound builder
- *    在 gatewayText 里替换成专用推荐 prompt。
+ *  - 推荐卡只能由「定制课程」sheet 的内部 recommend intent 触发。用户
+ *    手打推荐请求仍走普通聊天,避免误复用旧上下文生成课程卡。
  */
 
 const DEEPLY_BG = "#F9F9F7";

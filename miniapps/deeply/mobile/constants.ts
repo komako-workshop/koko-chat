@@ -5,5 +5,5 @@
 export const DEEPLY_MINI_APP_ID = "deeply";
 
 export {
-  DEEPLY_RECOMMEND_VISIBLE_TEXT
+  DEEPLY_RECOMMEND_INTENT
 } from "./persona";

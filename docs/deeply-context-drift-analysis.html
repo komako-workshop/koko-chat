@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deeply 为什么把科学史问题答回了拖延？</title>
+  <style>
+    :root {
+      --bg: #f7f4ee;
+      --paper: #fffdf8;
+      --ink: #211a15;
+      --muted: #6f665d;
+      --line: #ded5c8;
+      --accent: #f19a2a;
+      --accent-2: #1f6f78;
+      --bad: #b64232;
+      --good: #2d7a4d;
+      --code: #25211c;
+      --code-bg: #f1eadf;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.65;
+    }
+
+    main {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 48px 0 72px;
+    }
+
+    header {
+      margin-bottom: 28px;
+    }
+
+    .eyebrow {
+      color: var(--accent-2);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-size: clamp(34px, 5vw, 64px);
+      line-height: 1.08;
+      margin: 0 0 18px;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 840px;
+      color: var(--muted);
+      font-size: 20px;
+      margin: 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+      gap: 22px;
+      align-items: start;
+    }
+
+    .card,
+    .panel {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 12px 30px rgba(50, 42, 32, 0.06);
+    }
+
+    .card {
+      padding: 24px;
+      margin-bottom: 22px;
+    }
+
+    .panel {
+      padding: 20px;
+      position: sticky;
+      top: 18px;
+    }
+
+    h2 {
+      font-size: 24px;
+      line-height: 1.25;
+      margin: 0 0 12px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      font-size: 17px;
+      margin: 20px 0 8px;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    .verdict {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      color: white;
+      background: var(--bad);
+      font-size: 14px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .badge.ok {
+      background: var(--good);
+    }
+
+    .badge.warn {
+      background: var(--accent);
+      color: #20140a;
+    }
+
+    .flow {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 16px;
+      background: #fffaf1;
+      position: relative;
+    }
+
+    .step + .step::before {
+      content: "↓";
+      position: absolute;
+      top: -22px;
+      left: 18px;
+      color: var(--accent);
+      font-weight: 900;
+    }
+
+    .step strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .quote {
+      border-left: 4px solid var(--accent);
+      background: #fff7e8;
+      padding: 14px 16px;
+      border-radius: 0 8px 8px 0;
+      color: #3b3129;
+      margin: 14px 0;
+    }
+
+    .cols {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 12px;
+    }
+
+    .mini {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fffaf4;
+    }
+
+    .mini h3 {
+      margin-top: 0;
+    }
+
+    code,
+    pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    code {
+      background: var(--code-bg);
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-size: 0.92em;
+    }
+
+    pre {
+      background: var(--code);
+      color: #f9f2e7;
+      border-radius: 8px;
+      padding: 16px;
+      overflow: auto;
+      font-size: 13px;
+      line-height: 1.55;
+      margin: 14px 0 0;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .source-list {
+      padding-left: 18px;
+      margin: 10px 0 0;
+      color: var(--muted);
+    }
+
+    .source-list li {
+      margin: 7px 0;
+    }
+
+    .callout {
+      border: 1px solid rgba(31, 111, 120, 0.25);
+      background: #eef8f7;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 14px;
+    }
+
+    .severity {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .severity-row {
+      display: grid;
+      grid-template-columns: 108px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .severity-row:first-child {
+      border-top: 0;
+    }
+
+    @media (max-width: 860px) {
+      main {
+        width: min(100% - 24px, 720px);
+        padding-top: 26px;
+      }
+
+      .grid,
+      .cols,
+      .verdict,
+      .severity-row {
+        grid-template-columns: 1fr;
+      }
+
+      .panel {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Deeply 回归测试解释页</div>
+      <h1>为什么问“科学史入门书”，它却继续讲“拖延”？</h1>
+      <p class="lead">
+        这次现象不是 OpenClaw 连接断了，也不是 Deeply 搜索配置没生效。更准确地说，是 Deeply 的“推荐课程”触发规则把一句新的明确需求误路由到了“根据刚才整段对话推荐课程”的 prompt。
+      </p>
+    </header>
+
+    <div class="grid">
+      <section>
+        <div class="card">
+          <h2>一句话结论</h2>
+          <div class="verdict">
+            <span class="badge warn">P2 体验问题</span>
+            <p>
+              你的输入里有“推荐”，所以客户端把它判定为“我要基于当前 Deeply 对话生成推荐卡”。但这条专用 prompt 又明确要求模型“回顾刚才整段对话”。由于这个会话之前主要在聊拖延，模型就按旧主题给出了皮尔斯·斯蒂尔和《拖延心理学》。
+            </p>
+          </div>
+          <div class="quote">
+            用户以为自己在问：给我一本科学史入门书。<br>
+            系统实际暗示模型：用户点了推荐课程按钮，请从刚才整段对话里提炼推荐方向。
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>实际发生了什么</h2>
+          <div class="flow">
+            <div class="step">
+              <strong>1. Deeply 会话前文在聊“拖延”</strong>
+              <span class="muted">页面上已有“拖延心理学 / 皮尔斯·斯蒂尔”相关内容。</span>
+            </div>
+            <div class="step">
+              <strong>2. 你输入“推荐一本适合入门的科学史书”</strong>
+              <span class="muted">这是一个新主题，并且目标很明确：科学史、入门书、一本。</span>
+            </div>
+            <div class="step">
+              <strong>3. 客户端关键词命中“推荐”</strong>
+              <span class="muted">Deeply 当前规则看到“推荐”就容易进入推荐卡路径。</span>
+            </div>
+            <div class="step">
+              <strong>4. outbound builder 换成推荐卡专用 prompt</strong>
+              <span class="muted">用户看到的还是原句，但真正发给 OpenClaw 的文本被包了一层“推荐课程”指令。</span>
+            </div>
+            <div class="step">
+              <strong>5. 推荐卡 prompt 要求“回顾刚才整段对话”</strong>
+              <span class="muted">模型自然回到了前文最强上下文：拖延。</span>
+            </div>
+            <div class="step">
+              <strong>6. UI 渲染了拖延相关推荐卡</strong>
+              <span class="muted">所以看起来像“没听懂科学史”，其实是路由和 prompt 共同把它拉回了旧主题。</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>为什么不是搜索配置问题</h2>
+          <div class="cols">
+            <div class="mini">
+              <h3>连接链路是通的</h3>
+              <p>同一轮测试里 Koko 普通聊天、酒馆角色聊天、Deeply 返回推荐卡都成功了，没有 websocket 或 provider 报错。</p>
+            </div>
+            <div class="mini">
+              <h3>返回内容是“有逻辑地错”</h3>
+              <p>如果是搜索配置失败，通常会报工具不可用或没有结果。这次它生成了完整推荐卡，只是主题被旧上下文带偏。</p>
+            </div>
+          </div>
+          <div class="callout">
+            关键判断：它不是“不会搜索科学史”，而是压根没有被稳定地引导到“科学史入门书”这个新任务上。
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>代码层面的触发点</h2>
+          <h3>触发规则太宽</h3>
+          <p>
+            <code>shouldTriggerDeeplyRecommend</code> 目前会把包含“推荐”的短句判定为推荐卡路径。你的句子“推荐一本适合入门的科学史书”长度短，并且包含“推荐”，所以命中。
+          </p>
+          <pre>miniapps/deeply/mobile/persona.ts:119-133
+
+const DEEPLY_RECOMMEND_TRIGGER_REGEX =
+  /(推荐|列|来一?组|换一组|再来|清单|学习计划|课题清单|课程清单)/;
+
+export function shouldTriggerDeeplyRecommend(visibleText: string): boolean {
+  if (visibleText === DEEPLY_RECOMMEND_VISIBLE_TEXT) return true;
+  const text = visibleText.trim();
+  if (text.length === 0 || text.length > 60) return false;
+  if (!DEEPLY_RECOMMEND_TRIGGER_REGEX.test(text)) return false;
+  if (!DEEPLY_RECOMMEND_HARD_HINT_REGEX.test(text)) return false;
+  return true;
+}</pre>
+
+          <h3>推荐路径强制“回顾刚才整段对话”</h3>
+          <p>
+            命中后，Deeply 不走普通聊天 prompt，而是走 <code>DEEPLY_RECOMMEND_INSTRUCTION</code>。这里写的是“用户点击了推荐课程按钮”，并要求“回顾我们刚才整段对话”。
+          </p>
+          <pre>miniapps/deeply/mobile/persona.ts:1208-1217
+
+[系统注入 · 用户点击了「推荐课程」按钮]
+
+请回顾我们刚才整段对话,从中提炼 3-5 个最值得深入学习的方向,
+然后把推荐结果作为一个 fenced block 返回。
+
+每个方向应满足:
+- 在对话里被实际提到过,或与对话主题强相关。</pre>
+
+          <h3>用户看见的文本和模型收到的文本不同</h3>
+          <p>
+            这是设计上有意为之：用户看到的是原句，OpenClaw 收到的是包装后的 <code>gatewayText</code>。这让 UI 很干净，但也意味着 intent routing 一旦错了，模型会被隐藏 prompt 带偏。
+          </p>
+          <pre>miniapps/deeply/mobile/index.ts:97-120
+
+if (shouldTriggerDeeplyRecommend(visibleText)) {
+  return {
+    visibleText,
+    gatewayText: [
+      DEEPLY_RECOMMEND_INSTRUCTION,
+      "",
+      "[用户消息]",
+      visibleText
+    ].join("\n")
+  };
+}</pre>
+        </div>
+
+        <div class="card">
+          <h2>问题大不大</h2>
+          <div class="severity">
+            <div class="severity-row">
+              <span class="badge ok">不算阻塞</span>
+              <span>它不影响连接、流式、卡片渲染、OpenClaw 调用，也不说明搜索 provider 配错。</span>
+            </div>
+            <div class="severity-row">
+              <span class="badge warn">体验要修</span>
+              <span>Deeply 是探索产品，用户换主题时如果还抓着旧主题，会明显降低信任感。</span>
+            </div>
+            <div class="severity-row">
+              <span class="badge warn">beta 前建议</span>
+              <span>不需要大重构，主要修 intent routing 和推荐 prompt 优先级。</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>建议怎么修</h2>
+          <div class="cols">
+            <div class="mini">
+              <h3>方案 A：拆分按钮推荐和文字推荐</h3>
+              <p>只有用户真的点“定制课程 / 推荐课程”按钮时，才使用“回顾整段对话”的推荐卡 prompt。</p>
+            </div>
+            <div class="mini">
+              <h3>方案 B：文字推荐优先当前句</h3>
+              <p>如果用户文字里有明确新主题，比如“科学史入门书”，prompt 必须把这个新主题作为最高优先级。</p>
+            </div>
+            <div class="mini">
+              <h3>方案 C：调窄关键词规则</h3>
+              <p>“推荐一本书 / 推荐一篇文章 / 推荐资料”不要自动进课程卡路径，除非同时出现“课程、课题、深入学习、几门”。</p>
+            </div>
+            <div class="mini">
+              <h3>方案 D：加主题切换判定</h3>
+              <p>如果当前用户消息和前文主题差异明显，就明确告诉模型“这是新主题，不要沿用上一轮主题”。</p>
+            </div>
+          </div>
+          <div class="callout">
+            最小可行修法：保留按钮路径不动；用户手打“推荐…”时改成一个新 prompt，写清楚“当前用户消息优先，只有用户说‘刚才/这个/继续/再推荐’才回顾旧对话”。
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <h2>快速判断</h2>
+        <p><strong>根因：</strong>推荐 intent 被误触发，加上推荐 prompt 强调旧对话。</p>
+        <p><strong>不是：</strong>OpenClaw 掉线、搜索 provider 缺失、Deeply API 不通。</p>
+        <p><strong>影响：</strong>用户换主题时可能答偏；不会破坏基础通信。</p>
+        <p><strong>优先级：</strong>P2，beta 前最好修。</p>
+
+        <h3>证据位置</h3>
+        <ul class="source-list">
+          <li><code>miniapps/deeply/mobile/persona.ts:119-133</code>：推荐触发规则。</li>
+          <li><code>miniapps/deeply/mobile/persona.ts:1208-1217</code>：推荐 prompt 要求回顾整段对话。</li>
+          <li><code>miniapps/deeply/mobile/index.ts:97-120</code>：命中后包装为推荐卡 gatewayText。</li>
+          <li><code>apps/koko-chat/sources/state/gateway.ts:1030-1088</code>：最终把 gatewayText 发给 OpenClaw。</li>
+        </ul>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>

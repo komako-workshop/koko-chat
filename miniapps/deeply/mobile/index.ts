@@ -88,13 +88,13 @@ let registered = false;
  */
 const deeplyExploreOutboundBuilder: OutboundMessageBuilder = async ({
   visibleText,
+  intent,
   isFirstUserTurn
 }) => {
-  // 触发推荐 fenced block 的两种来源:
-  //   1. 用户按下「推荐课程」按钮(visibleText 是固定话)
-  //   2. 用户在输入框里口语化要求推荐(命中 shouldTriggerDeeplyRecommend)
-  // 两种都走同一条专用推荐 prompt 路径,避免"按钮才出卡"的隐蔽边界。
-  if (shouldTriggerDeeplyRecommend(visibleText)) {
+  // 推荐卡 fenced block 只能由可信 UI 控件显式触发。用户在输入框里
+  // 手打"推荐一本书 / 列个清单"仍然走普通聊天路径,避免把旧上下文误包装成
+  // "用户点击了推荐按钮"。
+  if (shouldTriggerDeeplyRecommend(intent)) {
     if (isFirstUserTurn) {
       return {
         visibleText,

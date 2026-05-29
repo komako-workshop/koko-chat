@@ -89,6 +89,12 @@ interface GatewayState {
     text: string,
     options?: {
       attachments?: OpenClawChatAttachment[];
+      /**
+       * Trusted mini-app UI action hint. Free text typed by the user should
+       * not set this; outbound builders use it to distinguish buttons from
+       * keyword-like plain chat.
+       */
+      intent?: string;
     }
   ) => Promise<void>;
   retryFailedUserMessage: (conversationId: string, errorMessageId: string) => Promise<void>;
@@ -1002,6 +1008,7 @@ interface DispatchUserMessageInput {
   conversationId: string;
   text: string;
   attachments?: OpenClawChatAttachment[];
+  intent?: string;
   appendUserMessage: boolean;
   outboundContextMessages?: ChatMessage[];
 }
@@ -1033,6 +1040,7 @@ async function dispatchUserMessage(
   const outbound = await buildOutboundMessage({
     conversation: meta,
     visibleText: trimmed,
+    ...(input.intent !== undefined ? { intent: input.intent } : {}),
     isFirstUserTurn: isFirstUserTurn(messagesBeforeTurn),
     messagesBeforeTurn
   });
@@ -1043,7 +1051,12 @@ async function dispatchUserMessage(
   if (input.appendUserMessage) {
     useConversationStore.getState().setMessages(input.conversationId, (prev) => [
       ...prev,
-      { id: newMessageId(), role: "user", text: visibleText }
+      {
+        id: newMessageId(),
+        role: "user",
+        text: visibleText,
+        ...(input.intent !== undefined ? { intent: input.intent } : {})
+      }
     ]);
   }
   useConversationStore.getState().touch(input.conversationId, visibleText.slice(0, 120));
@@ -1372,6 +1385,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       conversationId,
       text,
       ...(options?.attachments !== undefined ? { attachments: options.attachments } : {}),
+      ...(options?.intent !== undefined ? { intent: options.intent } : {}),
       appendUserMessage: true
     });
   },
@@ -1410,6 +1424,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     await dispatchUserMessage(get, {
       conversationId,
       text: userMessage.text,
+      ...(userMessage.intent !== undefined ? { intent: userMessage.intent } : {}),
       appendUserMessage: false,
       outboundContextMessages: messages.slice(0, userIndex)
     });

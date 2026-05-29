@@ -3,6 +3,8 @@ import type { ChatMessage, ConversationMeta } from "@/state/conversations";
 export interface OutboundMessageInput {
   conversation: ConversationMeta;
   visibleText: string;
+  /** Optional mini-app action hint supplied by trusted in-app UI controls. */
+  intent?: string;
   /** Host-provided hint only. Mini-app storage remains authoritative. */
   isFirstUserTurn: boolean;
   /** Local messages already visible before this user turn is appended. */

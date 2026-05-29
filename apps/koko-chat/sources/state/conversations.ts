@@ -141,6 +141,8 @@ export interface ChatMessage {
   id: string;
   role: "user" | "agent";
   text: string;
+  /** Trusted in-app action hint captured with the user message for retries. */
+  intent?: string;
   /** Structured render payloads. Plain text remains the compatibility path. */
   blocks?: MessageBlock[];
   runId?: string;
@@ -351,6 +353,7 @@ function normalizeMessage(value: unknown): ChatMessage | null {
 
   const blocks = normalizeMessageBlocks(value.blocks);
   if (blocks !== undefined) out.blocks = blocks;
+  if (typeof value.intent === "string") out.intent = value.intent;
   if (typeof value.runId === "string") out.runId = value.runId;
   if (typeof value.error === "string") out.error = value.error;
 
