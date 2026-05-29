@@ -1,7 +1,16 @@
 #!/usr/bin/env node
 import { randomBytes } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -21,6 +30,7 @@ const DEFAULT_SCOPES = [
 ];
 const RELAY_STATE_FILE = "relay.json";
 const DEFAULT_RELAY_URL = "ws://47.84.141.40:8787";
+const RELAY_DAEMON_SERVICE = "kokochat-relay-connector.service";
 
 const argInput = process.argv.slice(2).join(" ");
 const input = process.env.KOKOCHAT_PAIRING_REQUEST || argInput || readStdin();
@@ -333,12 +343,22 @@ function startRelayConnector(root, relayId, configPath) {
   if (process.env.NODE_ENV === "test" && process.env.KOKOCHAT_SKIP_RELAY_CONNECTOR_START === "1") {
     return;
   }
+  const pidFile = join(root, "kokochat-relay", `${relayId}.pid`);
+  stopOtherRelayConnectors(root, relayId);
+
   // If the self-healing systemd daemon is managing the connector, don't spawn
   // a second one — two connectors on the same relay tunnel fight over it and
   // make the phone flap between connected/disconnected. The daemon
   // self-bootstraps from relay.json (which we just wrote), so a restart
   // picks up this pairing.
-  if (relayDaemonActive()) {
+  //
+  // Check whether the unit is installed, not just whether it is active. During
+  // first pairing the unit may be inactive/restarting because relay.json did
+  // not exist yet. Falling back to a detached connector in that moment creates
+  // the exact duplicate-connector race we are trying to avoid.
+  if (relayDaemonInstalled()) {
+    stopExistingConnector(pidFile);
+    stopDetachedRelayConnectors();
     restartRelayDaemon();
     return;
   }
@@ -347,8 +367,6 @@ function startRelayConnector(root, relayId, configPath) {
     throw new Error(`KokoChat relay connector is missing: ${connector}`);
   }
 
-  const pidFile = join(root, "kokochat-relay", `${relayId}.pid`);
-  stopOtherRelayConnectors(root, relayId);
   if (isPidAlive(pidFile)) {
     return;
   }
@@ -366,12 +384,17 @@ function startRelayConnector(root, relayId, configPath) {
   writeFileSync(pidFile, `${child.pid}\n`, { mode: 0o600 });
 }
 
-const RELAY_DAEMON_SERVICE = "kokochat-relay-connector.service";
-
-function relayDaemonActive() {
+function relayDaemonInstalled() {
   if (process.platform !== "linux") return false;
+  const unitPaths = [
+    `/etc/systemd/system/${RELAY_DAEMON_SERVICE}`,
+    `/run/systemd/system/${RELAY_DAEMON_SERVICE}`,
+    `/usr/lib/systemd/system/${RELAY_DAEMON_SERVICE}`,
+    `/lib/systemd/system/${RELAY_DAEMON_SERVICE}`
+  ];
+  if (unitPaths.some((path) => existsSync(path))) return true;
   try {
-    const result = spawnSync("systemctl", ["is-active", "--quiet", RELAY_DAEMON_SERVICE], {
+    const result = spawnSync("systemctl", ["cat", RELAY_DAEMON_SERVICE], {
       stdio: "ignore"
     });
     return result.status === 0;
@@ -384,9 +407,43 @@ function restartRelayDaemon() {
   // The daemon self-bootstraps from relay.json, which this run just wrote.
   // Restart so it reconnects with the freshly-approved device immediately.
   try {
+    spawnSync("systemctl", ["reset-failed", RELAY_DAEMON_SERVICE], { stdio: "ignore" });
     spawnSync("systemctl", ["restart", RELAY_DAEMON_SERVICE], { stdio: "ignore" });
   } catch {
     // Best effort; the daemon would also pick it up on its next reconnect.
+  }
+}
+
+function relayDaemonMainPid() {
+  if (process.platform !== "linux") return null;
+  try {
+    const result = spawnSync("systemctl", ["show", "-p", "MainPID", "--value", RELAY_DAEMON_SERVICE], {
+      encoding: "utf8"
+    });
+    const pid = Number(result.stdout.trim());
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function stopDetachedRelayConnectors() {
+  if (process.platform !== "linux") return;
+  const mainPid = relayDaemonMainPid();
+  let output = "";
+  try {
+    const result = spawnSync("pgrep", ["-f", "kokochat-relay-connector.mjs"], {
+      encoding: "utf8"
+    });
+    output = result.stdout ?? "";
+  } catch {
+    return;
+  }
+  for (const line of output.split(/\r?\n/)) {
+    const pid = Number(line.trim());
+    if (!Number.isInteger(pid) || pid <= 0) continue;
+    if (pid === process.pid || pid === mainPid) continue;
+    terminatePid(pid);
   }
 }
 
@@ -428,13 +485,42 @@ function stopExistingConnector(pidFile) {
   }
   const pid = Number(readFileSync(pidFile, "utf8").trim());
   if (!Number.isInteger(pid) || pid <= 0) {
+    rmSync(pidFile, { force: true });
     return;
   }
+  terminatePid(pid);
+  rmSync(pidFile, { force: true });
+}
+
+function terminatePid(pid) {
   try {
     process.kill(pid, "SIGTERM");
   } catch {
     // The previous connector is already gone.
+    return;
   }
+  for (let i = 0; i < 10; i += 1) {
+    if (!pidAlive(pid)) return;
+    sleepMs(100);
+  }
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch {
+    // The process exited between the final liveness check and SIGKILL.
+  }
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function sleepMs(ms) {
+  spawnSync("sh", ["-c", `sleep ${Math.max(0, ms) / 1000}`], { stdio: "ignore" });
 }
 
 function normalizeWsUrl(url) {

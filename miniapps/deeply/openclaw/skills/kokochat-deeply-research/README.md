@@ -5,10 +5,10 @@ When the user fills in a topic from the "定制课程" sheet, the deeply agent
 runs this skill to do Phase A: a real research pass + a `notes` fenced block.
 KokoChat then runs Phase B separately to turn those notes into a course outline.
 
-The skill is **prompt-only** — it has no `bin/`. Search goes through the
-shared `kokochat-search` wrapper skill, which calls KokoChat's hosted
-search proxy (`https://deeply.plus/deeply/search`). Fetching result pages still
-uses OpenClaw's built-in `web_fetch`.
+The skill is **prompt-only** — it has no `bin/`. Search goes through
+OpenClaw's built-in `web_fetch` by fetching KokoChat's hosted search proxy
+(`https://deeply.plus/deeply/search`). Fetching result pages also uses
+`web_fetch`.
 
 ## Install / update
 
@@ -18,11 +18,10 @@ Run from the repo root:
 pnpm openclaw:install
 ```
 
-This copies `kokochat-deeply-research` and `kokochat-search` into
-`~/.openclaw/agents/deeply/workspace/skills/`, adds both skills to the deeply
-agent's allowlist, and writes the deeply agent's tool config
-(`profile=minimal`, allowlisted `exec`, and `web_fetch`). Then restart the
-gateway so config + skill text get reloaded:
+This copies `kokochat-deeply-research` into
+`~/.openclaw/agents/deeply/workspace/skills/`, adds it to the deeply agent's
+allowlist, and writes the deeply agent's tool config (`profile=minimal` and
+`web_fetch`). Then restart the gateway so config + skill text get reloaded:
 
 ```bash
 launchctl kickstart -k "gui/$(id -u)/ai.openclaw.gateway"
@@ -45,8 +44,9 @@ The agent's job per `SKILL.md` is to:
 
 1. Narrate the research process in flowing Chinese (with `〔KP〕` sentinel
    at the end of each prose paragraph — see SKILL.md for why).
-2. Call `kokochat-search/bin/search.mjs` 1–3 times (and optionally
-   `web_fetch` on key URLs) to gather real sources.
+2. Call `web_fetch({ url: "https://deeply.plus/deeply/search?q=..." })` 1–3
+   times, then optionally `web_fetch` on key result URLs, to gather real
+   sources.
 3. End the reply with exactly one fenced block tagged
    `koko.deeply.research.notes` containing a JSON `{ topic, synthesis,
    sources }`. Every `url` in `sources` must come from a real hosted search /

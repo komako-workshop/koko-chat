@@ -40,7 +40,7 @@ export interface DeeplyResearchSource {
  * Research course 的 section 比普通课程多一个 `sources` 字段 —— 准备阶段
  * 调研到的、跟这一节相关的资料指针。讲解时 mainline prompt 把这些 sources
  * 注入给 agent 当"调研笔记",agent 可以(且鼓励)在讲解中 web_fetch 它们
- * 拿原文 + 再 web_search 补充新角度,临场创作内容。
+ * 拿原文 + 再用托管搜索补充新角度,临场创作内容。
  */
 export interface DeeplyResearchSection {
   index: number;

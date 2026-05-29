@@ -2,9 +2,9 @@
  * 解析 `koko.deeply.book.candidates` fenced block。
  *
  * "从一本书入门" disambiguation 阶段 agent 的交付物:用户在 sheet 里只输了
- * 一个书名,agent 这一轮先 web_search 找出 1-5 个可能的真实候选(同名书 /
- * 不同版本 / 译本),输出这个 fenced block,**不出 outline**,等用户在 chat
- * 里点候选卡片确认。
+ * 一个书名,agent 这一轮先通过 KokoChat 托管搜索(web_fetch deeply.plus)
+ * 找出 1-5 个可能的真实候选(同名书 / 不同版本 / 译本),输出这个 fenced
+ * block,**不出 outline**,等用户在 chat 里点候选卡片确认。
  *
  * 客户端把 fenced block 解开成:
  *   1. intro 段(prose,可选)

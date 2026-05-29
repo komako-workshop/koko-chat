@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -19,6 +19,8 @@ const DEFAULT_KNOWN_HOSTS = "/Users/lijianren/.ssh/known_hosts_openclaw_kokochat
 const DEFAULT_REMOTE_PAIRING_SCRIPT =
   "/root/.kokochat/koko-chat/openclaw/skills/kokochat-pairing/generate-kokochat-code.mjs";
 const DEFAULT_RELAY_HEALTH_URL = "http://47.84.141.40:8787/healthz";
+const DEFAULT_ALIYUN_REGION = "ap-southeast-1";
+const DEFAULT_ALIYUN_INSTANCE_ID = "i-t4n0481v1pkop5imukas";
 
 const args = parseArgs(process.argv.slice(2));
 const runId = args.runId ?? randomUUID().slice(0, 8);
@@ -32,7 +34,9 @@ const checks = [];
 
 async function main() {
   requireFile(passwordFile, "password file");
-  requireFile(knownHosts, "known_hosts file");
+  if ((args.pairVia ?? "ssh") === "ssh") {
+    requireFile(knownHosts, "known_hosts file");
+  }
 
   await checkRelayHealth();
   const pair = await pairFreshDevice();
@@ -106,6 +110,9 @@ async function pairFreshDevice() {
 }
 
 function runRemotePairing(requestCode) {
+  if (args.pairVia === "aliyun") {
+    return runRemotePairingViaAliyun(requestCode);
+  }
   const script = [
     "log_user 0",
     "set timeout 180",
@@ -117,6 +124,8 @@ function runRemotePairing(requestCode) {
     [
       "spawn ssh",
       "-o StrictHostKeyChecking=no",
+      "-o PubkeyAuthentication=no",
+      "-o PreferredAuthentications=password",
       `-o UserKnownHostsFile=${knownHosts}`,
       `root@${host}`,
       "$cmd"
@@ -133,6 +142,64 @@ function runRemotePairing(requestCode) {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"]
   });
+}
+
+function runRemotePairingViaAliyun(requestCode) {
+  const region = args.aliyunRegion ?? DEFAULT_ALIYUN_REGION;
+  const instanceId = args.aliyunInstanceId ?? DEFAULT_ALIYUN_INSTANCE_ID;
+  const command = [
+    "#!/usr/bin/env bash",
+    "set -euo pipefail",
+    `KOKOCHAT_PAIRING_REQUEST='${requestCode}' node ${shellQuote(remotePairingScript)}`
+  ].join("\n");
+  const run = JSON.parse(execFileSync("aliyun", [
+    "ecs",
+    "RunCommand",
+    "--RegionId",
+    region,
+    "--Type",
+    "RunShellScript",
+    "--InstanceId.1",
+    instanceId,
+    "--ContentEncoding",
+    "Base64",
+    "--CommandContent",
+    Buffer.from(command, "utf8").toString("base64"),
+    "--KeepCommand",
+    "false"
+  ], {
+    encoding: "utf8",
+    maxBuffer: 2 * 1024 * 1024
+  }));
+  const invokeId = run.InvokeId;
+  if (typeof invokeId !== "string" || invokeId.length === 0) {
+    throw new Error(`Aliyun RunCommand did not return InvokeId: ${JSON.stringify(run)}`);
+  }
+
+  for (let i = 0; i < 60; i += 1) {
+    const result = JSON.parse(execFileSync("aliyun", [
+      "ecs",
+      "DescribeInvocationResults",
+      "--RegionId",
+      region,
+      "--InvokeId",
+      invokeId,
+      "--ContentEncoding",
+      "PlainText"
+    ], {
+      encoding: "utf8",
+      maxBuffer: 2 * 1024 * 1024
+    }));
+    const item = result?.Invocation?.InvocationResults?.InvocationResult?.[0];
+    if (item?.InvokeRecordStatus === "Finished") {
+      if (Number(item.ExitCode) !== 0) {
+        throw new Error(`Aliyun pairing command failed exit=${item.ExitCode}: ${item.Output ?? item.ErrorInfo ?? ""}`);
+      }
+      return String(item.Output ?? "");
+    }
+    sleepSync(1000);
+  }
+  throw new Error(`timed out waiting for Aliyun pairing command ${invokeId}`);
 }
 
 async function assertAdminDeleteScope(gateway) {
@@ -363,6 +430,14 @@ function parseArgs(argv) {
   if (typeof out.passwordFile === "string") out.passwordFile = resolve(out.passwordFile);
   if (typeof out.knownHosts === "string") out.knownHosts = resolve(out.knownHosts);
   return out;
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
+function sleepSync(ms) {
+  spawnSync("sh", ["-c", `sleep ${Math.max(0, ms) / 1000}`], { stdio: "ignore" });
 }
 
 function quoteTcl(value) {

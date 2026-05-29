@@ -137,7 +137,7 @@ export interface DeeplyCourseSessionRecord {
   };
   /**
    * Book-only:用户在 CourseCustomizeSheet "从一本书入门" 里输入的元数据。
-   * 跟 research 走同样的 kickoff → web_search → outline 流程,但 prompt
+   * 跟 research 走同样的 kickoff → 托管搜索 → outline 流程,但 prompt
    * 侧重不同:agent 会先 disambiguate 书的版本,然后围绕书的章节结构出 outline。
    */
   bookInput?: {
@@ -441,7 +441,7 @@ export interface StartDeeplyBookCourseInput {
  * 启动一个"从一本书入门"型 course conversation。
  *
  * 跟 research / material 完全同形:不调 inferCourseOutline,outline 由 course
- * surface 自动 fire book kickoff 消息后由 agent 通过 web_search 找资料后产出。
+ * surface 自动 fire book kickoff 消息后由 agent 通过托管搜索找资料后产出。
  *
  * 跟 research 的核心差别在 prompt 文案:agent 会先 disambiguate 书的版本
  * (narration 里显式说"我理解你说的是 X 作者 Y 年版本,如不是请告诉我"),

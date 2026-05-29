@@ -51,8 +51,7 @@ you can paste this request to the agent:
 > <https://github.com/komako-workshop/koko-chat/blob/main/openclaw/README.md>.
 > Run the installer from the repository. Do not ask for API keys. Do not edit
 > model/provider credentials. After it finishes, report the installed KokoChat
-> skills and whether the deeply agent has the allowlisted
-> `kokochat-search` exec tool.
+> skills and whether the deeply agent has `web_fetch` enabled.
 
 The command the agent should end up running is:
 
@@ -68,9 +67,9 @@ node "$KOKOCHAT_REPO/scripts/install-openclaw-support.mjs"
 ```
 
 Important: KokoChat's hosted Deeply search uses the `deeply.plus` API. Users do
-**not** need a Brave Search API key in their own OpenClaw config; the installer
-only installs a local `kokochat-search` wrapper (shared across mini-apps) and
-an exec allowlist for it.
+**not** need a Brave Search API key or a `tools.web.search.provider` in their
+own OpenClaw config. The deeply agent uses built-in `web_fetch` to fetch the
+KokoChat hosted search URL and then fetch result pages.
 
 When the installer upgrades OpenClaw, Gateway can briefly disconnect. Let the
 script finish, then retry the same phone pairing request if the first attempt
@@ -98,18 +97,17 @@ The installer creates the KokoChat agents if needed and syncs:
   (also on ClawHub as
   [`kokochat-deeply-research`](https://clawhub.ai/komako-workshop/kokochat-deeply-research) —
   `openclaw skills install kokochat-deeply-research --agent deeply`)
-- `openclaw/skills/kokochat-search` →
-  `~/.openclaw/agents/deeply/workspace/skills/kokochat-search`
-  (shared skill; other mini-apps can opt in via the installer's SKILLS list,
-  also published as [`kokochat-search` on ClawHub](https://clawhub.ai/komako-workshop/kokochat-search)
-  so any OpenClaw user can install it standalone via
-  `openclaw skills install kokochat-search`)
 
-Deeply research search is routed through KokoChat's hosted search proxy via the
-local `kokochat-search` wrapper. The user's OpenClaw does **not** need a
-Brave Search API key. The installer also raises `tools.web.fetch.maxChars` and
+Deeply research search is routed through KokoChat's hosted search proxy via
+`web_fetch({ url: "https://deeply.plus/deeply/search?q=..." })`. The user's
+OpenClaw does **not** need a Brave Search API key or any configured web-search
+provider. The installer also raises `tools.web.fetch.maxChars` and
 `tools.web.fetch.maxCharsCap` to at least `60000` so Deeply can read more page
 body text when it calls `web_fetch({ url, maxChars: 60000 })`.
+
+On clean or older OpenClaw configs, the installer also fills missing
+`gateway.mode` with `local`; newer Gateway builds refuse to start when that
+field is absent.
 
 Sanity-check manually on OpenClaw versions that support `--agent`:
 
@@ -118,7 +116,6 @@ openclaw skills info kokochat-pairing --agent main
 openclaw skills info kokochat-tavern-search --agent tavern
 openclaw skills info kokochat-tavern-roleplay --agent tavern-roleplay
 openclaw skills info kokochat-deeply-research --agent deeply
-openclaw skills info kokochat-search --agent deeply
 ```
 
 ## Why these files are here

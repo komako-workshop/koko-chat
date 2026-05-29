@@ -134,7 +134,7 @@ interface CourseCustomizeSheetProps {
 /**
  * "定制课程" 入口弹窗。四张实卡:
  *
- * - **深度调研一个主题** —— agent 主动 web_search/web_fetch,综合多方资料后出课
+ * - **深度调研一个主题** —— agent 主动用托管搜索/web_fetch,综合多方资料后出课
  * - **基于一个链接** —— 用户贴 URL,agent web_fetch 后围绕这份资料拆课
  * - **从一本书入门** —— 用户给书名,agent 先 disambiguate 再围绕章节拆精读课
  * - **基于你的兴趣** —— 不创建 course,直接在主聊里 dispatch 推荐请求

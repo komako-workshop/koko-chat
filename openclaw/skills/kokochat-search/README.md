@@ -1,9 +1,10 @@
 # kokochat-search
 
-OpenClaw-side wrapper for KokoChat's hosted search API. Shared across mini-apps:
-Deeply uses it for research / outline / per-section lookups, and any future
-mini-app (e.g. Koko's general assistant turn) can route the same way without
-shipping a Brave / Tavily / Serper key on the user's machine.
+OpenClaw-side wrapper for KokoChat's hosted search API. This is an optional
+standalone skill for agents that want hosted web search without shipping a
+Brave / Tavily / Serper key on the user's machine. KokoChat's built-in Deeply
+agent now calls the same hosted API directly through OpenClaw's built-in
+`web_fetch`, so the main KokoChat installer does not install this wrapper.
 
 Also published on ClawHub so any OpenClaw user can install it standalone:
 
@@ -12,8 +13,7 @@ openclaw skills install kokochat-search --agent <your-agent>
 ```
 
 After install, allowlist `bin/search.mjs` via `openclaw approvals` so the agent
-is allowed to exec it. KokoChat's `install-openclaw-support.mjs` does this
-automatically for the `deeply` agent.
+is allowed to exec it.
 
 The wrapper lives in `bin/search.mjs` and calls:
 
@@ -27,10 +27,7 @@ with:
 { "query": "AI investor outlook 2026", "count": 5 }
 ```
 
-The Brave API key is configured only on the `deeply.plus` server. User
-OpenClaw installs this wrapper via `scripts/install-openclaw-support.mjs`
-into whichever agent workspaces opt in (currently `deeply`; others can join
-by editing the installer's SKILLS list).
+The Brave API key is configured only on the `deeply.plus` server.
 
 Optional env for development / private deployments:
 

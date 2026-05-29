@@ -23,7 +23,6 @@ const openclawHome = resolve(
 const MIN_OPENCLAW_VERSION = "2026.4.15";
 const MIN_OPENCLAW_VERSION_PARTS = [2026, 4, 15];
 const TARGET_OPENCLAW_VERSION = "2026.5.22";
-const DEFAULT_WEB_SEARCH_PROVIDER = "duckduckgo";
 const DEFAULT_WEB_FETCH_MAX_CHARS = 60_000;
 const DEFAULT_WEB_FETCH_MAX_CHARS_CAP = 60_000;
 let openclawBin = "openclaw";
@@ -827,6 +826,7 @@ function configureAgentOpenClawConfig(installed) {
   if (dryRun) return;
 
   const config = readJsonObject(configPath);
+  ensureGatewayConfig(config);
   ensureDefaultWebToolConfig(config);
 
   const agents = isRecord(config.agents) ? config.agents : {};
@@ -904,7 +904,7 @@ function configureExecApprovals(workspaceByAgent) {
 function pushExecApprovalsToGateway(approvalsPath) {
   // `openclaw.json` (agents / tools) is auto hot-reloaded by the gateway, but
   // `exec-approvals.json` is not. Push it explicitly so the running gateway
-  // accepts newly allowlisted exec entries (e.g. kokochat-search) without a
+  // accepts newly allowlisted exec entries (e.g. tavern card search) without a
   // manual restart — otherwise the first agent call still hits
   // "exec denied: allowlist miss" and prompts the user for approval.
   //
@@ -985,17 +985,20 @@ function ensureDefaultWebToolConfig(config) {
   config.tools = tools;
   const web = isRecord(tools.web) ? tools.web : {};
   tools.web = web;
-  const search = isRecord(web.search) ? web.search : {};
-  web.search = search;
   const fetch = isRecord(web.fetch) ? web.fetch : {};
   web.fetch = fetch;
 
-  const provider = typeof search.provider === "string" ? search.provider.trim() : "";
-  if (provider.length > 0) {
+  const search = isRecord(web.search) ? web.search : null;
+  const provider = typeof search?.provider === "string" ? search.provider.trim() : "";
+  if (provider === "duckduckgo") {
+    delete search.provider;
+    log("web_search provider: removed legacy KokoChat duckduckgo default");
+  } else if (provider.length > 0) {
     log(`web_search provider: keep existing ${provider}`);
-  } else {
-    search.provider = DEFAULT_WEB_SEARCH_PROVIDER;
-    log(`web_search provider: default ${DEFAULT_WEB_SEARCH_PROVIDER} (key-free)`);
+  }
+  if (search !== null && Object.keys(search).length === 0) {
+    delete web.search;
+    log("web_search config: removed empty legacy search block");
   }
 
   ensureMinimumNumberConfig(fetch, "maxChars", DEFAULT_WEB_FETCH_MAX_CHARS, "web_fetch maxChars");
@@ -1005,6 +1008,18 @@ function ensureDefaultWebToolConfig(config) {
     DEFAULT_WEB_FETCH_MAX_CHARS_CAP,
     "web_fetch maxCharsCap"
   );
+}
+
+function ensureGatewayConfig(config) {
+  const gateway = isRecord(config.gateway) ? config.gateway : {};
+  config.gateway = gateway;
+  const mode = typeof gateway.mode === "string" ? gateway.mode.trim() : "";
+  if (mode.length === 0) {
+    gateway.mode = "local";
+    log("gateway mode: default local");
+  } else {
+    log(`gateway mode: keep existing ${mode}`);
+  }
 }
 
 function ensureMinimumNumberConfig(target, key, minimum, label) {

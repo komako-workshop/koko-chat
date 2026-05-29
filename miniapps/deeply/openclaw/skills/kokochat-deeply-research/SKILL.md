@@ -14,8 +14,6 @@ metadata:
   openclaw:
     emoji: "🔍"
     requires:
-      skills:
-        - kokochat-search
       capabilities:
         - network
       platforms:

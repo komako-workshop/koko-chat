@@ -42,18 +42,16 @@ openclaw skills install kokochat-search --agent <your-agent>
 ```
 
 After install, add it to the agent's exec allowlist so the agent is allowed
-to invoke `bin/search.mjs`. KokoChat's own installer does this
-automatically; standalone users can do it via
-`openclaw approvals` (see OpenClaw docs).
+to invoke `bin/search.mjs`; standalone users can do it via `openclaw approvals`
+(see OpenClaw docs). KokoChat's built-in Deeply agent no longer installs this
+wrapper by default: it calls the same hosted search API directly through
+OpenClaw's built-in `web_fetch`.
 
 ## Tool command
 
 ```bash
 ~/.openclaw/agents/<your-agent>/workspace/skills/kokochat-search/bin/search.mjs '{"query":"EN keywords","count":5}'
 ```
-
-(Inside KokoChat's `deeply` agent, the host prompt rewrites this to the
-real absolute path automatically.)
 
 Input:
 

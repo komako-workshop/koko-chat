@@ -194,7 +194,7 @@ function renderHtml(data) {
   <div class="pipeline">
     <div class="step"><div class="step-num">1</div><div class="step-text">客户端把用户的可见输入(<code>请围绕「...」做一份深度调研课程</code>)包成 <strong>Phase A kickoff prompt</strong>(下面 §A)→ <code>chat.send</code> 给 deeply agent。</div></div>
     <div class="step-arrow">↓</div>
-    <div class="step"><div class="step-num">2</div><div class="step-text"><strong>Phase A · Deeply agent 一次 run</strong>:agent 在同一 turn 内多次 <code>web_search</code> / <code>web_fetch</code>,边搜边输出中文 prose(<code>〔KP〕</code> 分段),最后 emit 一个 <code>koko.deeply.research.notes</code> fenced block(扁平 sources + synthesis)。</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text"><strong>Phase A · Deeply agent 一次 run</strong>:agent 在同一 turn 内多次 <code>web_fetch</code> 托管搜索 / 抓网页,边搜边输出中文 prose(<code>〔KP〕</code> 分段),最后 emit 一个 <code>koko.deeply.research.notes</code> fenced block(扁平 sources + synthesis)。</div></div>
     <div class="step-arrow">↓ 客户端 transformer 检测到 notes block,剪掉 raw JSON,显示过桥消息,触发 Phase B</div>
     <div class="step"><div class="step-num">3</div><div class="step-text"><strong>Phase B · 单次 <code>inferOnce</code></strong>(同一 deeply agent,新 oneshot session,无 web 工具):用 Phase A 的 synthesis + sources 拼一个新 prompt(下面 §B),让模型只做"拆 section + 分配 sources + 写 introduction"。输出 <code>koko.deeply.research.outline</code> JSON。</div></div>
     <div class="step-arrow">↓</div>
@@ -210,7 +210,7 @@ function renderHtml(data) {
 <section class="phase">
   <div class="phase-head">
     <h2 class="phase-title"><span class="badge">§A</span>Phase A · Agent 调研轮</h2>
-    <div class="phase-meta">用时 <strong id="meta-a-time"></strong>s · <code>chat.send</code> 至 <code>deeply</code> agent,allowlist 含 web_search / web_fetch</div>
+    <div class="phase-meta">用时 <strong id="meta-a-time"></strong>s · <code>chat.send</code> 至 <code>deeply</code> agent,allowlist 含 web_fetch</div>
   </div>
 
   <div class="sub">

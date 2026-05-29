@@ -564,7 +564,7 @@ const deeplyCourseOutboundBuilder: OutboundMessageBuilder = async ({
     // Research / material / book / library 课:每节由 agent 临场基于 sources
     // (+ web tools / 用户资料)创作内容,走 buildResearchCourseSectionPrompt。
     // 4 种 kind 共用同一个 prompt builder,只在 kind 参数上区分文案侧重 —
-    // research 鼓励多 web_search 拿新角度,material 优先用用户给的资料、
+    // research 鼓励通过托管搜索拿新角度,material 优先用用户给的资料、
     // book / library 围绕原书章节结构 + 权威解读。library 跟 book 共用
     // section prompt(都是"围绕这本书讲解",来源不同只在 kickoff 阶段)。
     if (
