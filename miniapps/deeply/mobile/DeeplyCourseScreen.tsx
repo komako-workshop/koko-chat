@@ -39,6 +39,8 @@ import {
   advanceDeeplyCourseProgress,
   useDeeplyCourseProgress
 } from "./courseProgress";
+import { getMiniAppStorage } from "@/runtime/miniAppStorage";
+import { DEEPLY_MINI_APP_ID } from "./constants";
 import { inferCourseQuickReplies } from "./inferCourseQuickReplies";
 import type { DeeplyQuickReplyChip } from "./parseCourseQuickReplies";
 import { parseCourseSectionHeader } from "./parseCourseSectionHeader";
@@ -75,7 +77,46 @@ interface QuickRepliesEntry {
  */
 const QUICK_REPLIES_STALE_MS = 35_000;
 const QUICK_REPLIES_WATCHDOG_TICK_MS = 3_000;
+// In-memory cache: fast path within a session. Cleared on JS reload.
 const quickRepliesCache = new Map<string, QuickRepliesEntry>();
+
+// Persistent backing store so a reload doesn't re-infer (a fresh LLM call)
+// quick replies for lecture turns we already generated. Keyed by the agent
+// message runId (stable across reloads — messages live in MMKV). Only the
+// final `ready` chips are persisted; loading/error states stay ephemeral.
+const QUICK_REPLIES_STORAGE = getMiniAppStorage(DEEPLY_MINI_APP_ID);
+const QUICK_REPLIES_PREFIX = "quickreplies.";
+
+function loadPersistedQuickReplies(runId: string): QuickRepliesEntry | undefined {
+  const chips = QUICK_REPLIES_STORAGE.getJson<DeeplyQuickReplyChip[]>(
+    `${QUICK_REPLIES_PREFIX}${runId}`
+  );
+  if (Array.isArray(chips) && chips.length > 0) {
+    return { runId, status: "ready", chips, generation: 0 };
+  }
+  return undefined;
+}
+
+function persistQuickReplies(runId: string, chips: DeeplyQuickReplyChip[]): void {
+  if (chips.length === 0) return;
+  QUICK_REPLIES_STORAGE.setJson(`${QUICK_REPLIES_PREFIX}${runId}`, chips);
+}
+
+/**
+ * Resolve a ready entry from the in-memory cache, falling back to the
+ * persistent store (and warming the cache from it). Returns undefined when
+ * we've never generated chips for this runId.
+ */
+function resolveCachedQuickReplies(runId: string): QuickRepliesEntry | undefined {
+  const inMemory = quickRepliesCache.get(runId);
+  if (inMemory !== undefined) return inMemory;
+  const persisted = loadPersistedQuickReplies(runId);
+  if (persisted !== undefined) {
+    quickRepliesCache.set(runId, persisted);
+    return persisted;
+  }
+  return undefined;
+}
 
 const DEEPLY_BG = "#F9F9F7";
 const DEEPLY_INK = "#111111";
@@ -525,7 +566,7 @@ export function DeeplyCourseScreen({
   const fireQuickReplies = useCallback((lastAgent: ChatMessage) => {
     const runId = lastAgent.runId;
     if (runId === undefined) return;
-    const cached = quickRepliesCache.get(runId);
+    const cached = resolveCachedQuickReplies(runId);
     if (cached !== undefined) {
       setQuickRepliesByRunId((prev) => ({
         ...prev,
@@ -561,6 +602,7 @@ export function DeeplyCourseScreen({
         : { runId, status: "error", generation };
       if (result.ok) {
         quickRepliesCache.set(runId, nextEntry);
+        persistQuickReplies(runId, result.chips);
       } else if (typeof __DEV__ === "undefined" || __DEV__ === true) {
         console.warn("[deeply-course] quick replies failed", result.error);
       }
@@ -586,7 +628,7 @@ export function DeeplyCourseScreen({
     if (lastAgent === null) return;
     const runId = lastAgent.runId;
     if (runId === undefined) return;
-    const existing = quickRepliesStateRef.current[runId] ?? quickRepliesCache.get(runId);
+    const existing = quickRepliesStateRef.current[runId] ?? resolveCachedQuickReplies(runId);
     if (existing !== undefined) {
       if (quickRepliesStateRef.current[runId] === undefined) {
         setQuickRepliesByRunId((prev) => ({
@@ -654,7 +696,7 @@ export function DeeplyCourseScreen({
     if (lastAgent === null) return null;
     if (lastAgent.runId === undefined) return null;
     if (parseCourseSectionHeader(lastAgent.text) === null) return null;
-    return quickRepliesByRunId[lastAgent.runId] ?? quickRepliesCache.get(lastAgent.runId) ?? null;
+    return quickRepliesByRunId[lastAgent.runId] ?? resolveCachedQuickReplies(lastAgent.runId) ?? null;
   }, [messages, quickRepliesByRunId]);
 
   // 消息流跟随:只在"用户当前贴底"时才跟,跟 standard chat 一致。
