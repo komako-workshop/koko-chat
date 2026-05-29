@@ -1,28 +1,18 @@
 /**
- * Parser for the Phase A `koko.deeply.research.plan` fenced block.
+ * Parser for the `koko.deeply.research.plan` fenced block.
  *
- * Two-phase research v2:
+ * Single-pass plan: the Deeply agent searches the web to ground itself, then
+ * designs the course outline and emits ONE `koko.deeply.research.plan` block:
+ *   { version, topic, courseTitle, introduction, sections: [{ index, title }] }
  *
- *   Phase A (this block) — Deeply agent does *exploratory* research and then
- *     designs the course outline:
- *     - calls hosted web_fetch search 1-3 times only to calibrate its read
- *       of the topic (especially for time-sensitive topics like "2026 ...")
- *     - streams Chinese prose narration so the user sees the planning
- *     - finishes by emitting ONE `koko.deeply.research.plan` block:
- *         { courseTitle, introduction, sections: [{ index, title, searchHint }] }
- *     - does NOT cite per-section sources — Phase B owns that
+ * It does NOT cite per-section sources. The client lands this plan straight
+ * into the course (applyResearchPlanToCourse); each section's material is
+ * searched live by that section's lecture turn, not here.
  *
- *   Phase B (separate `inferOnce` on the same deeply agent) — opens
- *     `koko.deeply.research.plan`, for each section runs hosted search
- *     using `searchHint`, picks 2-4 results, and emits the existing
- *     `koko.deeply.research.outline` block. Each section finally carries
- *     its own real-URL sources.
- *
- * Split goal: Phase A's attention is "what's worth teaching", Phase B's
- * attention is "for each topic, what real sources back it up". Earlier
- * `notes → outline` pipeline let raw search results dictate the section
- * shape, which is why a "viewpoints by famous investor" topic could come
- * out as "bulls vs bears" — the article-level sources steamrolled the plan.
+ * Designing the teaching structure first (rather than letting raw search
+ * results dictate section shape) keeps the outline aligned with the user's
+ * ask — e.g. a "viewpoints by famous investor" topic stays organised around
+ * those people instead of collapsing into a generic "bulls vs bears" split.
  */
 
 import { extractFencedBlock } from "@/runtime/messageBlocks";
@@ -30,7 +20,6 @@ import { extractFencedBlock } from "@/runtime/messageBlocks";
 export const DEEPLY_RESEARCH_PLAN_BLOCK_TYPE = "koko.deeply.research.plan";
 
 const MAX_TITLE_CHARS = 40;
-const MAX_SEARCH_HINT_CHARS = 200;
 const MAX_INTRO_CHARS = 1200;
 const MAX_COURSE_TITLE_CHARS = 60;
 const MIN_SECTIONS = 2;
@@ -39,12 +28,6 @@ const MAX_SECTIONS = 40;
 export interface DeeplyResearchPlanSection {
   index: number;
   title: string;
-  /**
-   * Optional EN search keywords. The current pipeline searches per-section at
-   * lecture time (not here), so this is no longer required; kept so older
-   * plans that still carry it parse cleanly.
-   */
-  searchHint?: string;
 }
 
 export interface DeeplyResearchPlan {
@@ -58,10 +41,6 @@ export interface DeeplyResearchPlan {
 export interface ParseSuccess { ok: true; value: DeeplyResearchPlan }
 export interface ParseFailure { ok: false; error: string }
 export type ParseResult = ParseSuccess | ParseFailure;
-
-export function isDeeplyResearchPlanStream(text: string): boolean {
-  return /```[ \t]*koko\.deeply\.research\.plan\b/.test(text);
-}
 
 export function parseDeeplyResearchPlan(assistantText: string): ParseResult {
   const fenced = extractFencedBlock(assistantText, DEEPLY_RESEARCH_PLAN_BLOCK_TYPE);
@@ -100,15 +79,9 @@ export function parseDeeplyResearchPlan(assistantText: string): ParseResult {
       trimString(item.title) || trimString(item.name)
     ).slice(0, MAX_TITLE_CHARS);
     if (title.length === 0) continue;
-    const searchHint = (
-      trimString(item.searchHint) ||
-      trimString(item.search_hint) ||
-      trimString(item.query) ||
-      trimString(item.search)
-    ).slice(0, MAX_SEARCH_HINT_CHARS);
     const rawIndex = typeof item.index === "number" ? Math.trunc(item.index) : NaN;
     const index = Number.isFinite(rawIndex) && rawIndex > 0 ? rawIndex : i + 1;
-    sections.push(searchHint.length > 0 ? { index, title, searchHint } : { index, title });
+    sections.push({ index, title });
   }
 
   if (sections.length < MIN_SECTIONS) {
@@ -120,11 +93,10 @@ export function parseDeeplyResearchPlan(assistantText: string): ParseResult {
   const trimmed = sections.slice(0, MAX_SECTIONS);
   // Stable renumber so progress UI is monotonic regardless of what the
   // model wrote.
-  const renumbered = trimmed.map((section, idx) => (
-    section.searchHint !== undefined
-      ? { index: idx + 1, title: section.title, searchHint: section.searchHint }
-      : { index: idx + 1, title: section.title }
-  ));
+  const renumbered = trimmed.map((section, idx) => ({
+    index: idx + 1,
+    title: section.title
+  }));
 
   return {
     ok: true,

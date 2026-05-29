@@ -57,7 +57,6 @@ import {
 } from "./parseResearchPlan";
 import {
   DEEPLY_RESEARCH_OUTLINE_BLOCK_TYPE,
-  isDeeplyResearchOutlineStream,
   parseDeeplyResearchOutline
 } from "./parseResearchOutline";
 import { BookCandidateCard, isDeeplyBookCandidate } from "./BookCandidateCard";
@@ -315,9 +314,9 @@ function transformDeeplyCourseAgentResponse({
     };
   }
 
-  // ─── Phase A research plan(深度调研课程第一阶段产物)───
+  // ─── research plan(深度调研课程的课程目录产物)───
   // Agent 在脑暴轮结尾输出 `koko.deeply.research.plan` fenced block:
-  // courseTitle + introduction + sections[title + searchHint]。客户端在这里:
+  // courseTitle + introduction + sections[title]。客户端在这里:
   //   1. 把 fenced block 之前的 prose 留下来(用户已经在 stream 里看过了)
   //   2. 剪掉 fenced block 本身(用户不需要看 raw JSON)
   //   3. 直接把目录落库 + 切 ready(没有后续 outline inferOnce 阶段了)。
@@ -739,7 +738,6 @@ export function registerDeeplyMiniApp(): void {
       return display === text ? null : display;
     }
   });
-  void isDeeplyResearchOutlineStream;
   registerSharedBlockRenderer(
     DEEPLY_CARD_BLOCK_TYPE,
     isDeeplyRecommendationCard,

@@ -111,15 +111,14 @@ export interface DeeplyCourseSessionRecord {
    */
   researchTopic?: string;
   /**
-   * Research-only:Phase A(agent 脑暴轮)产出的课程目录 plan
-   * (courseTitle / introduction / sections[title + searchHint])。
-   * 缓存在 record 里有两个用途:
+   * Research-only:agent 脑暴轮产出的课程目录 plan
+   * (courseTitle / introduction / sections[title])。缓存在 record 里有两个用途:
    *
-   *   1. Phase B inferOnce 失败时,用户在 bootstrap error banner 上点重试,
-   *      可以直接重做 Phase B 而不用让 agent 再脑暴一遍。
+   *   1. 用户在 bootstrap error banner 上点重试时,直接把缓存的 plan 重新
+   *      落库即可(目录早就生成好,落库是纯本地操作),不用让 agent 再脑暴一遍。
    *   2. 调试时可以离线 inspect agent 设计的目录。
    *
-   * Phase A 成功一次就写一次,后续不再变。Phase B 反复重试只读它、不改它。
+   * 成功一次就写一次,后续不再变。
    */
   cachedResearchPlan?: DeeplyResearchPlan;
   /**

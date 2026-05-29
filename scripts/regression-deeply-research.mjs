@@ -4,31 +4,23 @@
  * the full transcript so we can verify prompt changes from this repo
  * actually take effect on the deeply agent.
  *
- * Two-phase pipeline v2 (matches what the KokoChat client runs):
+ * Single-turn plan pipeline (matches what the KokoChat client runs):
  *
- *   Phase A — plan agent turn:
+ *   Plan agent turn:
  *     KokoChat wraps the user's "请围绕「...」做一份深度调研课程" into a
  *     long gatewayText (see persona.ts → buildResearchKickoffPrompt). The
- *     agent does light exploratory search to calibrate, then emits one
- *     `koko.deeply.research.plan` fenced block (courseTitle + introduction
- *     + sections[title + searchHint]). No per-section sources yet.
+ *     agent searches first (mandatory for time-sensitive topics), then emits
+ *     one `koko.deeply.research.plan` fenced block (courseTitle + introduction
+ *     + sections[title]). No per-section sources — those are fetched live by
+ *     each lecture turn when the user enters a section.
  *
- *   Phase B — per-section search inferOnce on the same agent:
- *     KokoChat takes Phase A's plan, builds a new prompt
- *     (persona.ts → buildResearchOutlineFromPlanPrompt), and chat.send's
- *     it with a fresh oneshot session key. The agent searches once per
- *     section using each `searchHint` and emits one
- *     `koko.deeply.research.outline` fenced block (per-section sources).
+ *   The client lands that plan straight into the course (applyResearchPlanToCourse);
+ *   there is no follow-up outline inferOnce step. We replicate the single turn
+ *   here so regression runs match production exactly. The inline-copied prompt
+ *   below MUST be kept in sync with persona.ts.
  *
- *   We replicate both phases here so regression runs match production
- *   exactly. Inline-copied prompts below MUST be kept in sync with
- *   persona.ts.
- *
- *   On test:
- *     - Phase A raw.txt should carry a `koko.deeply.research.plan` block
- *       whose section titles reflect a teaching structure for the topic.
- *     - Phase B raw.txt should parse into a research outline whose
- *       per-section sources URLs are real (spot-check with curl/HEAD).
+ *   On test: the raw.txt should carry a `koko.deeply.research.plan` block whose
+ *   section titles reflect a teaching structure for the topic.
  *
  * Usage:
  *   node scripts/regression-deeply-research.mjs --topic "一二级投资人现在怎么看AI"
@@ -38,7 +30,7 @@
  *
  * Output goes under ./artifacts/deeply-research-test-<timestamp>.{
  *   phase-a.prompt.txt, phase-a.events.json, phase-a.raw.txt, phase-a.plan.json,
- *   phase-b.prompt.txt, phase-b.events.json, phase-b.raw.txt, phase-b.outline.md
+ *   phase-a.plan.md
  * } so multiple runs can be diffed.
  *
  * Sync notes:
@@ -277,30 +269,33 @@ function buildResearchKickoffVisibleText({ topic, sections }) {
 
 /**
  * Mirror of miniapps/deeply/mobile/persona.ts → buildResearchKickoffPrompt.
- * Phase A: agent explores + designs course outline, emits `koko.deeply.research.plan`.
- * Keep in sync when persona.ts changes.
+ * Single turn: agent searches first, then designs the course outline and emits
+ * one `koko.deeply.research.plan` block. Keep in sync when persona.ts changes.
  */
 function buildResearchKickoffPromptInline({ topic, sections }) {
   const visible = buildResearchKickoffVisibleText({ topic, sections });
   const sectionHint = sections > 0
-    ? `用户期望约 ${sections} 节,以材料自然结构为准上下浮动。`
-    : `节数自由决定,按题目自然结构来。`;
-  return `[系统注入 · 深度调研课程 Phase A:出课程目录 plan]
+    ? `用户期望约 ${sections} 节,以题目自然结构为准上下浮动。`
+    : `节数自由决定,按题目自然结构来 —— 别为了铺满硬拆,也别为了简洁硬并。`;
+  return `[系统注入 · 深度调研课程:出课程目录]
 
-按 \`kokochat-deeply-research\` skill 走两阶段研报流程。这一轮的任务
-**不是收集材料**,而是**理解题目并设计一门课的教学目录**:用户想学
-什么?这道题值得讲哪些主题?怎么拆才适合学?
+按 \`kokochat-deeply-research\` skill 走。这一轮的任务**不是收集材料**,
+而是**理解题目并设计一门课的教学目录**:用户想学什么?这道题值得讲
+哪些主题?怎么拆才适合学?
 
-材料收集留给 Phase B —— 它会拿到你这份 plan,然后对每节按你给的
-\`searchHint\` 单独联网搜,挂上真实 sources。你**不要在 plan 里 cite URL,
-不要带 sources 字段**。
+每节的具体资料**不在这一轮找** —— 等用户进到某一节讲解时,我会让你
+针对那一节临场联网搜最新、最相关的材料。所以现在你**不挂 sources、不
+写 URL**,专心把目录设计好。
 
 # 你这一轮怎么工作
 
 **先联网搜,再设计目录。** 设计一门好课的前提是你真的了解这道题当下的
-实际情况。**不要凭训练数据拍脑袋出目录**,尤其题目带时间词、具体人名、
-近期事件、"现在 / 最新 / 怎么看" 这类时效信号时,**必须先搜**。搜几次、
-怎么搜你自己判断 —— 搜到对题目有把握为止。
+实际情况 —— 有哪些关键人物 / 流派 / 事件 / 最新进展值得讲。**不要凭训练
+数据拍脑袋出目录**,尤其题目带时间词(如 "2026")、具体人名、近期事件、
+"现在 / 最新 / 怎么看" 这类时效信号时,**必须先搜**,看看现在真实的讨论
+长什么样,再据此拆节。
+
+搜几次、怎么搜你自己判断 —— 搜到对题目有把握、能设计出好目录为止。
 
 联网用 \`web_fetch\`:
 
@@ -311,14 +306,15 @@ web_fetch({
 })
 \`\`\`
 
-返回 body 是 JSON,结构 \`{ ok, provider, query, count, results: [{ title, url, snippet }] }\`。
-读 snippet 了解现状即可,**不要把搜到的 URL 写进 plan**。只有 \`ok=false\` /
-确实搜不到时,才退回凭理解设计目录,并在 prose 里说明。
+返回 body 是 JSON \`{ ok, provider, query, count, results: [{ title, url, snippet }] }\`。
+读 snippet 了解现状即可(URL 不用写进 plan,每节资料讲解时再单独搜)。
+只有当 \`ok=false\` / 搜索确实拿不到结果时,才退回凭理解设计目录,并在
+prose 里如实说明。
 
 # Prose 节奏
 
 每段中文 prose 末尾打 \`〔KP〕\` sentinel(客户端会替换成段落分隔)。
-搜索前后简单说一下你在想什么、搜到了什么、最终目录怎么定的。综合段
+搜索前后简单说一下你在想什么、查到了什么、最终目录怎么定的。综合段
 之后接 fenced block。
 
 # Output schema
@@ -333,20 +329,14 @@ web_fetch({
   "courseTitle": "5-60 字课程标题",
   "introduction": "200-600 字课程介绍:这门课要回答什么问题、有哪些值得展开的视角、为什么这个时间点值得看",
   "sections": [
-    {
-      "index": 1,
-      "title": "8-30 字节标题,从教学维度命名(可以按人物 / 视角 / 阶段 / 概念,选最贴这道题的切法)",
-      "searchHint": "EN keywords for Phase B to search this section specifically; 12-40 chars; concrete enough to return useful results, not the whole topic again"
-    }
+    { "index": 1, "title": "8-30 字节标题,从教学维度命名(可按人物 / 视角 / 阶段 / 概念,选最贴这道题的切法)" }
   ]
 }
 \`\`\`
 
 约束:
 
-- \`searchHint\` 用英文关键词组,**要比原题更窄、更聚焦**,这样 Phase B
-  搜出来的才贴本节;不要每节都重抄原题。
-- 不要输出 \`sections.sources\` / \`outlineMarkdown\` —— 那些是 Phase B 的事。
+- 不要输出 \`sections.sources\` / \`searchHint\` / \`outlineMarkdown\`。
 - fenced block 之外不要再写文字。
 - ${sectionHint}
 

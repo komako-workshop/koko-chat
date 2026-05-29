@@ -1,15 +1,15 @@
 ---
 name: kokochat-deeply-research
-version: 0.5.0
-description: "Deep-research course generator for the KokoChat Deeply mini-app. Phase A side of a two-phase pipeline: do light exploratory web search via `web_fetch`, narrate the planning in Chinese prose, and emit one `koko.deeply.research.plan` fenced block (courseTitle + introduction + sections with title and searchHint). Phase B runs as a separate inference that searches per-section and turns the plan into the course outline. Fires when the user message looks like '请围绕「<topic>」做一份深度调研课程'."
+version: 0.6.0
+description: "Deep-research course generator for the KokoChat Deeply mini-app. In one agent turn: search the web first via `web_fetch` (mandatory for time-sensitive topics), narrate the planning in Chinese prose, and emit one `koko.deeply.research.plan` fenced block (courseTitle + introduction + sections with just a title). The client lands that plan straight into the course; per-section material is searched live by each lecture turn, not here. Fires when the user message looks like '请围绕「<topic>」做一份深度调研课程'."
 author: komako-workshop
 license: Apache-2.0
-tags: [latest, kokochat, deeply, research, course, web-search, two-phase]
+tags: [latest, kokochat, deeply, research, course, web-search]
 triggers:
   - 请围绕「
   - 深度调研课程
   - kokochat deeply research course
-  - koko.deeply.research.notes
+  - koko.deeply.research.plan
 metadata:
   openclaw:
     emoji: "🔍"
@@ -28,30 +28,28 @@ OpenClaw side of the KokoChat **Deeply** mini-app's deep-research course path.
 The user is in a `deeply-course` conversation created from the "定制课程" sheet
 with `kind = "research"`.
 
-## Two-phase pipeline (this skill is Phase A)
+## What this turn produces (one pass, plan only)
 
-KokoChat splits research course generation into two model passes:
+This is a single agent run: search to ground yourself, then design the
+course outline.
 
-- **Phase A — this turn (the agent run you are in now)**: explore + design
-  the course outline. Do light web search to calibrate your read of the
-  topic (especially when it's time-sensitive — "2026 ...", named people,
-  recent events), narrate your thinking in Chinese prose, then emit one
-  `koko.deeply.research.plan` fenced block: `courseTitle`, `introduction`,
-  and `sections` where each section has a `title` and a `searchHint`. You do
-  **not** cite per-section URLs here — your attention is on *what's worth
-  teaching and how to break it up*.
+- **Search first, then design.** Do real web search to calibrate your read
+  of the topic (especially when it's time-sensitive — "2026 ...", named
+  people, recent events), narrate your thinking in Chinese prose, then emit
+  one `koko.deeply.research.plan` fenced block: `courseTitle`,
+  `introduction`, and `sections` where each section has just a `title`. Your
+  attention is on *what's worth teaching and how to break it up*.
 
-- **Phase B — separate `inferOnce` the client triggers right after you
-  finish**: the same agent, still with `web_fetch`. Phase B reads your plan,
-  runs hosted search once per section using each `searchHint`, attaches real
-  sources, and emits the final `koko.deeply.research.outline` JSON. You will
-  never see Phase B run; just hand off a clean plan.
+- **No sources, no per-section search here.** You do **not** cite per-section
+  URLs and do **not** attach `sources`. The client lands this plan straight
+  into the course. Each section's actual material is searched **live** by the
+  lecture turn when the user enters that section — that's where it's most
+  relevant and avoids cramming dozens of searches into one pass.
 
-This split exists because letting raw search results drive the section shape
-made outlines collapse into whatever the articles happened to cover (e.g. a
-"viewpoints by famous investor" topic came out as generic "bulls vs bears").
-Designing the teaching structure first, then finding evidence per section,
-keeps the outline aligned with what the user actually asked.
+Designing the teaching structure first (instead of letting raw search results
+drive section shape) keeps the outline aligned with what the user actually
+asked. A "viewpoints by famous investor" topic stays organised around those
+people, not a generic "bulls vs bears" split the articles happened to use.
 
 ## When this skill fires
 
@@ -67,12 +65,12 @@ every turn.
 
 ## What the host sends with the kickoff
 
-KokoChat injects a Phase A kickoff prompt right before the visible user line.
-That prompt is the authoritative source of truth for this turn's output
-schema (`koko.deeply.research.plan`) and the prose sentinel `〔KP〕`
-requirement. **Always follow what the kickoff prompt says.** Do not produce a
-`koko.deeply.research.outline` block from this turn — that schema belongs to
-Phase B and emitting it here will be ignored.
+KokoChat injects a kickoff prompt right before the visible user line. That
+prompt is the authoritative source of truth for this turn's output schema
+(`koko.deeply.research.plan`) and the prose sentinel `〔KP〕` requirement.
+**Always follow what the kickoff prompt says.** Emit exactly one
+`koko.deeply.research.plan` block — sections carry only a `title`, never
+`sources` / `searchHint` / `outlineMarkdown`.
 
 This skill file only adds background you need across all such turns: what
 the search/fetch tools can / cannot do, and how to plan the research itself.
@@ -159,12 +157,12 @@ topic is very narrow, **prefer fewer real sources over more weak ones**.
 
 Schema, field rules, prose sentinel marker (`〔KP〕`), exact step-by-step
 narration order, and the "3 hard rules" all live in the host-injected
-Phase A kickoff prompt now. Treating those as the source of truth keeps this
-file small and stops the model from being overwhelmed by duplicated, slightly
+kickoff prompt now. Treating those as the source of truth keeps this file
+small and stops the model from being overwhelmed by duplicated, slightly
 divergent instructions across two layers (which is exactly what caused the
 2026-05-28 regression where the model emitted plausible-looking sources
 without ever calling search).
 
-The `koko.deeply.research.outline` schema (per-section sources, course
-introduction, outline markdown) lives entirely in the Phase B prompt and is
-**not** part of Phase A's output.
+There is no longer a separate per-section "outline" pass: the plan you emit
+is the course. Each section's sources are gathered live during that section's
+lecture turn, governed by the lecture prompt — not by this skill.

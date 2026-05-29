@@ -181,7 +181,6 @@ export default function RootLayout() {
                   <Stack.Screen name="tavern/browse" options={{ title: "角色广场" }} />
                   <Stack.Screen name="tavern/card/[...path]" options={{ title: "角色详情" }} />
                   <Stack.Screen name="tavern/settings" options={{ title: "酒馆设置" }} />
-                  <Stack.Screen name="network-test" options={{ title: "网络连接测试" }} />
                 </Stack>
               </ThemeProvider>
             </AppStateProvider>

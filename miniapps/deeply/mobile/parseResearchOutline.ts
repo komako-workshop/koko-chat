@@ -75,15 +75,6 @@ export interface ParseSuccess {
 export type ParseResult = ParseSuccess | ParseFailure;
 
 /**
- * 检测整段 agent text 里是否出现 `koko.deeply.research.outline` fenced block
- * 开头(streaming 期间也能命中,即使 block 还没闭合)。客户端 streaming defer
- * 用得到 —— 跟 tavern 的 recommendations defer 模式同款。
- */
-export function isDeeplyResearchOutlineStream(text: string): boolean {
-  return /```[ \t]*koko\.deeply\.research\.outline\b/.test(text);
-}
-
-/**
  * Best-effort parse the research-outline fenced block.
  *
  * LLM 经常 alias 字段名(`title` vs `courseTitle`)或漏字段。严格校验只
