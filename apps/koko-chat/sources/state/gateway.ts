@@ -10,6 +10,7 @@
  */
 
 import { create } from "zustand";
+import { AppState } from "react-native";
 import type { ConnectionStatus, JsonRecord } from "@koko/openclaw-client/protocol";
 import { BrowserGatewayClient } from "@/gateway/BrowserGatewayClient";
 import {
@@ -1160,6 +1161,21 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           return;
         }
         set({ status });
+      },
+      onUnexpectedClose: () => {
+        // A live socket dropped on its own (gateway closed it, or the network
+        // died while iOS had the app suspended). Kick an immediate reconnect
+        // instead of waiting for AppStateProvider's foreground poll, so the
+        // "连接中" state doesn't linger. Guarded so we only act for the current
+        // client and only while foregrounded — a backgrounded app can't keep a
+        // socket alive anyway, and the foreground poll will recover on resume.
+        if (get().client !== client) return;
+        if (AppState.currentState !== "active") return;
+        // status is already "disconnected" here, so reconnectIfPossible falls
+        // straight through to a fresh connect(). If this attempt fails it won't
+        // re-trigger onUnexpectedClose (the new socket never reaches connected),
+        // so the AppStateProvider interval remains the backstop — no fast loop.
+        void get().reconnectIfPossible();
       },
       onDeviceToken: (deviceToken: string) => {
         saveDeviceToken(deviceToken);

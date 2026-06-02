@@ -51,6 +51,16 @@ export interface BrowserGatewayClientOptions {
   logger?: Logger;
   /** Called when connection status changes. */
   onStatusChange?: (status: ConnectionStatus) => void;
+  /**
+   * Called when an established (previously handshaked) socket closes for a
+   * reason other than an explicit {@link BrowserGatewayClient.disconnect} call
+   * — e.g. the gateway closed the connection or the network dropped while the
+   * app was suspended. Lets the host kick an immediate reconnect instead of
+   * waiting for the foreground poll. NOT fired for intentional disconnects or
+   * for sockets that never finished the handshake (those are handled by the
+   * caller's own retry path, so firing here would risk a fast failure loop).
+   */
+  onUnexpectedClose?: () => void;
   /** Called when hello-ok returns a new deviceToken. */
   onDeviceToken?: (deviceToken: string) => void;
   /**
@@ -81,7 +91,13 @@ const noopLogger: Logger = {
   error: () => undefined
 };
 
-const HANDSHAKE_TIMEOUT_MS = 30_000;
+// Handshake (open socket + challenge round-trip + connect request) is a tiny,
+// sub-second exchange on both LAN and the cloud relay. A long ceiling here only
+// hurts: when a stale socket needs replacing (e.g. after iOS suspends the app),
+// the client would sit in "connecting/handshaking" for the full timeout before
+// giving up and retrying. 8s is plenty for a real handshake while making a
+// failed one recover quickly.
+const HANDSHAKE_TIMEOUT_MS = 8_000;
 
 /** Browser/RN-compatible Gateway client. Minimal: open, handshake, call, on. */
 export class BrowserGatewayClient {
@@ -92,6 +108,12 @@ export class BrowserGatewayClient {
   private nextId = 1;
   private connectNonce: string | null = null;
   private maxPayload = 1_048_576;
+  // True once this socket finished the handshake. Gates onUnexpectedClose so we
+  // only auto-recover sockets that were actually live (not failed connects).
+  private wasConnected = false;
+  // Set right before an explicit disconnect() so its onclose doesn't look like
+  // an unexpected drop and trigger a reconnect.
+  private intentionalClose = false;
 
   private readonly options: BrowserGatewayClientOptions;
   private readonly logger: Logger;
@@ -114,6 +136,8 @@ export class BrowserGatewayClient {
       return;
     }
     this.setStatus("connecting");
+    this.wasConnected = false;
+    this.intentionalClose = false;
 
     let ws: WebSocket | null = null;
     try {
@@ -126,9 +150,16 @@ export class BrowserGatewayClient {
       };
       socket.onclose = (event) => {
         this.logger.info("ws closed", { code: event.code, reason: event.reason });
+        const wasLive = this.wasConnected && !this.intentionalClose;
         this.setStatus("disconnected");
         this.ws = null;
         this.rejectAllPending(new Error(`websocket closed: ${event.code}`));
+        // Only auto-recover a socket that was live and dropped on its own. A
+        // failed reconnect's own onclose won't re-fire this (wasConnected stays
+        // false until handshake), so this can't spin into a fast retry loop.
+        if (wasLive) {
+          this.options.onUnexpectedClose?.();
+        }
       };
 
       await new Promise<void>((resolve, reject) => {
@@ -160,6 +191,7 @@ export class BrowserGatewayClient {
 
       this.setStatus("handshaking");
       await this.performHandshake();
+      this.wasConnected = true;
       this.setStatus("connected");
     } catch (error) {
       if (this.ws === ws) {
@@ -183,6 +215,7 @@ export class BrowserGatewayClient {
   }
 
   async disconnect(): Promise<void> {
+    this.intentionalClose = true;
     this.rejectAllPending(new Error("disconnect"));
     const ws = this.ws;
     if (ws !== null) {
