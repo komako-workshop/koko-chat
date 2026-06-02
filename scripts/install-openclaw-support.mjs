@@ -17,8 +17,18 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const skipVerify = args.has("--skip-verify");
+const openclawConfigDir =
+  process.env.OPENCLAW_CONFIG_DIR !== undefined
+    ? resolve(process.env.OPENCLAW_CONFIG_DIR)
+    : null;
 const openclawHome = resolve(
-  process.env.OPENCLAW_CONFIG_DIR ?? process.env.OPENCLAW_HOME ?? join(homedir(), ".openclaw")
+  process.env.OPENCLAW_STATE_DIR ??
+    openclawConfigDir ??
+    process.env.OPENCLAW_HOME ??
+    join(homedir(), ".openclaw")
+);
+const openclawConfigPath = resolve(
+  process.env.OPENCLAW_CONFIG_PATH ?? join(openclawConfigDir ?? openclawHome, "openclaw.json")
 );
 const MIN_OPENCLAW_VERSION = "2026.4.15";
 const MIN_OPENCLAW_VERSION_PARTS = [2026, 4, 15];
@@ -261,7 +271,7 @@ function main() {
 
   installAgentDefinitions(workspaceByAgent);
   configureAgentOpenClawConfig(installed);
-  configureExecApprovals(workspaceByAgent);
+  const execApprovals = configureExecApprovals(workspaceByAgent);
 
   if (!skipVerify) {
     for (const entry of installed) {
@@ -270,6 +280,9 @@ function main() {
   }
 
   restartGatewayAfterUpgrade(openclawState);
+  if (!openclawState.upgraded && execApprovals.needsGatewayReload) {
+    restartGatewayForExecApprovals();
+  }
   installRelayConnectorDaemon(defaultWorkspace);
 
   if (dryRun) {
@@ -811,7 +824,7 @@ function upsertManagedBlock(path, marker, body, options = {}) {
 }
 
 function configureAgentOpenClawConfig(installed) {
-  const configPath = join(openclawHome, "openclaw.json");
+  const configPath = openclawConfigPath;
   const skillsByAgent = new Map();
   for (const entry of installed) {
     const current = skillsByAgent.get(entry.agent) ?? [];
@@ -865,7 +878,9 @@ function configureExecApprovals(workspaceByAgent) {
       entriesByAgent.set(agentId, current);
     }
   }
-  if (entriesByAgent.size === 0) return;
+  if (entriesByAgent.size === 0) {
+    return { needsGatewayReload: false };
+  }
 
   log(`exec approvals: ${approvalsPath}`);
   for (const [agentId, entries] of entriesByAgent) {
@@ -875,7 +890,7 @@ function configureExecApprovals(workspaceByAgent) {
         .join(", ")}`
     );
   }
-  if (dryRun) return;
+  if (dryRun) return { needsGatewayReload: false };
 
   const approvals = existsSync(approvalsPath)
     ? readJsonObject(approvalsPath)
@@ -898,7 +913,7 @@ function configureExecApprovals(workspaceByAgent) {
   }
 
   writeFileSync(approvalsPath, `${JSON.stringify(approvals, null, 2)}\n`);
-  pushExecApprovalsToGateway(approvalsPath);
+  return { needsGatewayReload: !pushExecApprovalsToGateway(approvalsPath) };
 }
 
 function pushExecApprovalsToGateway(approvalsPath) {
@@ -909,31 +924,45 @@ function pushExecApprovalsToGateway(approvalsPath) {
   // "exec denied: allowlist miss" and prompts the user for approval.
   //
   // `openclaw approvals set --gateway` connects as a regular client; if it
-  // hits a brand-new gateway it can stall on a scope-upgrade approval
-  // prompt. To bypass that we pass the local gateway URL + the gateway
-  // token straight from `openclaw.env`, which gives us admin scope.
-  const args = ["approvals", "set", "--gateway", "--file", approvalsPath, "--json"];
+  // hits a brand-new gateway it can stall on a scope-upgrade approval prompt.
+  // When a gateway token is available, pass the local URL + token explicitly.
+  // Without a token, let the CLI use its configured gateway target; current
+  // OpenClaw rejects explicit URL overrides without explicit credentials.
+  const args = [
+    "approvals",
+    "set",
+    "--gateway",
+    "--file",
+    approvalsPath,
+    "--json",
+    "--timeout",
+    "5000"
+  ];
   const localUrl = resolveLocalGatewayUrlForInstaller();
-  if (localUrl !== null) args.push("--url", localUrl);
   const token = resolveLocalGatewayTokenForInstaller();
-  if (token !== null) args.push("--token", token);
+  if (localUrl !== null && token !== null) {
+    args.push("--url", localUrl, "--token", token);
+  } else if (token !== null) {
+    args.push("--token", token);
+  }
   const result = runOpenClaw(args, { capture: true, allowFailure: true });
   if (result.status === 0) {
     log("approvals set --gateway: ok");
-    return;
+    return true;
   }
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim();
   log(
     [
       `approvals set --gateway did not complete automatically (exit ${result.status ?? "unknown"}).`,
       output.length > 0 ? lastLines(output, 6) : null,
-      "If the first agent call hits `exec denied: allowlist miss`, restart the gateway and retry."
+      "Will try a Gateway restart so the running service loads the local exec approvals file."
     ].filter(Boolean).join(" ")
   );
+  return false;
 }
 
 function resolveLocalGatewayUrlForInstaller() {
-  const configPath = join(openclawHome, "openclaw.json");
+  const configPath = openclawConfigPath;
   if (!existsSync(configPath)) return null;
   try {
     const config = JSON.parse(readFileSync(configPath, "utf8"));
@@ -1203,6 +1232,27 @@ function restartGatewayAfterUpgrade(openclawState) {
   );
 }
 
+function restartGatewayForExecApprovals() {
+  if (dryRun) return;
+  log("Gateway approval sync was not confirmed; restarting Gateway to load exec-approvals.json.");
+  const result = runOpenClaw(["gateway", "restart"], {
+    capture: true,
+    allowFailure: true
+  });
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim();
+  if (result.status === 0) {
+    log("gateway restart for exec approvals: ok");
+    return;
+  }
+  log(
+    [
+      `gateway restart for exec approvals did not complete automatically (exit ${result.status ?? "unknown"}).`,
+      output.length > 0 ? lastLines(output, 8) : null,
+      "If Tavern still asks for `/approve`, run `openclaw gateway restart` once and retry the search."
+    ].filter(Boolean).join(" ")
+  );
+}
+
 function runOpenClaw(command, options = {}) {
   return run(openclawBin, command, options);
 }
@@ -1239,11 +1289,21 @@ function lastLines(value, count) {
 }
 
 function childEnv(command = openclawBin) {
-  if (command === "openclaw") return process.env;
-  return {
+  const env = {
     ...process.env,
-    PATH: `${dirname(command)}${delimiter}${process.env.PATH ?? ""}`
+    OPENCLAW_CONFIG_PATH: process.env.OPENCLAW_CONFIG_PATH ?? openclawConfigPath,
+    OPENCLAW_HOME: process.env.OPENCLAW_HOME ?? openclawHome,
+    OPENCLAW_STATE_DIR: process.env.OPENCLAW_STATE_DIR ?? openclawHome,
+    ...(process.env.OPENCLAW_CONFIG_DIR !== undefined || process.env.OPENCLAW_CONFIG_PATH === undefined
+      ? { OPENCLAW_CONFIG_DIR: process.env.OPENCLAW_CONFIG_DIR ?? dirname(openclawConfigPath) }
+      : {}),
+    ...(command === "openclaw"
+      ? {}
+      : {
+          PATH: `${dirname(command)}${delimiter}${process.env.PATH ?? ""}`
+        })
   };
+  return env;
 }
 
 function isRecord(value) {
