@@ -1,0 +1,23 @@
+[Unit]
+Description=KokoChat relay tunnel (deeply.plus host)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ecs-user
+Group=ecs-user
+WorkingDirectory=/opt/koko-chat/apps/koko-relay
+Environment=NODE_ENV=production
+# loopback only — Caddy terminates TLS on :443 (wss://deeply.plus/relay) and
+# reverse-proxies here. Never bind this to 0.0.0.0 in production.
+Environment=KOKO_RELAY_HOST=127.0.0.1
+Environment=KOKO_RELAY_PORT=8787
+ExecStart=/usr/bin/node /opt/koko-chat/apps/koko-relay/server.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

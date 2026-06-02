@@ -58,7 +58,7 @@ const DEFAULT_PASSWORD_FILE = "/Users/lijianren/openclaw-aliyun-kokochat/ecs-log
 const DEFAULT_KNOWN_HOSTS = "/Users/lijianren/.ssh/known_hosts_openclaw_kokochat";
 const DEFAULT_REMOTE_PAIRING_SCRIPT =
   "/root/.kokochat/koko-chat/openclaw/skills/kokochat-pairing/generate-kokochat-code.mjs";
-const DEFAULT_RELAY_HEALTH_URL = "http://47.84.141.40:8787/healthz";
+const DEFAULT_RELAY_HEALTH_URL = "https://deeply.plus/relay/healthz";
 
 const args = parseArgs(process.argv.slice(2));
 const topic = args.topic ?? "一二级投资人现在怎么看AI";

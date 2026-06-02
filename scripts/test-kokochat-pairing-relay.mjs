@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const PAIRING_SCRIPT = new URL("../openclaw/skills/kokochat-pairing/generate-kokochat-code.mjs", import.meta.url);
-const DEFAULT_RELAY_PREFIX = "ws://47.84.141.40:8787/v1/gateway/";
+const DEFAULT_RELAY_PREFIX = "wss://deeply.plus/relay/v1/gateway/";
 
 runCase("default relay ignores direct gateway config", {
   env: {
@@ -28,7 +28,7 @@ runCase("default relay ignores direct gateway config", {
     assert(!setup.url.includes("192.168."), `setup url leaked LAN address: ${setup.url}`);
     assert(!setup.url.includes(":18789"), `setup url leaked direct gateway port: ${setup.url}`);
     assert(setup.relay?.mode === "gateway-tunnel", "setup code missing relay tunnel metadata");
-    assert(connectorConfig.relayUrl === "ws://47.84.141.40:8787", "connector used wrong default relay url");
+    assert(connectorConfig.relayUrl === "wss://deeply.plus/relay", "connector used wrong default relay url");
     assert(connectorConfig.gatewayUrl === "ws://127.0.0.1:18789", "connector should target local OpenClaw gateway");
   }
 });

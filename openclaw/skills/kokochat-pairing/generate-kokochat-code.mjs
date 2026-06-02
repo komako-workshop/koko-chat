@@ -29,7 +29,11 @@ const DEFAULT_SCOPES = [
   ...REQUIRED_SCOPES
 ];
 const RELAY_STATE_FILE = "relay.json";
-const DEFAULT_RELAY_URL = "ws://47.84.141.40:8787";
+// Hosted relay behind deeply.plus Caddy (TLS-terminated, reverse-proxied to the
+// loopback koko-relay on the same box). `wss://` = encrypted; the `/relay`
+// prefix is stripped by Caddy so the relay sees /v1/gateway/* + /v1/connector/*.
+// Override with KOKOCHAT_RELAY_URL for self-hosting.
+const DEFAULT_RELAY_URL = "wss://deeply.plus/relay";
 const RELAY_DAEMON_SERVICE = "kokochat-relay-connector.service";
 
 const argInput = process.argv.slice(2).join(" ");
