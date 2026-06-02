@@ -78,14 +78,3 @@ export function loadGatewayUrl(): string | undefined {
   const stored = mmkv.getString(GATEWAY_URL_KEY);
   return typeof stored === "string" && stored.length > 0 ? stored : undefined;
 }
-
-/**
- * Whether this app has a previously approved Gateway device pairing.
- *
- * A stored URL alone is not enough: dev shared-token auto-connect also stores
- * the URL. A stored deviceToken means the phone has been approved by OpenClaw
- * and can reconnect without asking the user to pair again.
- */
-export function hasStoredGatewayPairing(): boolean {
-  return loadGatewayUrl() !== undefined && loadDeviceToken() !== undefined;
-}

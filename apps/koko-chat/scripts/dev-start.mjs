@@ -1,101 +1,23 @@
 #!/usr/bin/env node
 /**
- * Dev convenience launcher.
+ * Dev launcher: a thin wrapper around `expo start` so `pnpm dev` /
+ * `pnpm deeply:web` have a single stable entry point.
  *
- * Wraps `expo start` so the running APP can auto-connect to the local
- * OpenClaw Gateway without making the user paste a setup code each time.
- *
- * Steps:
- *   1. Detect the local machine's LAN IP (so the phone can reach Gateway).
- *   2. Run `openclaw qr --json --no-ascii --url ws://<lan-ip>:18789` to get
- *      a fresh setupCode (TTL ~10 minutes).
- *   3. Inject the setupCode into the APP via env var
- *      KOKO_DEV_SETUP_CODE — read by app.config.js -> extra.devSetupCode.
- *   4. Exec `expo start --host lan --clear`.
- *
- * Production / TestFlight builds never see KOKO_DEV_SETUP_CODE since this
- * script is only run by `pnpm dev`.
+ * KokoChat connects to OpenClaw exclusively through the relay tunnel — the
+ * exact same path real users take. Pair once from the in-app "配对 OpenClaw"
+ * screen and the device token persists across reloads; there is no LAN
+ * shared-token auto-connect anymore. (Metro still serves the JS bundle over
+ * the LAN via `--host lan`; that's unrelated to the Gateway connection.)
  */
 
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { networkInterfaces } from "node:os";
-
-function detectLanIp() {
-  const ifaces = networkInterfaces();
-  for (const name of Object.keys(ifaces)) {
-    const list = ifaces[name];
-    if (!list) continue;
-    for (const addr of list) {
-      if (addr.family === "IPv4" && !addr.internal) {
-        // Prefer 192.168.* / 10.* / 172.16-31 (private ranges).
-        if (addr.address.startsWith("192.168.") || addr.address.startsWith("10.")) {
-          return addr.address;
-        }
-      }
-    }
-  }
-  // Fall back to first non-loopback IPv4 even if not in private range.
-  for (const name of Object.keys(ifaces)) {
-    const list = ifaces[name];
-    if (!list) continue;
-    for (const addr of list) {
-      if (addr.family === "IPv4" && !addr.internal) {
-        return addr.address;
-      }
-    }
-  }
-  return null;
-}
-
-function readGatewayToken() {
-  const configPath = join(process.env.HOME ?? "", ".openclaw", "openclaw.json");
-  try {
-    const raw = readFileSync(configPath, "utf8");
-    const parsed = JSON.parse(raw);
-    const token = parsed?.gateway?.auth?.token;
-    return typeof token === "string" && token.length > 0 ? token : null;
-  } catch (err) {
-    console.warn(`[koko-dev] failed to read ${configPath}: ${err.message}`);
-    return null;
-  }
-}
 
 function main() {
-  // Pass through any extra args after `--`.
+  // Pass through any extra args after `--` (e.g. `-- --web`).
   const passthrough = process.argv.slice(2);
-  const isWeb = passthrough.includes("--web");
 
-  const lanIp = detectLanIp();
-  if (lanIp === null) {
-    console.warn("[koko-dev] could not detect LAN IP; expo will use defaults");
-  } else {
-    console.log(`[koko-dev] detected LAN IP: ${lanIp}`);
-  }
-
-  // For web targets we open the bundle in a desktop browser on the same host
-  // as the Gateway, so loopback is the most reliable address. LAN IP would
-  // also work when the gateway binds 0.0.0.0, but loopback dodges any
-  // browser-side host policies and works even when LAN IP is unstable.
-  const gatewayHost = isWeb ? "127.0.0.1" : lanIp;
-
-  const env = { ...process.env };
-  if (gatewayHost !== null) {
-    env.KOKO_DEV_GATEWAY_URL = `ws://${gatewayHost}:18789`;
-    const gatewayToken = readGatewayToken();
-    if (gatewayToken !== null) {
-      env.KOKO_DEV_GATEWAY_TOKEN = gatewayToken;
-      console.log(
-        `[koko-dev] using local gateway token (${gatewayToken.slice(0, 6)}...), gateway=${env.KOKO_DEV_GATEWAY_URL}`
-      );
-    } else {
-      console.warn("[koko-dev] no gateway token found; APP will start without auto-connect");
-    }
-  }
-
-  if (env.KOKO_DEMO_APP) {
-    console.log(`[koko-dev] demo mode: ${env.KOKO_DEMO_APP} (skips launcher)`);
+  if (process.env.KOKO_DEMO_APP) {
+    console.log(`[koko-dev] demo mode: ${process.env.KOKO_DEMO_APP} (skips launcher)`);
   }
 
   const args = ["expo", "start", "--host", "lan", "--clear", ...passthrough];
@@ -103,7 +25,7 @@ function main() {
   console.log(`[koko-dev] exec: pnpm exec ${args.join(" ")}`);
   const child = spawn("pnpm", ["exec", ...args], {
     stdio: "inherit",
-    env
+    env: process.env
   });
 
   child.on("exit", (code) => process.exit(code ?? 0));

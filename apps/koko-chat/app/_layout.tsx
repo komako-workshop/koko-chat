@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import Constants from "expo-constants";
@@ -10,12 +10,9 @@ import { AppStateProvider } from "@/providers/AppStateProvider";
 import { ErrorBoundary } from "@/providers/ErrorBoundary";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { hydrateStorage } from "@/storage/mmkv";
-import { hasStoredGatewayPairing } from "@/gateway/identityStorage";
-import { parseSetupCode } from "@/gateway/setupCode";
 import { registerMiniApps } from "@/miniapps";
 import { seedInitialKokoConversation } from "@/miniapps/koko";
 import { useConversationStore } from "@/state/conversations";
-import { useGatewayStore } from "@/state/gateway";
 import { KokoColors, KokoRadius } from "@/theme/koko";
 import { useTavernPersonaStore } from "@/state/tavernPersona";
 
@@ -156,7 +153,6 @@ export default function RootLayout() {
           <SafeAreaProvider>
             <AppStateProvider>
               <ThemeProvider>
-                <DevAutoConnect />
                 <StatusBar style="dark" />
                 <Stack
                   {...stackProps}
@@ -205,65 +201,6 @@ function DemoFrame({ children }: { children: React.ReactNode }): React.ReactElem
       <View style={styles.demoFrameViewport}>{children}</View>
     </View>
   );
-}
-
-/**
- * Dev-only side effect: when scripts/dev-start.mjs has populated
- * `extra.devGatewayUrl` + `extra.devGatewayToken`, auto-connect to the
- * local Gateway on first mount so we don't have to re-pair on every
- * reload. Production builds skip this branch entirely.
- *
- * We do NOT navigate here anymore: with multiple conversations the user
- * should land on the thread list, not an arbitrary chat.
- */
-function DevAutoConnect(): null {
-  const ranRef = useRef(false);
-  const status = useGatewayStore((s) => s.status);
-  const connect = useGatewayStore((s) => s.connect);
-
-  useEffect(() => {
-    if (ranRef.current) return;
-    if (!__DEV__) return;
-    const devGatewayUrl = Constants.expoConfig?.extra?.devGatewayUrl;
-    const devGatewayToken = Constants.expoConfig?.extra?.devGatewayToken;
-    if (typeof devGatewayUrl !== "string" || devGatewayUrl.length === 0) return;
-    if (typeof devGatewayToken !== "string" || devGatewayToken.length === 0) return;
-    if (status !== "disconnected") return;
-
-    // If the phone already has a real Gateway device pairing, let
-    // AppStateProvider.reconnectIfPossible() reuse the stored URL + deviceToken
-    // instead of overriding that state with the dev shared-token LAN setup.
-    //
-    // This is especially important in Expo Go: otherwise every restart can
-    // clobber the relay/device-token pairing with a temporary dev URL, and the
-    // next cold launch feels like it needs pairing again.
-    if (hasStoredGatewayPairing()) {
-      if (__DEV__) {
-        // eslint-disable-next-line no-console
-        console.info("[koko-dev] existing device pairing found; skipping dev shared-token auto-connect");
-      }
-      ranRef.current = true;
-      return;
-    }
-
-    ranRef.current = true;
-
-    void (async () => {
-      try {
-        const setup = parseSetupCode(
-          JSON.stringify({ url: devGatewayUrl, token: devGatewayToken })
-        );
-        // eslint-disable-next-line no-console
-        console.info("[koko-dev] auto-connecting to local Gateway:", setup.url);
-        await connect(setup);
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn("[koko-dev] auto-connect failed:", err);
-      }
-    })();
-  }, [connect, status]);
-
-  return null;
 }
 
 // 手机 viewport 框宽。420 偏瘦,480 更接近 iPhone 14/15 Pro Max 的实际

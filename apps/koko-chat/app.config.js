@@ -1,10 +1,7 @@
-// Dynamic Expo config so we can inject runtime env vars.
-// Mirrors what app.json had, plus an `extra` block populated from
-// KOKO_DEV_SETUP_CODE (set by scripts/dev-start.mjs).
-//
-// Production builds (TestFlight / EAS) won't have KOKO_DEV_SETUP_CODE so
-// extra.devSetupCode will be undefined and the APP boots into the normal
-// Pair flow.
+// Dynamic Expo config so we can inject runtime env vars into `extra`.
+// Mirrors what app.json had. The Gateway connection always goes through the
+// relay (paired from the in-app "配对 OpenClaw" screen), in dev and in
+// production alike — there is no LAN dev auto-connect to configure here.
 
 /** @type {import('@expo/config-types').ExpoConfig} */
 const config = {
@@ -54,11 +51,6 @@ const config = {
     typedRoutes: true
   },
   extra: {
-    // Populated by scripts/dev-start.mjs in dev mode only. This intentionally
-    // bypasses QR/bootstrap pairing for local development so Expo Go can open
-    // straight into Chat against the local OpenClaw Gateway.
-    devGatewayUrl: process.env.KOKO_DEV_GATEWAY_URL ?? null,
-    devGatewayToken: process.env.KOKO_DEV_GATEWAY_TOKEN ?? null,
     // Optional single-mini-app demo mode. When set (e.g. "deeply"), the host
     // boots straight into that mini-app's surface instead of showing the
     // launcher, and renders a phone-sized frame on web for layout sanity.
